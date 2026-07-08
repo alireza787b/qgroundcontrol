@@ -166,14 +166,14 @@ jobs:
           "path=$($installerExe.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "name=$($installerExe.Name)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           "sha256=$hash" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
-          "### PixEagle PR13594 Windows Artifact" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          "" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          "- Ref: `${{ inputs.ref }}`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          "- Installer: `$($installerExe.Name)`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
-          "- SHA-256: `$hash`" | Out-File -FilePath $env:GITHUB_STEP_SUMMARY -Append -Encoding utf8
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "### PixEagle PR13594 Windows Artifact"
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- Ref: {0}" -f "${{ inputs.ref }}")
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- Installer: {0}" -f $installerExe.Name)
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- SHA-256: {0}" -f $hash)
 
       - name: Upload installer artifact
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@v4
         with:
           name: QGroundControl-installer-AMD64-pr13594
           path: ${{ steps.installer.outputs.path }}
