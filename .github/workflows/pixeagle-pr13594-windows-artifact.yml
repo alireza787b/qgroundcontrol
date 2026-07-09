@@ -133,7 +133,7 @@ jobs:
             exit 1
           }
 
-      - name: Remove build SDK from PATH for installed verification
+      - name: Verify installed executable without build SDK
         if: inputs.build_type == 'Release'
         shell: pwsh
         env:
@@ -178,23 +178,12 @@ jobs:
             exit 1
           }
 
-          Write-Host "Removed build GStreamer SDK from installed verification PATH: $sdkBin"
-          "QGC_VERIFY_INSTALLED_PATH=$($sanitizedEntries -join ';')" |
-            Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
-
-      - name: Assert installed verification PATH excludes build SDK
-        if: inputs.build_type == 'Release'
-        shell: pwsh
-        env:
-          GST_ROOT: ${{ steps.gst-root.outputs.gst_root }}
-          PATH: ${{ env.QGC_VERIFY_INSTALLED_PATH }}
-        run: |
-          $sdkBin = [IO.Path]::GetFullPath((Join-Path $env:GST_ROOT "bin")).TrimEnd('\', '/')
+          $env:PATH = $sanitizedEntries -join ';'
           foreach ($entry in ($env:PATH -split ';')) {
             if ([string]::IsNullOrWhiteSpace($entry)) {
               continue
             }
-            $normalizedEntry = [IO.Path]::GetFullPath($entry).TrimEnd('\', '/')
+            $normalizedEntry = Get-NormalizedPath $entry
             if ([string]::Equals(
               $normalizedEntry,
               $sdkBin,
@@ -206,14 +195,24 @@ jobs:
           }
           Write-Host "Installed verification PATH excludes build GStreamer SDK: $sdkBin"
 
-      - name: Verify installed executable
-        if: inputs.build_type == 'Release'
-        uses: ./.github/actions/verify-executable
-        env:
-          PATH: ${{ env.QGC_VERIFY_INSTALLED_PATH }}
-        with:
-          binary-path: ${{ runner.temp }}\qgc-install-test\bin\QGroundControl.exe
-          type: exe
+          $binary = "${{ runner.temp }}\qgc-install-test\bin\QGroundControl.exe"
+          if (-not (Test-Path $binary)) {
+            Write-Error "QGroundControl.exe not found at $binary"
+            exit 1
+          }
+          $workDir = Split-Path -Parent $binary
+          Push-Location $workDir
+          try {
+            python "$env:GITHUB_WORKSPACE\.github\scripts\verify_executable.py" `
+              --binary-path "$binary" `
+              --type exe `
+              --timeout 60
+            if ($LASTEXITCODE -ne 0) {
+              exit $LASTEXITCODE
+            }
+          } finally {
+            Pop-Location
+          }
 
       - name: Locate installer
         id: installer
