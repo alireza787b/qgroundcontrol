@@ -69,6 +69,9 @@ jobs:
         with:
           qt-host: windows
           qt-arch: win64_msvc2022_64
+          # The public Qt archive currently exposes 6.11.0; official QGC
+          # runners can use their cached 6.11.1 toolchain.
+          qt-version: '6.11.0'
           build-type: ${{ inputs.build_type }}
 
       - name: Configure
@@ -246,6 +249,7 @@ jobs:
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "### PixEagle PR13594 Windows Artifact"
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ""
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- Ref: {0}" -f "${{ inputs.ref }}")
+          Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value "- Public-runner Qt: 6.11.0"
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- Installer: {0}" -f $installerExe.Name)
           Add-Content -LiteralPath $env:GITHUB_STEP_SUMMARY -Value ("- SHA-256: {0}" -f $hash)
 
