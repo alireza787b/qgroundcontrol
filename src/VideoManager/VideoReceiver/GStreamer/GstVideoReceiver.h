@@ -107,6 +107,7 @@ private:
     /// -Send an EOS event at the beginning of that branch
     bool _unlinkBranch(GstElement *from, guint32 eosSeqnum = GST_SEQNUM_INVALID);
     bool _isRecordingEOSMessage(GstMessage *message) const;
+    static bool _isRecordingFragmentClosedMessage(GstMessage* message, GstElement* activeSplitMux);
     void _handleBusEOS(bool recordingEOS, bool directPipelineEOS);
     void _shutdownDecodingBranch();
     void _shutdownRecordingBranch();

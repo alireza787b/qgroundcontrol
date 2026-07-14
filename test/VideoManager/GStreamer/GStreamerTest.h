@@ -105,6 +105,7 @@ private slots:
     void _testMultipartJpegGuard();
     void _testJpegRecordingContainers();
     void _testRecordingEosSeqnumClassification();
+    void _testRecordingFragmentClosedClassification();
     void _testJpegReceiverRecording();
     void _testSourceFactoryWebSocketJpeg();
     void _testSourceFactoryWebSocketAuthRequiresWss();

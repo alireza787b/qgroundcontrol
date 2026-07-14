@@ -1243,6 +1243,40 @@ void GStreamerTest::_testRecordingEosSeqnumClassification()
     QVERIFY(!receiver._isRecordingEOSMessage(recordingMessage));
 }
 
+void GStreamerTest::_testRecordingFragmentClosedClassification()
+{
+    GstElement* activeSplitMux = gst_element_factory_make("splitmuxsink", nullptr);
+    GstElement* staleSplitMux = gst_element_factory_make("splitmuxsink", nullptr);
+    if (!activeSplitMux || !staleSplitMux) {
+        gst_clear_object(&staleSplitMux);
+        gst_clear_object(&activeSplitMux);
+        QSKIP("splitmuxsink is unavailable");
+    }
+
+    GstMessage* activeMessage =
+        gst_message_new_element(GST_OBJECT(activeSplitMux), gst_structure_new_empty("splitmuxsink-fragment-closed"));
+    GstMessage* staleMessage =
+        gst_message_new_element(GST_OBJECT(staleSplitMux), gst_structure_new_empty("splitmuxsink-fragment-closed"));
+    GstMessage* wrongTypeMessage =
+        gst_message_new_element(GST_OBJECT(activeSplitMux), gst_structure_new_empty("splitmuxsink-fragment-opened"));
+    QVERIFY(activeMessage);
+    QVERIFY(staleMessage);
+    QVERIFY(wrongTypeMessage);
+    const auto cleanup = qScopeGuard([&] {
+        gst_clear_message(&wrongTypeMessage);
+        gst_clear_message(&staleMessage);
+        gst_clear_message(&activeMessage);
+        gst_clear_object(&staleSplitMux);
+        gst_clear_object(&activeSplitMux);
+    });
+
+    QVERIFY(GstVideoReceiver::_isRecordingFragmentClosedMessage(activeMessage, activeSplitMux));
+    QVERIFY(!GstVideoReceiver::_isRecordingFragmentClosedMessage(staleMessage, activeSplitMux));
+    QVERIFY(!GstVideoReceiver::_isRecordingFragmentClosedMessage(wrongTypeMessage, activeSplitMux));
+    QVERIFY(!GstVideoReceiver::_isRecordingFragmentClosedMessage(activeMessage, nullptr));
+    QVERIFY(!GstVideoReceiver::_isRecordingFragmentClosedMessage(nullptr, activeSplitMux));
+}
+
 void GStreamerTest::_testJpegReceiverRecording()
 {
 #ifdef QGC_HAS_WEBSOCKET_VIDEO
@@ -1463,6 +1497,20 @@ void GStreamerTest::_testJpegReceiverRecording()
     QVERIFY(receiver._recording);
     QVERIFY(!receiver._endOfStream.load(std::memory_order_acquire));
     QCOMPARE(receiverStopSpy.count(), 0);
+
+    // The pipeline bus retains synchronously emitted messages. Leave a same-named
+    // completion from another splitmux instance queued so source-EOS teardown must
+    // correlate finalization with the active recording branch.
+    GstElement* staleSplitMux = gst_element_factory_make("splitmuxsink", nullptr);
+    QVERIFY(staleSplitMux);
+    GstBus* pipelineBus = gst_pipeline_get_bus(GST_PIPELINE(receiver._pipeline));
+    QVERIFY(pipelineBus);
+    GstMessage* staleFragmentClosed =
+        gst_message_new_element(GST_OBJECT(staleSplitMux), gst_structure_new_empty("splitmuxsink-fragment-closed"));
+    QVERIFY(staleFragmentClosed);
+    QVERIFY(gst_bus_post(pipelineBus, staleFragmentClosed));
+    gst_object_unref(pipelineBus);
+    gst_object_unref(staleSplitMux);
 
     decodeFrameTimer.stop();
     serverSocket->close(QWebSocketProtocol::CloseCodeNormal, QStringLiteral("test complete"));

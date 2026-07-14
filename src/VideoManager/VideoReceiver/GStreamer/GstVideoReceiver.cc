@@ -417,6 +417,8 @@ void GstVideoReceiver::stop()
             g_object_get(_recorderValve, "drop", &recordingValveClosed, nullptr);
 
             if (!recordingValveClosed) {
+                GstElement* activeSplitMux =
+                    _fileSink ? gst_bin_get_by_name(GST_BIN(_fileSink), kRecordingSplitMuxName) : nullptr;
                 (void) gst_element_send_event(_pipeline, gst_event_new_eos());
 
                 // Wait for splitmuxsink to actually finalize its current fragment. async-finalize
@@ -440,8 +442,7 @@ void GstVideoReceiver::stop()
                     if (!msg) break;
                     switch (GST_MESSAGE_TYPE(msg)) {
                     case GST_MESSAGE_ELEMENT: {
-                        const GstStructure *s = gst_message_get_structure(msg);
-                        if (s && gst_structure_has_name(s, "splitmuxsink-fragment-closed")) {
+                        if (_isRecordingFragmentClosedMessage(msg, activeSplitMux)) {
                             qCDebug(GstVideoReceiverLog) << "splitmuxsink fragment finalized";
                             finalized = true;
                         }
@@ -461,6 +462,7 @@ void GstVideoReceiver::stop()
                     gst_clear_message(&msg);
                     if (finalized || finalizationError) break;
                 }
+                gst_clear_object(&activeSplitMux);
                 if (!finalized) {
                     if (finalizationError) {
                         qCWarning(GstVideoReceiverLog)
@@ -901,6 +903,17 @@ bool GstVideoReceiver::_isRecordingEOSMessage(GstMessage *message) const
     const guint32 recordingEosSeqnum = _recordingEosSeqnum.load(std::memory_order_acquire);
     return message && (isRecordingBranchMessage(message) || ((recordingEosSeqnum != GST_SEQNUM_INVALID) &&
                                                              (gst_message_get_seqnum(message) == recordingEosSeqnum)));
+}
+
+bool GstVideoReceiver::_isRecordingFragmentClosedMessage(GstMessage* message, GstElement* activeSplitMux)
+{
+    if (!message || !activeSplitMux || (GST_MESSAGE_TYPE(message) != GST_MESSAGE_ELEMENT) ||
+        (GST_MESSAGE_SRC(message) != GST_OBJECT(activeSplitMux))) {
+        return false;
+    }
+
+    const GstStructure* structure = gst_message_get_structure(message);
+    return structure && gst_structure_has_name(structure, "splitmuxsink-fragment-closed");
 }
 
 void GstVideoReceiver::_handleBusEOS(bool recordingEOS, bool directPipelineEOS)
