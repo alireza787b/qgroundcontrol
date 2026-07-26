@@ -14,6 +14,7 @@
 #include <QtWebSockets/QWebSocketServer>
 #include <array>
 #include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
 #include <gst/gst.h>
 
 #include "GstSourceFactory.h"
@@ -434,6 +435,16 @@ void GStreamerTest::_testWebSocketJpegValidation()
     QVERIFY(!excessivePixels.isEmpty());
     QCOMPARE(jpegDimensions(excessivePixels), QSize(QGCWebSocketVideoSource::kMaximumJpegDimension, 4097));
     QVERIFY(!QGCWebSocketVideoSource::isCompleteJpeg(excessivePixels));
+
+    QCOMPARE(QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral("https://video.example.test/")),
+             QStringLiteral("https://video.example.test"));
+    QCOMPARE(QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral(" http://127.0.0.1:3040 ")),
+             QStringLiteral("http://127.0.0.1:3040"));
+    QVERIFY(QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral("ws://video.example.test")).isEmpty());
+    QVERIFY(QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral("https://operator@video.example.test")).isEmpty());
+    QVERIFY(QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral("https://video.example.test/path")).isEmpty());
+    QVERIFY(
+        QGCWebSocketVideoSource::normalizedOrigin(QStringLiteral("https://video.example.test?token=secret")).isEmpty());
 }
 
 void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
@@ -448,6 +459,7 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
     QSignalSpy connectionSpy(&server, &QWebSocketServer::newConnection);
 
     GStreamer::SourceFactory::Config config;
+    config.webSocketOrigin = QStringLiteral("https://operator.example.test/");
     const QString url = QStringLiteral("ws://127.0.0.1:%1/video").arg(server.serverPort());
     GstElement* bin = GStreamer::SourceFactory::create(url, config);
     QVERIFY(bin);
@@ -479,6 +491,7 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
     QVERIFY_SIGNAL_WAIT(connectionSpy, TestTimeout::mediumMs());
     QWebSocket* peer = server.nextPendingConnection();
     QVERIFY(peer);
+    QCOMPARE(peer->origin(), QStringLiteral("https://operator.example.test"));
 
     const QByteArray jpeg = makeTestJpeg();
     QVERIFY(!jpeg.isEmpty());
@@ -527,11 +540,15 @@ void GStreamerTest::_testSourceFactoryRejectsUnsafeWebSocketJpegUrl()
                      QRegularExpression(QStringLiteral("Invalid WebSocket JPEG URL")));
     ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
                      QRegularExpression(QStringLiteral("WebSocket JPEG credentials in URLs are not supported")));
+    ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Invalid WebSocket Origin")));
 
     GStreamer::SourceFactory::Config config;
     QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("ws:///video"), config));
     QVERIFY(
         !GStreamer::SourceFactory::create(QStringLiteral("wss://operator:secret@video.example.test/video"), config));
+    config.webSocketOrigin = QStringLiteral("https://video.example.test/not-an-origin");
+    QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("wss://video.example.test/video"), config));
 }
 
 void GStreamerTest::_testSourceFactoryRejectsBadUri()

@@ -39,6 +39,10 @@
                     "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.webSocketJpegVideoSource"
                 },
                 {
+                    "setting": "videoSettings.webSocketJpegOrigin",
+                    "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.webSocketJpegVideoSource"
+                },
+                {
                     "setting": "videoSettings.tcpUrl",
                     "showWhen": "videoSource === QGroundControl.settingsManager.videoSettings.tcpVideoSource"
                 },
