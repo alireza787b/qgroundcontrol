@@ -4,11 +4,14 @@
 #include <chrono>
 
 #include <QtCore/QFuture>
+#include <QtCore/QHash>
 #include <QtCore/QMutex>
 #include <QtCore/QPromise>
 #include <QtCore/QObject>
 #include <QtCore/QSize>
 #include <QtQmlIntegration/QtQmlIntegration>
+
+#include "VideoReceiver.h"
 
 #ifdef QGC_UNITTEST_BUILD
 #include <functional>
@@ -17,7 +20,6 @@
 class QQuickWindow;
 class SubtitleWriter;
 class Vehicle;
-class VideoReceiver;
 class VideoSettings;
 
 class VideoManager : public QObject
@@ -111,6 +113,13 @@ private:
         Failed
     };
 
+    struct ReceiverLifecycleState {
+        quint64 retryGeneration = 0;
+        bool runRequested = false;
+        bool restartAfterStop = false;
+        bool retryScheduled = false;
+    };
+
     void _initAfterQmlIsReady();
     void _onBackendInitComplete(bool success);
     void _createVideoReceivers();
@@ -121,11 +130,15 @@ private:
     bool _updateVideoUri(VideoReceiver *receiver, const QString &uri);
     void _restartAllVideos();
     void _restartVideo(VideoReceiver *receiver);
+    void _scheduleManagerRestart(VideoReceiver *receiver);
+    void _handleReceiverStartComplete(VideoReceiver *receiver, VideoReceiver::STATUS status);
+    void _handleReceiverStopComplete(VideoReceiver *receiver, VideoReceiver::STATUS status);
     void _startReceiver(VideoReceiver *receiver);
     void _stopReceiver(VideoReceiver *receiver);
     static void _cleanupOldVideos();
 
     QList<VideoReceiver*> _videoReceivers;
+    QHash<VideoReceiver*, ReceiverLifecycleState> _receiverLifecycle;
     SubtitleWriter *_subtitleWriter = nullptr;
     VideoSettings *_videoSettings = nullptr;
     QQuickWindow *_mainWindow = nullptr;
