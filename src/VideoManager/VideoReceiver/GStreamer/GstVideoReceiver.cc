@@ -257,6 +257,7 @@ void GstVideoReceiver::_startPipeline(uint32_t timeout, bool reconnectAttempt)
                 ? GStreamer::SourceFactory::JitterBuffer::DropOnLatency
                 : GStreamer::SourceFactory::JitterBuffer::Buffered);
         sourceConfig.latencyMs = _rtpJitterLatencyMs;
+        sourceConfig.timeoutS = timeout;
         // do-retransmission needs ≥40 ms latency headroom over the default 20 ms rtx-delay;
         // forcibly disable for sub-frame latency configurations to avoid retransmit storms.
         sourceConfig.doRetransmission = (_rtpJitterLatencyMs >= 40) && (sourceConfig.jitterBuffer != GStreamer::SourceFactory::JitterBuffer::None);
