@@ -307,6 +307,11 @@ void GstVideoReceiver::_startPipeline(uint32_t timeout, bool reconnectAttempt)
             gst_clear_object(&bus);
         }
 
+        if (!GStreamer::SourceFactory::activate(_source)) {
+            qCCritical(GstVideoReceiverLog) << "SourceFactory::activate() failed";
+            break;
+        }
+
         GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GStreamer::kPipelineGraphDetails, "pipeline-initial");
         running = (gst_element_set_state(_pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
     } while(0);

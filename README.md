@@ -21,7 +21,7 @@ and mission planning for any *MAVLink-enabled* drone, including *PX4* and *ArduP
 - **Live Fly View** — real-time flight display with map, instruments, and full vehicle telemetry.
 - **Vehicle setup** — guided wizards for sensor calibration, radio, flight modes, and power.
 - **Parameter tuning** — inspect and edit every vehicle parameter through the Fact System.
-- **Video streaming** — GStreamer-based UDP RTP, RTSP, and HTTP MJPEG video with recording in the Flight Display.
+- **Video streaming** — GStreamer-based UDP RTP, RTSP, HTTP MJPEG, and WebSocket JPEG video with recording in the Flight Display.
 - **Multi-vehicle** — connect to and monitor multiple vehicles simultaneously.
 - **MAVLink tooling** — built-in MAVLink Inspector, console, and log download/analysis.
 - **Cross-platform** — Windows, macOS, Linux, Android, and iOS from a single codebase.

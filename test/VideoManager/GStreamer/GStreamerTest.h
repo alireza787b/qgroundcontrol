@@ -88,6 +88,11 @@ private slots:
     void _testSourceFactoryRtspExcludesStaticJitterBuffer();
     void _testSourceFactoryHttpMjpeg();
     void _testSourceFactoryRejectsUnsafeHttpMjpegUrl();
+    void _testSourceFactoryWebSocketJpeg();
+    void _testWebSocketJpegValidation();
+    void _testSourceFactoryWebSocketJpegDelivery();
+    void _testWebSocketJpegReconnectOwnership();
+    void _testSourceFactoryRejectsUnsafeWebSocketJpegUrl();
     void _testSourceFactoryRejectsBadUri();
     void _testSourceFactoryTcpMpegTs();
     void _testSourceFactoryRejectsBadTcpUri();
