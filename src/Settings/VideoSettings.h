@@ -19,6 +19,7 @@ public:
     DEFINE_SETTINGFACT(rtspUrl)
     DEFINE_SETTINGFACT(httpMjpegUrl)
     DEFINE_SETTINGFACT(webSocketJpegUrl)
+    DEFINE_SETTINGFACT(webSocketJpegOrigin)
     DEFINE_SETTINGFACT(aspectRatio)
     DEFINE_SETTINGFACT(videoFit)
     DEFINE_SETTINGFACT(gridLines)

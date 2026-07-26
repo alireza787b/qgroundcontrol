@@ -181,6 +181,8 @@ void VideoManager::init(QQuickWindow *mainWindow)
     (void) connect(_videoSettings->httpMjpegUrl(), &Fact::rawValueChanged, this, &VideoManager::_videoSourceChanged);
     (void) connect(_videoSettings->webSocketJpegUrl(), &Fact::rawValueChanged, this,
                    &VideoManager::_videoSourceChanged);
+    (void) connect(_videoSettings->webSocketJpegOrigin(), &Fact::rawValueChanged, this,
+                   &VideoManager::_videoSourceChanged);
     (void) connect(_videoSettings->tcpUrl(), &Fact::rawValueChanged, this, &VideoManager::_videoSourceChanged);
     (void) connect(_videoSettings->aspectRatio(), &Fact::rawValueChanged, this, &VideoManager::aspectRatioChanged);
     (void) connect(_videoSettings->lowLatencyMode(), &Fact::rawValueChanged, this, [this](const QVariant &value) { Q_UNUSED(value); _restartAllVideos(); });
@@ -700,6 +702,14 @@ bool VideoManager::_updateSettings(VideoReceiver *receiver)
     settingsChanged |= _updateAutoStream(receiver);
 
     const QString source = _videoSettings->videoSource()->rawValue().toString();
+    const QString webSocketOrigin = (source == VideoSettings::videoSourceWebSocketJPEG)
+                                        ? _videoSettings->webSocketJpegOrigin()->rawValue().toString()
+                                        : QString();
+    if (webSocketOrigin != receiver->webSocketOrigin()) {
+        receiver->setWebSocketOrigin(webSocketOrigin);
+        settingsChanged = true;
+    }
+
     if (source == VideoSettings::videoSourceUDPH264) {
         settingsChanged |= _updateVideoUri(receiver, QStringLiteral("udp://%1").arg(_videoSettings->udpUrl()->rawValue().toString()));
     } else if (source == VideoSettings::videoSourceUDPH265) {

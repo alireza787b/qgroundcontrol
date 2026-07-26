@@ -13,6 +13,7 @@ Connection settings vary by source type:
 - **RTSP URL** — full RTSP stream address
 - **HTTP MJPEG URL** — full `http://` or `https://` address of a multipart MJPEG stream
 - **WebSocket JPEG URL** — full `ws://` or `wss://` address of a JPEG message stream
+- **WebSocket Origin** — optional `http://` or `https://` origin required by some WebSocket servers
 - **TCP URL** — TCP stream address
 - **UDP URL** — UDP stream address and port (default: `0.0.0.0:5600`)
 
@@ -27,7 +28,9 @@ pixels in either dimension, and images over 64 megapixels are rejected. The
 receiver drops older queued images when decoding falls behind. `wss://`
 certificates are verified using QGroundControl's configured trust store.
 Credentials embedded in the URL are rejected. Use unencrypted `ws://` only on
-a trusted network.
+a trusted network. When required, enter only the Origin scheme and authority
+(for example, `https://video.example.com`), without credentials, a path, query,
+or fragment.
 
 ## Settings
 
