@@ -18,7 +18,7 @@ public:
     static constexpr int kMaximumJpegDimension = 16384;
     static constexpr quint64 kMaximumDecodedPixels = 64 * 1024 * 1024;
 
-    QGCWebSocketVideoSource(const QUrl& url, GstElement* appsrc);
+    QGCWebSocketVideoSource(const QUrl& url, const QString& origin, GstElement* appsrc);
     ~QGCWebSocketVideoSource();
 
     Q_DISABLE_COPY_MOVE(QGCWebSocketVideoSource)
@@ -27,6 +27,7 @@ public:
     void stop();
 
     static bool isCompleteJpeg(QByteArrayView message);
+    static QString normalizedOrigin(const QString& origin);
 
 private:
     class Impl;

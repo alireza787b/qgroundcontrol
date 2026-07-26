@@ -519,7 +519,7 @@ GstElement* buildHttpMjpegSource(const QUrl& sourceUrl, const Config& config)
     return sourceBin;
 }
 
-GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
+GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl, const Config& config)
 {
     if (!sourceUrl.isValid() || sourceUrl.isRelative() || sourceUrl.host().isEmpty()) {
         qCWarning(GstSourceFactoryLog) << "Invalid WebSocket JPEG URL:"
@@ -529,6 +529,16 @@ GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
     if (!sourceUrl.userInfo().isEmpty()) {
         qCWarning(GstSourceFactoryLog) << "WebSocket JPEG credentials in URLs are not supported";
         return nullptr;
+    }
+
+    QString origin;
+    if (!config.webSocketOrigin.trimmed().isEmpty()) {
+        origin = QGCWebSocketVideoSource::normalizedOrigin(config.webSocketOrigin);
+        if (origin.isEmpty()) {
+            qCWarning(GstSourceFactoryLog)
+                << "Invalid WebSocket Origin; expected an HTTP(S) scheme and authority without credentials or a path";
+            return nullptr;
+        }
     }
 
     GstElement* appsrc = gst_element_factory_make("appsrc", "source");
@@ -575,7 +585,7 @@ GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
             break;
         }
 
-        auto* context = new QGCWebSocketVideoSource(sourceUrl, binAppsrc);
+        auto* context = new QGCWebSocketVideoSource(sourceUrl, origin, binAppsrc);
         g_object_set_data_full(G_OBJECT(bin), kWebSocketSourceContextKey, context,
                                [](gpointer data) { delete static_cast<QGCWebSocketVideoSource*>(data); });
 
@@ -707,7 +717,7 @@ GstElement* create(const QString& uri, const Config& config)
         return buildHttpMjpegSource(sourceUrl, config);
     }
     if (isWebSocketJpeg) {
-        return buildWebSocketJpegSource(sourceUrl);
+        return buildWebSocketJpegSource(sourceUrl, config);
     }
 
     // Owning locals until gst_bin_add*, then nulled (non-owning alias used downstream) so the
