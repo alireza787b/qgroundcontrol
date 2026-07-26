@@ -3,9 +3,49 @@
 #ifdef QGC_GST_STREAMING
 
 #include "VideoManager.h"
+#include "VideoReceiver.h"
 
 #include <QtCore/QRegularExpression>
+#include <QtTest/QSignalSpy>
 #include <QtQuick/QQuickWindow>
+
+namespace {
+
+class TestVideoReceiver final : public VideoReceiver
+{
+public:
+    explicit TestVideoReceiver(QObject *parent = nullptr)
+        : VideoReceiver(parent)
+    {}
+
+    void start(uint32_t timeout) override
+    {
+        ++startCount;
+        lastTimeout = timeout;
+        emit onStartComplete(STATUS_OK);
+    }
+
+    void stop() override
+    {
+        ++stopCount;
+    }
+
+    void startDecoding(void *sink) override { Q_UNUSED(sink); }
+    void stopDecoding() override {}
+    void startRecording(const QString &videoFile, FILE_FORMAT format) override
+    {
+        Q_UNUSED(videoFile);
+        Q_UNUSED(format);
+    }
+    void stopRecording() override {}
+    void takeScreenshot(const QString &imageFile) override { Q_UNUSED(imageFile); }
+
+    int startCount = 0;
+    int stopCount = 0;
+    uint32_t lastTimeout = 0;
+};
+
+}  // namespace
 
 void VideoManagerInitTest::init()
 {
@@ -101,12 +141,129 @@ void VideoManagerInitTest::_testBackendInitFailure()
     QCOMPARE(createReceiversCount, 0);
 }
 
+void VideoManagerInitTest::_testManagerRequestedRestart()
+{
+    VideoManager videoManager;
+    TestVideoReceiver receiver;
+    receiver.setName(QStringLiteral("testVideo"));
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    receiver.setStarted(true);
+
+    videoManager._restartVideo(&receiver);
+    videoManager._restartVideo(&receiver);
+    QCOMPARE(receiver.stopCount, 1);
+    QVERIFY(videoManager._receiverLifecycle.value(&receiver).restartAfterStop);
+
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    videoManager._handleReceiverStopComplete(&receiver, VideoReceiver::STATUS_OK);
+
+    QVERIFY(startSpy.wait(1500));
+    QCOMPARE(receiver.startCount, 1);
+    QVERIFY(receiver.lastTimeout > 0);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).restartAfterStop);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).retryScheduled);
+}
+
+void VideoManagerInitTest::_testTransportStopDoesNotRestart()
+{
+    VideoManager videoManager;
+    TestVideoReceiver receiver;
+    receiver.setName(QStringLiteral("testVideo"));
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    receiver.setStarted(true);
+
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    videoManager._handleReceiverStopComplete(&receiver, VideoReceiver::STATUS_OK);
+
+    QVERIFY(!receiver.started());
+    QVERIFY(!startSpy.wait(1100));
+    QCOMPARE(receiver.startCount, 0);
+}
+
+void VideoManagerInitTest::_testFailedStopDoesNotRestart()
+{
+    VideoManager videoManager;
+    TestVideoReceiver receiver;
+    receiver.setName(QStringLiteral("testVideo"));
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    receiver.setStarted(true);
+
+    videoManager._restartVideo(&receiver);
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    expectLogMessage(
+        "Video.VideoManager",
+        QtWarningMsg,
+        QRegularExpression(QStringLiteral("Video receiver stop failed; manager restart cancelled")));
+    videoManager._handleReceiverStopComplete(&receiver, VideoReceiver::STATUS_FAIL);
+    verifyExpectedLogMessage();
+
+    QVERIFY(!startSpy.wait(1100));
+    QCOMPARE(receiver.startCount, 0);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).restartAfterStop);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).retryScheduled);
+}
+
+void VideoManagerInitTest::_testOperatorStopCancelsPendingRestart()
+{
+    VideoManager videoManager;
+    TestVideoReceiver receiver;
+    receiver.setName(QStringLiteral("testVideo"));
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    receiver.setStarted(true);
+    videoManager._videoReceivers.append(&receiver);
+
+    videoManager._restartVideo(&receiver);
+    videoManager._handleReceiverStopComplete(&receiver, VideoReceiver::STATUS_OK);
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    videoManager.stopVideo();
+
+    QVERIFY(!startSpy.wait(1100));
+    QCOMPARE(receiver.startCount, 0);
+    QCOMPARE(receiver.stopCount, 2);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).runRequested);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).restartAfterStop);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).retryScheduled);
+
+    videoManager._videoReceivers.removeOne(&receiver);
+}
+
+void VideoManagerInitTest::_testOperatorStopCancelsStartFailureRetry()
+{
+    VideoManager videoManager;
+    TestVideoReceiver receiver;
+    receiver.setName(QStringLiteral("testVideo"));
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    videoManager._videoReceivers.append(&receiver);
+
+    videoManager._startReceiver(&receiver);
+    QCOMPARE(receiver.startCount, 1);
+
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    videoManager._handleReceiverStartComplete(&receiver, VideoReceiver::STATUS_FAIL);
+    QVERIFY(videoManager._receiverLifecycle.value(&receiver).retryScheduled);
+
+    videoManager.stopVideo();
+
+    QVERIFY(!startSpy.wait(1100));
+    QCOMPARE(receiver.startCount, 1);
+    QCOMPARE(receiver.stopCount, 1);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).runRequested);
+    QVERIFY(!videoManager._receiverLifecycle.value(&receiver).retryScheduled);
+
+    videoManager._videoReceivers.removeOne(&receiver);
+}
+
 #else
 
 void VideoManagerInitTest::init() { UnitTest::init(); QSKIP("GStreamer not enabled"); }
 void VideoManagerInitTest::_testQmlReadyBeforeBackendReady() { QSKIP("GStreamer not enabled"); }
 void VideoManagerInitTest::_testBackendReadyBeforeQmlReady() { QSKIP("GStreamer not enabled"); }
 void VideoManagerInitTest::_testBackendInitFailure() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::_testManagerRequestedRestart() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::_testTransportStopDoesNotRestart() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::_testFailedStopDoesNotRestart() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::_testOperatorStopCancelsPendingRestart() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::_testOperatorStopCancelsStartFailureRetry() { QSKIP("GStreamer not enabled"); }
 
 #endif
 
