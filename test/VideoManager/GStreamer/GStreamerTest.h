@@ -25,6 +25,9 @@ private slots:
     void _testPipelineGraphOmitsElementProperties();
     void _testCompleteInit();
     void _testCreateVideoReceiver();
+    void _testStopCancelsReconnectSynchronously();
+    void _testRetiredPipelineBusRejected();
+    void _testReconnectHealthyWindowPolicy();
     void _testBindDebugLevelFactRejectsNullContext();
     void _testRuntimeVersionCheck();
     void _testAppsinkFrameDelivery();
