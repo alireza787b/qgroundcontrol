@@ -18,12 +18,14 @@
 #include "QGCNetworkHelper.h"
 #include "QGCQVideoSinkController.h"
 
+#include <QtCore/QByteArray>
 #include <QtCore/QDateTime>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QUrl>
 #include <QtQuick/QQuickItem>
 
 #include <algorithm>
+#include <chrono>
 
 #include <gst/gst.h>
 #include <gst/video/video.h>
@@ -70,6 +72,13 @@ QString canonicalGStreamerError(const GError* error)
     return result;
 }
 
+qint64 steadyClockMilliseconds()
+{
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+               std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+}
+
 } // namespace
 
 GstVideoReceiver::GstVideoReceiver(QObject *parent)
@@ -97,11 +106,28 @@ QString GstVideoReceiver::_redactedUri() const
 
 void GstVideoReceiver::start(uint32_t timeout)
 {
+    _runRequested.store(true, std::memory_order_release);
+    _reconnectAttempts.store(0, std::memory_order_relaxed);
+    const quint64 generation = _advanceReconnectGeneration();
+
     if (_needDispatch()) {
-        _worker->dispatch([this, timeout]() { start(timeout); });
+        _worker->dispatch([this, timeout, generation]() {
+            if (_runRequested.load(std::memory_order_acquire) &&
+                (generation == _reconnectGeneration.load(std::memory_order_acquire))) {
+                _startPipeline(timeout, false);
+            }
+        });
         return;
     }
 
+    if (_runRequested.load(std::memory_order_acquire) &&
+        (generation == _reconnectGeneration.load(std::memory_order_acquire))) {
+        _startPipeline(timeout, false);
+    }
+}
+
+void GstVideoReceiver::_startPipeline(uint32_t timeout, bool reconnectAttempt)
+{
     if (_pipeline) {
         qCDebug(GstVideoReceiverLog) << "Already running!" << _redactedUri();
         emit onStartComplete(STATUS_INVALID_STATE);
@@ -115,6 +141,15 @@ void GstVideoReceiver::start(uint32_t timeout)
     }
 
     _timeout = timeout;
+    _reconnectBackoffResetGeneration.store(0, std::memory_order_release);
+    _reconnectHealthySinceMonotonicMs.store(0, std::memory_order_release);
+    const qint64 timeoutMs = std::max<qint64>(1000, static_cast<qint64>(timeout) * 1000);
+    _reconnectStabilityWindowMs.store(
+        std::max(kReconnectMinimumHealthyWindowMs, timeoutMs * 2),
+        std::memory_order_relaxed);
+    _reconnectFreshnessWindowMs.store(
+        std::max(kReconnectMinimumRecentFrameMs, timeoutMs),
+        std::memory_order_relaxed);
     _buffer = lowLatency() ? -1 : 0;
 
     qCDebug(GstVideoReceiverLog) << "Starting" << _redactedUri() << ", lowLatency" << lowLatency()
@@ -152,6 +187,8 @@ void GstVideoReceiver::start(uint32_t timeout)
         }
 
         _lastSourceFrameTime = 0;
+        _lastSourceFrameMonotonicMs = 0;
+        _reconnectHealthySinceMonotonicMs = 0;
 
         _teeProbeId = gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, _teeProbe, this, nullptr);
         gst_clear_object(&pad);
@@ -255,6 +292,11 @@ void GstVideoReceiver::start(uint32_t timeout)
 
         GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
         if (bus) {
+            {
+                QMutexLocker lock(&_pipelineMutex);
+                _pipelineBus = bus;
+                _pipelineGeneration.fetch_add(1, std::memory_order_acq_rel);
+            }
             gst_bus_enable_sync_message_emission(bus);
             (void) g_signal_connect(bus, "sync-message", G_CALLBACK(_onBusMessage), this);
             // HwBuffers facade chains every compiled context bridge so they don't clobber each
@@ -272,9 +314,16 @@ void GstVideoReceiver::start(uint32_t timeout)
         qCCritical(GstVideoReceiverLog) << "Failed";
 
         if (_pipeline) {
+            GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
+            _retirePipelineBus(bus);
+            gst_clear_object(&bus);
             (void) gst_element_set_state(_pipeline, GST_STATE_NULL);
             (void) gst_element_get_state(_pipeline, nullptr, nullptr, GST_CLOCK_TIME_NONE);
-            gst_clear_object(&_pipeline);
+            {
+                QMutexLocker lock(&_pipelineMutex);
+                gst_clear_object(&_pipeline);
+                _pipeline = nullptr;
+            }
         }
 
         if (!pipelineUp) {
@@ -286,7 +335,12 @@ void GstVideoReceiver::start(uint32_t timeout)
             gst_clear_object(&_source);
         }
 
-        emit onStartComplete(STATUS_FAIL);
+        if (reconnectAttempt) {
+            const quint64 generation = _advanceReconnectGeneration();
+            _queueReconnect(QByteArrayLiteral("reconnect start failure"), generation);
+        } else {
+            emit onStartComplete(STATUS_FAIL);
+        }
     } else {
         GST_DEBUG_BIN_TO_DOT_FILE(GST_BIN(_pipeline), GStreamer::kPipelineGraphDetails, "pipeline-started");
         qCDebug(GstVideoReceiverLog) << "Started" << _redactedUri();
@@ -300,21 +354,25 @@ void GstVideoReceiver::start(uint32_t timeout)
 
 void GstVideoReceiver::stop()
 {
+    _runRequested.store(false, std::memory_order_release);
+    _advanceReconnectGeneration();
+
     if (_needDispatch()) {
-        _worker->dispatch([this]() { stop(); });
+        _worker->dispatch([this]() { _stopPipeline(); });
         return;
     }
 
+    _stopPipeline();
+}
+
+void GstVideoReceiver::_stopPipeline()
+{
     if (_uri.isEmpty()) {
-        qCDebug(GstVideoReceiverLog) << "Stop called on empty URI (no-op)";
-        return;
+        qCDebug(GstVideoReceiverLog) << "Stopping receiver after its URI was cleared";
     }
 
     qCDebug(GstVideoReceiverLog) << "Stopping" << _redactedUri();
 
-    // Bump the epoch synchronously (atomic — no GUI thread needed) so any in-flight reconnect lambda
-    // is superseded before this stop() returns; cross-callsite QueuedConnection FIFO is not guaranteed.
-    _reconnectEpoch.fetch_add(1, std::memory_order_relaxed);
     // Only _watchdogTimer.stop() must run on the GUI thread (the timer lives on `this`).
     QMetaObject::invokeMethod(this, [this]() { _watchdogTimer.stop(); }, Qt::QueuedConnection);
 
@@ -332,8 +390,7 @@ void GstVideoReceiver::stop()
     if (_pipeline) {
         GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(_pipeline));
         if (bus) {
-            gst_bus_disable_sync_message_emission(bus);
-            (void) g_signal_handlers_disconnect_by_data(bus, this);
+            _retirePipelineBus(bus);
 
             gboolean recordingValveClosed = TRUE;
             g_object_get(_recorderValve, "drop", &recordingValveClosed, nullptr);
@@ -392,6 +449,7 @@ void GstVideoReceiver::stop()
             gst_clear_object(&bus);
         } else {
             qCCritical(GstVideoReceiverLog) << "gst_pipeline_get_bus() failed";
+            _retirePipelineBus(nullptr);
         }
 
         (void) gst_element_set_state(_pipeline, GST_STATE_NULL);
@@ -422,6 +480,8 @@ void GstVideoReceiver::stop()
         _source = nullptr;
 
         _lastSourceFrameTime = 0;
+        _lastSourceFrameMonotonicMs = 0;
+        _reconnectHealthySinceMonotonicMs = 0;
 
         if (_streaming) {
             _streaming = false;
@@ -720,16 +780,41 @@ void GstVideoReceiver::_watchdog()
 
 void GstVideoReceiver::_scheduleReconnect(const char *reason)
 {
-    // Always tear down — even when autoReconnect is off we still want a clean stop.
-    // stop() bumps _reconnectEpoch, so any prior singleShot lambda becomes a no-op.
-    stop();
+    const QByteArray reasonText(reason ? reason : "unknown");
 
-    if (!_autoReconnect) {
-        qCDebug(GstVideoReceiverLog) << "Auto-reconnect disabled — not retrying after" << reason;
+    // Transport recovery preserves the operator's run intent. Advancing the generation
+    // invalidates any older retry before this pipeline is torn down.
+    const quint64 generation = _advanceReconnectGeneration();
+    _stopPipeline();
+    _reconnectBackoffResetGeneration.store(0, std::memory_order_release);
+    _reconnectHealthySinceMonotonicMs.store(0, std::memory_order_release);
+    _queueReconnect(reasonText, generation);
+}
+
+quint64 GstVideoReceiver::_advanceReconnectGeneration()
+{
+    _reconnectBackoffResetGeneration.store(0, std::memory_order_release);
+    _reconnectHealthySinceMonotonicMs.store(0, std::memory_order_release);
+    return _reconnectGeneration.fetch_add(1, std::memory_order_acq_rel) + 1;
+}
+
+void GstVideoReceiver::_queueReconnect(const QByteArray &reasonText, quint64 generation)
+{
+    if (!_runRequested.load(std::memory_order_acquire)) {
+        qCDebug(GstVideoReceiverLog) << "Run request was cancelled — not retrying after" << reasonText;
+        return;
+    }
+
+    if (!_autoReconnect.load(std::memory_order_acquire)) {
+        qCDebug(GstVideoReceiverLog) << "Auto-reconnect disabled — not retrying after" << reasonText;
         return;
     }
 
     if (_uri.isEmpty()) {
+        return;
+    }
+
+    if (generation != _reconnectGeneration.load(std::memory_order_acquire)) {
         return;
     }
 
@@ -738,33 +823,68 @@ void GstVideoReceiver::_scheduleReconnect(const char *reason)
     const uint32_t reconnectTimeout = (_timeout != 0) ? _timeout : 8;
     const QString uri = _uri;
 
-    // Schedule on the GUI thread (QTimer::singleShot requires its receiver's thread). Worker
-    // is the only caller today, but route through invokeMethod so a future direct GUI-thread
-    // call (e.g. user-initiated retry) stays correct.
-    QMetaObject::invokeMethod(this, [this, reason, reconnectTimeout, uri]() {
+    QMetaObject::invokeMethod(this, [this, reasonText, reconnectTimeout, uri, generation]() {
+        if (!_runRequested.load(std::memory_order_acquire) ||
+            !_autoReconnect.load(std::memory_order_acquire) ||
+            (generation != _reconnectGeneration.load(std::memory_order_acquire))) {
+            return;
+        }
+
         const int next = std::min(_reconnectAttempts.load(std::memory_order_relaxed) + 1, 30);
         _reconnectAttempts.store(next, std::memory_order_relaxed);
         // 1s → 2s → 4s → 8s → 16s, capped at 30s. Capping bounds worst-case "vehicle in flight,
         // RF down for 5 min" recovery; lower than typical RTSP server keepalive (60s).
         const int delaySec = std::min(1 << std::min(next - 1, 5), 30);
-        const quint64 epoch = _reconnectEpoch.load(std::memory_order_relaxed);
         const int attempts = next;
         qCInfo(GstVideoReceiverLog) << "Scheduling reconnect #" << attempts
-                                    << "in" << delaySec << "s after" << reason
+                                    << "in" << delaySec << "s after" << reasonText
                                     << QGCNetworkHelper::redactedUrlForLogging(uri);
-        QTimer::singleShot(delaySec * 1000, this, [this, epoch, attempts, reconnectTimeout, uri]() {
-            if (epoch != _reconnectEpoch.load(std::memory_order_relaxed)) return;  // superseded by stop()
-            // _pipeline is mutated by the worker under _pipelineMutex; a bare deref here (GUI
-            // thread) races teardown, so probe liveness through the mutex-guarded accessor.
-            GstElement *livePipeline = _acquirePipelineRef();
-            const bool pipelineUp = (livePipeline != nullptr);
-            if (livePipeline) gst_object_unref(livePipeline);
-            if (uri.isEmpty() || pipelineUp) return;  // pipeline already came back
-            qCInfo(GstVideoReceiverLog) << "Reconnecting (attempt" << attempts << ")"
-                                        << QGCNetworkHelper::redactedUrlForLogging(uri);
-            start(reconnectTimeout);
+        QTimer::singleShot(delaySec * 1000, this, [this, generation, attempts, reconnectTimeout, uri]() {
+            if (!_runRequested.load(std::memory_order_acquire) ||
+                !_autoReconnect.load(std::memory_order_acquire) ||
+                (generation != _reconnectGeneration.load(std::memory_order_acquire))) {
+                return;
+            }
+
+            _worker->dispatch([this, generation, attempts, reconnectTimeout, uri]() {
+                if (!_runRequested.load(std::memory_order_acquire) ||
+                    !_autoReconnect.load(std::memory_order_acquire) ||
+                    (generation != _reconnectGeneration.load(std::memory_order_acquire)) ||
+                    uri.isEmpty()) {
+                    return;
+                }
+
+                GstElement *livePipeline = _acquirePipelineRef();
+                const bool pipelineUp = (livePipeline != nullptr);
+                if (livePipeline) {
+                    gst_object_unref(livePipeline);
+                }
+                if (pipelineUp) {
+                    return;
+                }
+
+                qCInfo(GstVideoReceiverLog) << "Reconnecting (attempt" << attempts << ")"
+                                            << QGCNetworkHelper::redactedUrlForLogging(uri);
+                _startPipeline(reconnectTimeout, true);
+            });
         });
     }, Qt::QueuedConnection);
+}
+
+bool GstVideoReceiver::_isReconnectDeliveryHealthy(qint64 windowStartMs, qint64 latestFrameMs,
+                                                    qint64 healthySinceMs,
+                                                    quint64 initialFrameCount, quint64 currentFrameCount,
+                                                    qint64 nowMs, qint64 stabilityWindowMs,
+                                                    qint64 freshnessWindowMs)
+{
+    return (windowStartMs > 0) &&
+           (healthySinceMs == windowStartMs) &&
+           (latestFrameMs >= windowStartMs) &&
+           (stabilityWindowMs >= kReconnectMinimumHealthyWindowMs) &&
+           (freshnessWindowMs >= kReconnectMinimumRecentFrameMs) &&
+           (nowMs >= (windowStartMs + stabilityWindowMs)) &&
+           ((nowMs - latestFrameMs) <= freshnessWindowMs) &&
+           (currentFrameCount > initialFrameCount);
 }
 
 void GstVideoReceiver::dumpPipelineGraph(const QString &tag)
@@ -1169,15 +1289,65 @@ bool GstVideoReceiver::_addVideoSink(GstPad *pad)
 void GstVideoReceiver::_noteTeeFrame()
 {
     _lastSourceFrameTime.store(QDateTime::currentSecsSinceEpoch(), std::memory_order_relaxed);
-    // Successful frame arrival: drop the reconnect backoff so the next failure starts at 1 s,
-    // not minutes-into-the-curve. This probe runs on the streaming thread while the backoff
-    // increment runs on the GUI thread; post the reset there too so all mutation of
-    // _reconnectAttempts is single-threaded and the increment can't clobber the reset.
-    if (_reconnectAttempts.load(std::memory_order_relaxed) != 0) {
-        QMetaObject::invokeMethod(
-            this, [this]() { _reconnectAttempts.store(0, std::memory_order_relaxed); }, Qt::QueuedConnection);
+    const qint64 nowMs = steadyClockMilliseconds();
+    const qint64 previousFrameMs = _lastSourceFrameMonotonicMs.exchange(nowMs, std::memory_order_relaxed);
+    const qint64 freshnessWindowMs = _reconnectFreshnessWindowMs.load(std::memory_order_relaxed);
+    if ((previousFrameMs <= 0) || ((nowMs - previousFrameMs) > freshnessWindowMs)) {
+        _reconnectHealthySinceMonotonicMs.store(nowMs, std::memory_order_relaxed);
     }
     const quint64 sourceFrames = _sourceFrameCount.fetch_add(1, std::memory_order_relaxed) + 1;
+
+    quint64 expectedResetGeneration = 0;
+    const quint64 generation = _reconnectGeneration.load(std::memory_order_acquire);
+    if ((_reconnectAttempts.load(std::memory_order_relaxed) != 0) &&
+        _reconnectBackoffResetGeneration.compare_exchange_strong(
+            expectedResetGeneration, generation, std::memory_order_acq_rel)) {
+        const qint64 stabilityWindowMs = _reconnectStabilityWindowMs.load(std::memory_order_relaxed);
+        const qint64 healthySinceMs = _reconnectHealthySinceMonotonicMs.load(std::memory_order_relaxed);
+        QMetaObject::invokeMethod(
+            this,
+            [this, generation, sourceFrames, healthySinceMs, stabilityWindowMs, freshnessWindowMs]() {
+                if (generation != _reconnectGeneration.load(std::memory_order_acquire)) {
+                    quint64 expectedGeneration = generation;
+                    _reconnectBackoffResetGeneration.compare_exchange_strong(
+                        expectedGeneration, 0, std::memory_order_acq_rel);
+                    return;
+                }
+
+                QTimer::singleShot(
+                    std::chrono::milliseconds(stabilityWindowMs),
+                    this,
+                    [this, generation, sourceFrames, healthySinceMs, stabilityWindowMs, freshnessWindowMs]() {
+                        quint64 expectedGeneration = generation;
+                        _reconnectBackoffResetGeneration.compare_exchange_strong(
+                            expectedGeneration, 0, std::memory_order_acq_rel);
+                        if (!_runRequested.load(std::memory_order_acquire) ||
+                            (generation != _reconnectGeneration.load(std::memory_order_acquire))) {
+                            return;
+                        }
+
+                        const qint64 checkTimeMs = steadyClockMilliseconds();
+                        if (!_isReconnectDeliveryHealthy(
+                                healthySinceMs,
+                                _lastSourceFrameMonotonicMs.load(std::memory_order_relaxed),
+                                _reconnectHealthySinceMonotonicMs.load(std::memory_order_relaxed),
+                                sourceFrames,
+                                _sourceFrameCount.load(std::memory_order_relaxed),
+                                checkTimeMs,
+                                stabilityWindowMs,
+                                freshnessWindowMs)) {
+                            return;
+                        }
+
+                        if (_reconnectAttempts.exchange(0, std::memory_order_relaxed) != 0) {
+                            qCInfo(GstVideoReceiverLog)
+                                << "Reconnect backoff reset after sustained frame delivery";
+                        }
+                    });
+            },
+            Qt::QueuedConnection);
+    }
+
     if (sourceFrames == 1) {
         qCInfo(GstVideoReceiverLog).noquote() << "Source receiving frames (tee):" << _redactedUri();
     } else if ((sourceFrames % 300) == 0) {
@@ -1340,7 +1510,36 @@ GstElement *GstVideoReceiver::_acquirePipelineRef() const
     return GST_ELEMENT(gst_object_ref(_pipeline));
 }
 
-gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gpointer data)
+bool GstVideoReceiver::_currentPipelineGenerationForBus(GstBus *bus, quint64 *generation) const
+{
+    if (!bus || !generation) {
+        return false;
+    }
+
+    QMutexLocker lock(&_pipelineMutex);
+    if (!_pipeline || (_pipelineBus != bus)) {
+        return false;
+    }
+
+    *generation = _pipelineGeneration.load(std::memory_order_acquire);
+    return true;
+}
+
+void GstVideoReceiver::_retirePipelineBus(GstBus *bus)
+{
+    if (bus) {
+        gst_bus_disable_sync_message_emission(bus);
+        (void) g_signal_handlers_disconnect_by_data(bus, this);
+    }
+
+    QMutexLocker lock(&_pipelineMutex);
+    if (!bus || (_pipelineBus == bus)) {
+        _pipelineBus = nullptr;
+        _pipelineGeneration.fetch_add(1, std::memory_order_acq_rel);
+    }
+}
+
+gboolean GstVideoReceiver::_onBusMessage(GstBus *bus, GstMessage *msg, gpointer data)
 {
     if (!msg || !data) {
         qCCritical(GstVideoReceiverLog) << "Invalid parameters in _onBusMessage: msg=" << msg << "data=" << data;
@@ -1348,12 +1547,19 @@ gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gp
     }
 
     GstVideoReceiver *pThis = static_cast<GstVideoReceiver*>(data);
+    const GstMessageType messageType = GST_MESSAGE_TYPE(msg);
+    quint64 pipelineGeneration = 0;
 
-    if (GST_MESSAGE_TYPE(msg) != GST_MESSAGE_ERROR) {
+    if (!pThis->_currentPipelineGenerationForBus(bus, &pipelineGeneration)) {
+        qCDebug(GstVideoReceiverLog) << "Ignoring message from a retired pipeline" << messageType;
+        return TRUE;
+    }
+
+    if (messageType != GST_MESSAGE_ERROR) {
         HwBuffers::dispatchBusMessage(msg);
     }
 
-    switch (GST_MESSAGE_TYPE(msg)) {
+    switch (messageType) {
     case GST_MESSAGE_ERROR: {
         gchar *debug = nullptr;
         GError *error = nullptr;
@@ -1393,8 +1599,10 @@ gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gp
         }
 
         // GPU-side ERROR handling (cached-device drop) runs in HwBuffers::dispatchBusMessage above.
-        // _scheduleReconnect calls stop() then queues a backoff retry if autoReconnect is on.
-        pThis->_worker->dispatch([pThis]() {
+        pThis->_worker->dispatch([pThis, pipelineGeneration]() {
+            if (pipelineGeneration != pThis->_pipelineGeneration.load(std::memory_order_acquire)) {
+                return;
+            }
             qCDebug(GstVideoReceiverLog) << "Stopping because of error";
             pThis->_scheduleReconnect("pipeline error");
         });
@@ -1417,12 +1625,16 @@ gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gp
         g_clear_pointer(&debug, g_free);
         break;
     }
-    case GST_MESSAGE_EOS:
-        pThis->_worker->dispatch([pThis]() {
+    case GST_MESSAGE_EOS: {
+        pThis->_worker->dispatch([pThis, pipelineGeneration]() {
+            if (pipelineGeneration != pThis->_pipelineGeneration.load(std::memory_order_acquire)) {
+                return;
+            }
             qCDebug(GstVideoReceiverLog) << "Received EOS";
             pThis->_handleEOS();
         });
         break;
+    }
     case GST_MESSAGE_STREAM_COLLECTION: {
         GstStreamCollection *collection = nullptr;
         gst_message_parse_stream_collection(msg, &collection);
@@ -1498,7 +1710,10 @@ gboolean GstVideoReceiver::_onBusMessage(GstBus * /* bus */, GstMessage *msg, gp
         }
 
         if (GST_MESSAGE_TYPE(forward_msg) == GST_MESSAGE_EOS) {
-            pThis->_worker->dispatch([pThis]() {
+            pThis->_worker->dispatch([pThis, pipelineGeneration]() {
+                if (pipelineGeneration != pThis->_pipelineGeneration.load(std::memory_order_acquire)) {
+                    return;
+                }
                 qCDebug(GstVideoReceiverLog) << "Received branch EOS";
                 pThis->_handleEOS();
             });

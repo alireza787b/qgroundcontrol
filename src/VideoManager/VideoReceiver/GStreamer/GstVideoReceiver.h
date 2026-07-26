@@ -2,6 +2,7 @@
 
 #include <atomic>
 
+#include <QtCore/QByteArray>
 #include <QtCore/QMutex>
 #include <QtCore/QQueue>
 #include <QtCore/QThread>
@@ -41,6 +42,7 @@ private:
 /*===========================================================================*/
 
 typedef struct _GstElement GstElement;
+class GStreamerTest;
 
 class GstVideoReceiver : public VideoReceiver
 {
@@ -51,6 +53,8 @@ class GstVideoReceiver : public VideoReceiver
     Q_PROPERTY(qint64  currentJitterNs   READ currentJitterNs   NOTIFY decoderStatsChanged)
     Q_PROPERTY(double  qosProportion     READ qosProportion     NOTIFY decoderStatsChanged)
     Q_PROPERTY(int     qosQuality        READ qosQuality        NOTIFY decoderStatsChanged)
+
+    friend class GStreamerTest;
 
 public:
     explicit GstVideoReceiver(QObject *parent = nullptr);
@@ -86,6 +90,10 @@ private slots:
 
 private:
     QString _redactedUri() const;
+    void _startPipeline(uint32_t timeout, bool reconnectAttempt);
+    void _stopPipeline();
+    quint64 _advanceReconnectGeneration();
+    void _queueReconnect(const QByteArray &reason, quint64 generation);
     GstElement *_makeDecoder();
     GstElement *_makeFileSink(const QString &videoFile, FILE_FORMAT format);
 
@@ -110,11 +118,18 @@ private:
     /// `reason` is logged so reconnect storms are diagnosable. No-op when
     /// autoReconnect() is disabled.
     void _scheduleReconnect(const char *reason);
+    static bool _isReconnectDeliveryHealthy(qint64 windowStartMs, qint64 latestFrameMs,
+                                            qint64 healthySinceMs,
+                                            quint64 initialFrameCount, quint64 currentFrameCount,
+                                            qint64 nowMs, qint64 stabilityWindowMs,
+                                            qint64 freshnessWindowMs);
 
     /// Returns a strong ref to _pipeline (caller must gst_object_unref) or nullptr if torn down.
     /// Bus sync-message callbacks run on the streaming thread concurrent with stop() on the
     /// worker thread, so direct dereference of _pipeline races with gst_clear_object(&_pipeline).
     GstElement *_acquirePipelineRef() const;
+    bool _currentPipelineGenerationForBus(GstBus *bus, quint64 *generation) const;
+    void _retirePipelineBus(GstBus *bus);
 
     static gboolean _onBusMessage(GstBus *bus, GstMessage *message, gpointer user_data);
     static void _onNewPad(GstElement *element, GstPad *pad, gpointer data);
@@ -128,13 +143,23 @@ private:
     GstElement *_fileSink = nullptr;
     GstElement *_pipeline = nullptr;
     mutable QMutex _pipelineMutex;  // serializes _pipeline mutation (worker) vs read in _onBusMessage (streaming thread)
+    GstBus *_pipelineBus = nullptr;  ///< Non-owning; valid while _pipeline owns its bus.
     GstElement *_recorderValve = nullptr;
     GstElement *_source = nullptr;
     GstElement *_tee = nullptr;
     GstElement *_videoSink = nullptr;
     GstVideoWorker *_worker = nullptr;
-    std::atomic<int> _reconnectAttempts = 0;     ///< Written on the streaming thread (_noteTeeFrame) and GUI thread (reconnect lambda); atomic.
-    std::atomic<quint64> _reconnectEpoch = 0;    ///< Bumped on every stop() — pending singleShot lambdas check this before firing, replacing an explicit cancel/pending-flag pair.
+    static constexpr qint64 kReconnectMinimumHealthyWindowMs = 5000;
+    static constexpr qint64 kReconnectMinimumRecentFrameMs = 2000;
+    std::atomic<bool> _runRequested = false;
+    std::atomic<int> _reconnectAttempts = 0;     ///< Written on the GUI thread and read by the streaming thread.
+    std::atomic<quint64> _reconnectGeneration = 0;
+    std::atomic<quint64> _reconnectBackoffResetGeneration = 0;
+    std::atomic<qint64> _reconnectStabilityWindowMs = kReconnectMinimumHealthyWindowMs;
+    std::atomic<qint64> _reconnectFreshnessWindowMs = kReconnectMinimumRecentFrameMs;
+    std::atomic<quint64> _pipelineGeneration = 0;
+    std::atomic<qint64> _lastSourceFrameMonotonicMs = 0;
+    std::atomic<qint64> _reconnectHealthySinceMonotonicMs = 0;
     std::atomic<quint64> _sourceFrameCount =
         0;  ///< Tee-probe frame tally (streaming thread); drives the source-side flow heartbeat log.
     gulong _teeProbeId = 0;

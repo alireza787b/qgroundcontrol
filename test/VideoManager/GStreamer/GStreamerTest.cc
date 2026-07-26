@@ -12,6 +12,7 @@ QGC_LOGGING_CATEGORY(GStreamerTestLog, "Video.GStreamer.GStreamerTest")
 #include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
 #include <QtCore/QStandardPaths>
+#include <QtTest/QSignalSpy>
 #include <gst/gst.h>
 #include <memory>
 #include <vector>
@@ -517,6 +518,103 @@ void GStreamerTest::_testCreateVideoReceiver()
     QVERIFY(qobject_cast<GstVideoReceiver*>(receiver.get()));
 }
 
+void GStreamerTest::_testStopCancelsReconnectSynchronously()
+{
+    GstVideoReceiver receiver;
+    receiver.setUri(QStringLiteral("udp://0.0.0.0:5600"));
+    receiver._runRequested.store(true, std::memory_order_relaxed);
+    receiver._reconnectGeneration.store(7, std::memory_order_relaxed);
+    receiver._worker->dispatch([&receiver]() { receiver._scheduleReconnect("test"); });
+
+    QTRY_COMPARE_WITH_TIMEOUT(receiver._reconnectAttempts.load(std::memory_order_acquire), 1, 1000);
+
+    QSignalSpy startSpy(&receiver, &VideoReceiver::onStartComplete);
+    QSignalSpy stopSpy(&receiver, &VideoReceiver::onStopComplete);
+    const quint64 pendingGeneration = receiver._reconnectGeneration.load(std::memory_order_acquire);
+
+    receiver.stop();
+
+    QVERIFY(!receiver._runRequested.load(std::memory_order_acquire));
+    QVERIFY(receiver._reconnectGeneration.load(std::memory_order_acquire) > pendingGeneration);
+    QVERIFY_NO_SIGNAL_WAIT(startSpy, 1200);
+    QVERIFY(stopSpy.count() >= 1);
+}
+
+void GStreamerTest::_testRetiredPipelineBusRejected()
+{
+    GstVideoReceiver receiver;
+    GstElement *pipeline = gst_pipeline_new("retired-bus-test");
+    QVERIFY(pipeline);
+    GstBus *bus = gst_pipeline_get_bus(GST_PIPELINE(pipeline));
+    QVERIFY(bus);
+    gst_bus_enable_sync_message_emission(bus);
+
+    {
+        QMutexLocker lock(&receiver._pipelineMutex);
+        receiver._pipeline = pipeline;
+        receiver._pipelineBus = bus;
+        receiver._pipelineGeneration.store(11, std::memory_order_release);
+    }
+
+    quint64 generation = 0;
+    QVERIFY(receiver._currentPipelineGenerationForBus(bus, &generation));
+    QCOMPARE(generation, quint64(11));
+
+    receiver._retirePipelineBus(bus);
+    QVERIFY(!receiver._currentPipelineGenerationForBus(bus, &generation));
+    QVERIFY(receiver._pipelineGeneration.load(std::memory_order_acquire) > quint64(11));
+
+    {
+        QMutexLocker lock(&receiver._pipelineMutex);
+        receiver._pipeline = nullptr;
+    }
+    gst_clear_object(&bus);
+    gst_clear_object(&pipeline);
+}
+
+void GStreamerTest::_testReconnectHealthyWindowPolicy()
+{
+    constexpr qint64 windowStartMs = 10000;
+    constexpr quint64 initialFrameCount = 20;
+    constexpr qint64 stabilityWindowMs = GstVideoReceiver::kReconnectMinimumHealthyWindowMs;
+    constexpr qint64 freshnessWindowMs = GstVideoReceiver::kReconnectMinimumRecentFrameMs;
+    const qint64 healthyNowMs = windowStartMs + stabilityWindowMs;
+
+    QVERIFY(!GstVideoReceiver::_isReconnectDeliveryHealthy(
+        windowStartMs, healthyNowMs, windowStartMs, initialFrameCount, initialFrameCount, healthyNowMs,
+        stabilityWindowMs, freshnessWindowMs));
+    QVERIFY(!GstVideoReceiver::_isReconnectDeliveryHealthy(
+        windowStartMs,
+        healthyNowMs,
+        windowStartMs,
+        initialFrameCount,
+        initialFrameCount + 1,
+        healthyNowMs - 1,
+        stabilityWindowMs,
+        freshnessWindowMs));
+    QVERIFY(!GstVideoReceiver::_isReconnectDeliveryHealthy(
+        windowStartMs,
+        healthyNowMs - freshnessWindowMs - 1,
+        windowStartMs,
+        initialFrameCount,
+        initialFrameCount + 1,
+        healthyNowMs,
+        stabilityWindowMs,
+        freshnessWindowMs));
+    QVERIFY(!GstVideoReceiver::_isReconnectDeliveryHealthy(
+        windowStartMs,
+        healthyNowMs,
+        windowStartMs + 1,
+        initialFrameCount,
+        initialFrameCount + 1,
+        healthyNowMs,
+        stabilityWindowMs,
+        freshnessWindowMs));
+    QVERIFY(GstVideoReceiver::_isReconnectDeliveryHealthy(
+        windowStartMs, healthyNowMs, windowStartMs, initialFrameCount, initialFrameCount + 1, healthyNowMs,
+        stabilityWindowMs, freshnessWindowMs));
+}
+
 void GStreamerTest::_testBindDebugLevelFactRejectsNullContext()
 {
     Fact fact;
@@ -577,6 +675,9 @@ QGC_GST_SKIP_TEST(_testWritePipelineDotReturnsEmptyOnWriteFailure)
 QGC_GST_SKIP_TEST(_testPipelineGraphOmitsElementProperties)
 QGC_GST_SKIP_TEST(_testCompleteInit)
 QGC_GST_SKIP_TEST(_testCreateVideoReceiver)
+QGC_GST_SKIP_TEST(_testStopCancelsReconnectSynchronously)
+QGC_GST_SKIP_TEST(_testRetiredPipelineBusRejected)
+QGC_GST_SKIP_TEST(_testReconnectHealthyWindowPolicy)
 QGC_GST_SKIP_TEST(_testBindDebugLevelFactRejectsNullContext)
 QGC_GST_SKIP_TEST(_testRuntimeVersionCheck)
 QGC_GST_SKIP_TEST(_testAppsinkFrameDelivery)
