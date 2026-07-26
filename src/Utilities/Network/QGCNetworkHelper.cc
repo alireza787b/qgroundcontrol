@@ -5,6 +5,7 @@
 #include <QtCore/QFile>
 #include <QtCore/QIODevice>
 #include <QtCore/QJsonDocument>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QUrlQuery>
 #include <QtNetwork/QHttpHeaders>
 #include <QtNetwork/QHttpPart>
@@ -340,6 +341,62 @@ QUrl buildUrl(const QString& baseUrl, const QList<QPair<QString, QString>>& para
 QUrl urlWithoutQuery(const QUrl& url)
 {
     return url.adjusted(QUrl::RemoveQuery | QUrl::RemoveFragment);
+}
+
+QString redactedUrlForLogging(const QUrl& url)
+{
+    if (!url.isValid() || url.scheme().isEmpty()) {
+        return QStringLiteral("<invalid-url>");
+    }
+
+    QUrl redactedUrl(url);
+    const bool hadPath = !redactedUrl.path().isEmpty() && (redactedUrl.path() != QLatin1String("/"));
+    redactedUrl.setUserInfo(QString());
+    redactedUrl.setPath(hadPath ? QString() : redactedUrl.path());
+    redactedUrl.setQuery(QString());
+    redactedUrl.setFragment(QString());
+
+    QString displayUrl = redactedUrl.toDisplayString(QUrl::FullyEncoded);
+    if (hadPath) {
+        displayUrl += QStringLiteral("/<redacted>");
+    }
+    return displayUrl;
+}
+
+QString redactedUrlForLogging(const QString& url)
+{
+    return redactedUrlForLogging(QUrl(url));
+}
+
+QString redactedTextForLogging(const QString& text)
+{
+    static const QRegularExpression urlPattern(
+        QStringLiteral(R"(\b(?:https?|wss?|rtsp[a-z0-9+.-]*|udp(?:265)?|mpegts|tcp)://[^\s<>"']+)"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression authorizationPattern(
+        QStringLiteral(
+            R"(["']?(?:authorization|proxy-authorization)["']?\s*(?:=|:)\s*)"
+            R"((?:\(string\))?(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\r\n,;]*))"),
+        QRegularExpression::CaseInsensitiveOption);
+    static const QRegularExpression credentialPattern(
+        QStringLiteral(
+            R"(["']?(?:user-pw|user-id|password|passwd|token|secret|cookie|api[-_]?key)["']?)"
+            R"(\s*(?:=|:)\s*(?:\(string\))?(?:"[^"\r\n]*"|'[^'\r\n]*'|[^\s,;]+))"),
+        QRegularExpression::CaseInsensitiveOption);
+
+    QString redacted;
+    qsizetype previousEnd = 0;
+    QRegularExpressionMatchIterator matches = urlPattern.globalMatch(text);
+    while (matches.hasNext()) {
+        const QRegularExpressionMatch match = matches.next();
+        redacted += text.sliced(previousEnd, match.capturedStart() - previousEnd);
+        redacted += redactedUrlForLogging(match.captured());
+        previousEnd = match.capturedEnd();
+    }
+    redacted += text.sliced(previousEnd);
+    redacted.replace(authorizationPattern, QStringLiteral("<redacted-authorization>"));
+    redacted.replace(credentialPattern, QStringLiteral("<redacted-credential>"));
+    return redacted;
 }
 
 // ============================================================================

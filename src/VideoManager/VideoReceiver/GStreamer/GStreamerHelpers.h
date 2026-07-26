@@ -9,9 +9,15 @@
 #include "GStreamer.h"  // VideoDecoderOptions
 
 namespace GStreamer {
+/// Pipeline graph detail safe for logs and evidence bundles. Element properties can contain URLs,
+/// credentials, or request headers, so parameter flags must not be enabled.
+inline constexpr GstDebugGraphDetails kPipelineGraphDetails =
+    static_cast<GstDebugGraphDetails>(GST_DEBUG_GRAPH_SHOW_MEDIA_TYPE | GST_DEBUG_GRAPH_SHOW_CAPS_DETAILS |
+                                      GST_DEBUG_GRAPH_SHOW_STATES);
+
 bool isValidRtspUri(const gchar* uri_str);
 
-/// Dump @p pipeline's graph as a rotating .dot under CacheLocation/qgc-pipeline-dot/ for field reports.
+/// Dump @p pipeline's graph as a rotating .dot under CacheLocation/qgc-pipeline-dot-v2/ for field reports.
 /// Returns empty (no-op) when GST_DEBUG_DUMP_DOT_DIR is set or on I/O failure.
 QString writePipelineDot(GstElement* pipeline, const char* tag);
 

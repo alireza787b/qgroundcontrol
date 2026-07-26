@@ -10,6 +10,7 @@
 #include "GStreamer.h"
 #include "GStreamerHelpers.h"
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 
 QGC_LOGGING_CATEGORY(GStreamerLoggingLog, "Video.GStreamer.GStreamerLogging")
 QGC_LOGGING_CATEGORY_ON(GStreamerAPILog, "Video.GStreamer.GStreamerAPI")
@@ -19,21 +20,26 @@ namespace {
 
 std::atomic_bool g_externalPluginLoaderFailed = false;
 
+QString sanitizedMessage(const gchar* message)
+{
+    return QGCNetworkHelper::redactedTextForLogging(QString::fromUtf8(message ? message : ""));
+}
+
 void glib_print_handler(const gchar* string)
 {
-    qCInfo(GStreamerLoggingLog) << string;
+    qCInfo(GStreamerLoggingLog) << sanitizedMessage(string);
 }
 
 void glib_printerr_handler(const gchar* string)
 {
-    qCWarning(GStreamerLoggingLog) << string;
+    qCWarning(GStreamerLoggingLog) << sanitizedMessage(string);
 }
 
 void glib_log_handler(const gchar* log_domain, GLogLevelFlags log_level, const gchar* message, gpointer user_data)
 {
     Q_UNUSED(user_data);
     const QString domain = log_domain ? QString::fromUtf8(log_domain) : QStringLiteral("GLib");
-    const QString msg = QString::fromUtf8(message);
+    const QString msg = sanitizedMessage(message);
 
     if (msg.contains(QStringLiteral("External plugin loader failed"), Qt::CaseInsensitive)) {
         g_externalPluginLoaderFailed.store(true);
@@ -101,17 +107,20 @@ void qtGstLog(GstDebugCategory* category, GstDebugLevel level, const gchar* file
     };
 
     const std::unique_ptr<gchar, GFree> object_info(gst_info_strdup_printf("%" GST_PTR_FORMAT, object));
+    const QByteArray safeMessage =
+        QStringLiteral("%1 %2").arg(sanitizedMessage(object_info.get()),
+                                    sanitizedMessage(gst_debug_message_get(message))).toUtf8();
 
     switch (level) {
         case GST_LEVEL_ERROR:
-            log.critical(GStreamerAPILog, "%s %s", object_info.get(), gst_debug_message_get(message));
+            log.critical(GStreamerAPILog, "%s", safeMessage.constData());
             break;
         case GST_LEVEL_WARNING:
-            log.warning(GStreamerAPILog, "%s %s", object_info.get(), gst_debug_message_get(message));
+            log.warning(GStreamerAPILog, "%s", safeMessage.constData());
             break;
         case GST_LEVEL_FIXME:
         case GST_LEVEL_INFO:
-            log.info(GStreamerAPILog, "%s %s", object_info.get(), gst_debug_message_get(message));
+            log.info(GStreamerAPILog, "%s", safeMessage.constData());
             break;
         case GST_LEVEL_DEBUG:
 #ifdef QT_DEBUG
@@ -121,7 +130,7 @@ void qtGstLog(GstDebugCategory* category, GstDebugLevel level, const gchar* file
         case GST_LEVEL_TRACE:
         case GST_LEVEL_MEMDUMP:
 #endif
-            log.debug(GStreamerAPILog, "%s %s", object_info.get(), gst_debug_message_get(message));
+            log.debug(GStreamerAPILog, "%s", safeMessage.constData());
             break;
         default:
             break;

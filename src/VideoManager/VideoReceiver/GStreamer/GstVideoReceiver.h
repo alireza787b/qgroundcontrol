@@ -73,7 +73,7 @@ public slots:
     void takeScreenshot(const QString &imageFile) override;
 
     /// Dump the current pipeline graph to GST_DEBUG_DUMP_DOT_DIR (if set) plus
-    /// CacheLocation/qgc-pipeline-dot for field-bug-report bundles. No-op when
+    /// CacheLocation/qgc-pipeline-dot-v2 for field-bug-report bundles. No-op when
     /// the pipeline isn't running. Callable from QML for a debug menu.
     Q_INVOKABLE void dumpPipelineGraph(const QString &tag = QStringLiteral("manual"));
 
@@ -85,6 +85,7 @@ private slots:
     void _handleEOS();
 
 private:
+    QString _redactedUri() const;
     GstElement *_makeDecoder();
     GstElement *_makeFileSink(const QString &videoFile, FILE_FORMAT format);
 
