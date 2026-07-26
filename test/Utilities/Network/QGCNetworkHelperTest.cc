@@ -343,6 +343,44 @@ void QGCNetworkHelperTest::_testUrlWithoutQuery()
     QVERIFY(result.fragment().isEmpty());
 }
 
+void QGCNetworkHelperTest::_testRedactedUrlForLogging()
+{
+    const QString sensitiveUrl =
+        QStringLiteral("https://pilot:secret@example.com:8443/video%20feed?token=abc123#session");
+    const QString redacted = QGCNetworkHelper::redactedUrlForLogging(sensitiveUrl);
+
+    QCOMPARE(redacted, QStringLiteral("https://example.com:8443/<redacted>"));
+    QVERIFY(!redacted.contains(QStringLiteral("pilot")));
+    QVERIFY(!redacted.contains(QStringLiteral("secret")));
+    QVERIFY(!redacted.contains(QStringLiteral("abc123")));
+    QVERIFY(!redacted.contains(QStringLiteral("video")));
+    QCOMPARE(QGCNetworkHelper::redactedUrlForLogging(QStringLiteral("udp://0.0.0.0:5600")),
+             QStringLiteral("udp://0.0.0.0:5600"));
+    QCOMPARE(QGCNetworkHelper::redactedUrlForLogging(QStringLiteral("token-only-value")),
+             QStringLiteral("<invalid-url>"));
+}
+
+void QGCNetworkHelperTest::_testRedactedTextForLogging()
+{
+    const QString diagnostic = QStringLiteral(
+        "request https://pilot:secret@example.com/live/private?token=url-secret failed; "
+        "Authorization: Bearer header-secret; user-pw=(string)property-secret");
+    const QString redacted = QGCNetworkHelper::redactedTextForLogging(diagnostic);
+
+    QVERIFY(redacted.contains(QStringLiteral("https://example.com/<redacted>")));
+    QVERIFY(redacted.contains(QStringLiteral("<redacted-authorization>")));
+    QVERIFY(redacted.contains(QStringLiteral("<redacted-credential>")));
+    QVERIFY(!redacted.contains(QStringLiteral("pilot")));
+    QVERIFY(!redacted.contains(QStringLiteral("url-secret")));
+    QVERIFY(!redacted.contains(QStringLiteral("header-secret")));
+    QVERIFY(!redacted.contains(QStringLiteral("property-secret")));
+
+    const QString secureRtsp = QGCNetworkHelper::redactedTextForLogging(
+        QStringLiteral("rtsps://pilot:password@example.com/private?token=rtsp-secret"));
+    QCOMPARE(secureRtsp, QStringLiteral("rtsps://example.com/<redacted>"));
+    QVERIFY(!secureRtsp.contains(QStringLiteral("rtsp-secret")));
+}
+
 // ============================================================================
 // Request Configuration Tests
 // ============================================================================

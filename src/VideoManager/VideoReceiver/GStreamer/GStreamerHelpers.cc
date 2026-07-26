@@ -69,10 +69,35 @@ QString writePipelineDot(GstElement* pipeline, const char* tag)
     const QString cacheRoot = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     if (cacheRoot.isEmpty())
         return {};
-    QDir dir(cacheRoot + QStringLiteral("/qgc-pipeline-dot"));
+    QDir dir(cacheRoot + QStringLiteral("/qgc-pipeline-dot-v2"));
     if (!dir.exists() && !dir.mkpath(QStringLiteral("."))) {
         qCWarning(GStreamerHelpersLog) << "Failed to create" << dir.absolutePath();
         return {};
+    }
+
+    // v1 used GST_DEBUG_GRAPH_SHOW_ALL, which could serialize source properties containing secrets.
+    // Remove only QGC-generated .dot files, never directories or symlinks, then record the migration.
+    const QString migrationMarker = dir.absoluteFilePath(QStringLiteral(".legacy-dot-cache-purged"));
+    if (!QFileInfo::exists(migrationMarker)) {
+        QDir legacyDir(cacheRoot + QStringLiteral("/qgc-pipeline-dot"));
+        bool legacyPurged = true;
+        const QFileInfoList legacyDots =
+            legacyDir.entryInfoList(QStringList{QStringLiteral("*.dot")}, QDir::Files | QDir::NoSymLinks);
+        for (const QFileInfo& legacyDot : legacyDots) {
+            legacyPurged &= QFile::remove(legacyDot.absoluteFilePath());
+        }
+        QFile marker(migrationMarker);
+        bool migrationRecorded = false;
+        if (legacyPurged && marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+            static constexpr char kMarkerContents[] = "property-safe-v2\n";
+            static constexpr qint64 kMarkerSize = static_cast<qint64>(sizeof(kMarkerContents) - 1);
+            migrationRecorded = (marker.write(kMarkerContents, kMarkerSize) == kMarkerSize) && marker.flush();
+            marker.close();
+        }
+        if (!migrationRecorded) {
+            marker.remove();
+            qCWarning(GStreamerHelpersLog) << "Could not complete legacy pipeline graph cache cleanup";
+        }
     }
 
     // Rotate: remove oldest .dot files until under cap. Sort by mtime ascending.
@@ -82,7 +107,7 @@ QString writePipelineDot(GstElement* pipeline, const char* tag)
         QFile::remove(existing.takeFirst().absoluteFilePath());
     }
 
-    gchar* data = gst_debug_bin_to_dot_data(GST_BIN(pipeline), GST_DEBUG_GRAPH_SHOW_ALL);
+    gchar* data = gst_debug_bin_to_dot_data(GST_BIN(pipeline), kPipelineGraphDetails);
     if (!data)
         return {};
     const QString fileName = QStringLiteral("%1-%2.dot")

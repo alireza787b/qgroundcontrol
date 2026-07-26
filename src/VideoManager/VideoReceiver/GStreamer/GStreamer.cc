@@ -39,6 +39,7 @@
 #include "HwBuffers/common/QGCRhiCapture.h"
 #endif
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 #include "QGCQVideoSinkController.h"
 #include "gstqgc/gstqgcqvideosink.h"
 #include "gstqgc/gstqgcvideosinkbin.h"
@@ -188,7 +189,10 @@ bool _initGstRuntime(const QStringList& args, const Environment::ValidationResul
     GError* error = nullptr;
 
     if (!gst_init_check(&argc, &argvPtr, &error)) {
-        qCCritical(GStreamerLog) << "Failed to initialize GStreamer:" << (error ? error->message : "unknown error");
+        qCCritical(GStreamerLog)
+            << "Failed to initialize GStreamer:"
+            << QGCNetworkHelper::redactedTextForLogging(
+                   QString::fromUtf8((error && error->message) ? error->message : "unknown error"));
         g_clear_error(&error);
         return false;
     }

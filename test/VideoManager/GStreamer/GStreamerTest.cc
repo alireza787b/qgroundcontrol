@@ -298,6 +298,7 @@ void GStreamerTest::_testSetCodecPrioritiesHardware()
 void GStreamerTest::_testRedirectGLibLogging()
 {
     GStreamer::redirectGLibLogging();
+    LogManager::clearCapturedMessages();
 
     // Debug-level GLib messages map to QtDebugMsg — suppress it.
     ignoreLogMessage("Video.GStreamer.GStreamerLogging", QtDebugMsg,
@@ -308,6 +309,24 @@ void GStreamerTest::_testRedirectGLibLogging()
     g_log("TestDomain", G_LOG_LEVEL_DEBUG, "GStreamerTest debug message");
     g_log("TestDomain", G_LOG_LEVEL_WARNING, "GStreamerTest warning message");
     verifyExpectedLogMessage();
+
+    expectLogMessage(
+        "Video.GStreamer.GStreamerLogging", QtWarningMsg,
+        QRegularExpression(QStringLiteral(
+            R"(example\.com/<redacted>.*<redacted-authorization>.*<redacted-credential>)")));
+    g_log("TestDomain", G_LOG_LEVEL_WARNING,
+          "Failed https://pilot:password@example.com/private?token=url-secret "
+          "Authorization: Bearer header-secret; user-pw=(string)property-secret");
+    verifyExpectedLogMessage();
+
+    const QList<LogEntry> messages =
+        LogManager::capturedMessages(QStringLiteral("Video.GStreamer.GStreamerLogging"));
+    for (const LogEntry& entry : messages) {
+        QVERIFY(!entry.message.contains(QStringLiteral("pilot")));
+        QVERIFY(!entry.message.contains(QStringLiteral("url-secret")));
+        QVERIFY(!entry.message.contains(QStringLiteral("header-secret")));
+        QVERIFY(!entry.message.contains(QStringLiteral("property-secret")));
+    }
 }
 
 void GStreamerTest::_testConfigureDebugLoggingIsIdempotent()
@@ -327,6 +346,20 @@ void GStreamerTest::_testConfigureDebugLoggingIsIdempotent()
     gst_debug_log(qgcTestDebug, GST_LEVEL_WARNING, __FILE__, Q_FUNC_INFO, __LINE__, nullptr, "%s",
                   "idempotent configureDebugLogging probe");
     verifyExpectedLogMessage();
+
+    LogManager::clearCapturedMessages();
+    expectLogMessage("Video.GStreamer.GStreamerAPI", QtWarningMsg,
+                     QRegularExpression(QStringLiteral(R"(example\.com/<redacted>)")));
+    gst_debug_log(qgcTestDebug, GST_LEVEL_WARNING, __FILE__, Q_FUNC_INFO, __LINE__, nullptr, "%s",
+                  "https://pilot:password@example.com/private?token=gst-debug-secret");
+    verifyExpectedLogMessage();
+
+    const QList<LogEntry> messages =
+        LogManager::capturedMessages(QStringLiteral("Video.GStreamer.GStreamerAPI"));
+    for (const LogEntry& entry : messages) {
+        QVERIFY(!entry.message.contains(QStringLiteral("pilot")));
+        QVERIFY(!entry.message.contains(QStringLiteral("gst-debug-secret")));
+    }
 
     gst_debug_category_set_threshold(qgcTestDebug, GST_LEVEL_NONE);
 }
@@ -431,6 +464,30 @@ void GStreamerTest::_testWritePipelineDotReturnsEmptyOnWriteFailure()
     QVERIFY2(path.isEmpty(), qPrintable(QStringLiteral("Expected empty path for failed dot write, got %1").arg(path)));
 }
 
+void GStreamerTest::_testPipelineGraphOmitsElementProperties()
+{
+    GstElement* pipeline = gst_pipeline_new("redacted-dot-test");
+    QVERIFY(pipeline);
+    const auto cleanup = qScopeGuard([&] { gst_object_unref(pipeline); });
+
+    GstElement* source = gst_element_factory_make("filesrc", "redacted-dot-source");
+    if (!source) {
+        QSKIP("filesrc is unavailable");
+    }
+    constexpr const char* kSentinel = "/tmp/qgc-sensitive-stream-token.mjpeg";
+    g_object_set(source, "location", kSentinel, nullptr);
+    gst_bin_add(GST_BIN(pipeline), source);
+
+    gchar* rawDot = gst_debug_bin_to_dot_data(GST_BIN(pipeline), GStreamer::kPipelineGraphDetails);
+    QVERIFY(rawDot);
+    const QByteArray dot(rawDot);
+    g_free(rawDot);
+
+    QVERIFY(dot.contains("redacted-dot-source"));
+    QVERIFY(!dot.contains(kSentinel));
+    QVERIFY(!dot.contains("qgc-sensitive-stream-token"));
+}
+
 void GStreamerTest::_testCompleteInit()
 {
     GStreamer::redirectGLibLogging();
@@ -517,6 +574,7 @@ QGC_GST_SKIP_TEST(_testConfigureDebugLoggingIsIdempotent)
 QGC_GST_SKIP_TEST(_testVerifyRequiredPlugins)
 QGC_GST_SKIP_TEST(_testEnvironmentSetup)
 QGC_GST_SKIP_TEST(_testWritePipelineDotReturnsEmptyOnWriteFailure)
+QGC_GST_SKIP_TEST(_testPipelineGraphOmitsElementProperties)
 QGC_GST_SKIP_TEST(_testCompleteInit)
 QGC_GST_SKIP_TEST(_testCreateVideoReceiver)
 QGC_GST_SKIP_TEST(_testBindDebugLevelFactRejectsNullContext)
