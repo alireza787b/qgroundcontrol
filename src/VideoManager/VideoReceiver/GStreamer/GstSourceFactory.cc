@@ -470,6 +470,8 @@ GstElement* buildHttpMjpegSource(const QUrl& sourceUrl, const Config& config)
         const QByteArray location = cleanUrl.toEncoded(QUrl::FullyEncoded);
         const QByteArray userAgent = QGCNetworkHelper::defaultUserAgent().toUtf8();
         const guint timeoutS = std::clamp<guint>(config.timeoutS, 1u, 3600u);
+        // libsoup2 honors ssl-use-system-ca-file; libsoup3 uses its default TLS
+        // database and exposes this compatibility property as a no-op.
         g_object_set(source, "location", location.constData(), "method", "GET", "is-live", TRUE, "do-timestamp", TRUE,
                      "keep-alive", TRUE, "compress", FALSE, "iradio-mode", FALSE, "automatic-redirect", FALSE,
                      "retries", 0, "timeout", timeoutS, "ssl-strict", TRUE, "ssl-use-system-ca-file", TRUE,

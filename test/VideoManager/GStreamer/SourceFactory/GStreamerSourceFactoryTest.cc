@@ -222,15 +222,13 @@ void GStreamerTest::_testSourceFactoryHttpMjpeg()
     gboolean keepAlive = FALSE;
     gboolean automaticRedirect = TRUE;
     gboolean sslStrict = FALSE;
-    gboolean useSystemCa = FALSE;
     gboolean singleStream = FALSE;
     gint retries = -1;
     guint timeout = 0;
     gint httpLogLevel = -1;
     g_object_get(source, "location", &location, "method", &method, "is-live", &isLive, "do-timestamp", &doTimestamp,
                  "keep-alive", &keepAlive, "automatic-redirect", &automaticRedirect, "retries", &retries, "timeout",
-                 &timeout, "ssl-strict", &sslStrict, "ssl-use-system-ca-file", &useSystemCa, "http-log-level",
-                 &httpLogLevel, nullptr);
+                 &timeout, "ssl-strict", &sslStrict, "http-log-level", &httpLogLevel, nullptr);
     const auto stringsCleanup = qScopeGuard([&] {
         g_free(location);
         g_free(method);
@@ -246,7 +244,6 @@ void GStreamerTest::_testSourceFactoryHttpMjpeg()
     QCOMPARE(retries, 0);
     QCOMPARE(timeout, 9u);
     QCOMPARE(sslStrict, TRUE);
-    QCOMPARE(useSystemCa, TRUE);
     QCOMPARE(httpLogLevel, 0);
     QCOMPARE(singleStream, TRUE);
 
@@ -401,6 +398,12 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
 
     QVERIFY(GStreamer::SourceFactory::activate(sourceBin));
     QVERIFY(gst_element_set_state(pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
+    const auto pipelineIsPlaying = [pipeline]() {
+        GstState state = GST_STATE_NULL;
+        return (gst_element_get_state(pipeline, &state, nullptr, 0) != GST_STATE_CHANGE_FAILURE) &&
+               (state == GST_STATE_PLAYING);
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(pipelineIsPlaying(), TestTimeout::mediumMs());
     QVERIFY_SIGNAL_WAIT(connectionSpy, TestTimeout::mediumMs());
     QWebSocket* peer = server.nextPendingConnection();
     QVERIFY(peer);

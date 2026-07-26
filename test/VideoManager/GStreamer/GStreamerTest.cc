@@ -348,7 +348,6 @@ void GStreamerTest::_testConfigureDebugLoggingIsIdempotent()
                   "idempotent configureDebugLogging probe");
     verifyExpectedLogMessage();
 
-    LogManager::clearCapturedMessages();
     expectLogMessage("Video.GStreamer.GStreamerAPI", QtWarningMsg,
                      QRegularExpression(QStringLiteral(R"(example\.com/<redacted>)")));
     gst_debug_log(qgcTestDebug, GST_LEVEL_WARNING, __FILE__, Q_FUNC_INFO, __LINE__, nullptr, "%s",
