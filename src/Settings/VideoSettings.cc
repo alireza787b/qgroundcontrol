@@ -241,6 +241,15 @@ DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, webSocketJpegUrl)
     return _webSocketJpegUrlFact;
 }
 
+DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, webSocketJpegOrigin)
+{
+    if (!_webSocketJpegOriginFact) {
+        _webSocketJpegOriginFact = _createSettingsFact(webSocketJpegOriginName);
+        connect(_webSocketJpegOriginFact, &Fact::valueChanged, this, &VideoSettings::_configChanged);
+    }
+    return _webSocketJpegOriginFact;
+}
+
 DECLARE_SETTINGSFACT_NO_FUNC(VideoSettings, tcpUrl)
 {
     if (!_tcpUrlFact) {

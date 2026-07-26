@@ -48,6 +48,15 @@
             "keywords": "websocket,ws,wss,jpeg,video url,stream url"
         },
         {
+            "name": "webSocketJpegOrigin",
+            "shortDesc": "Optional Origin sent when opening a WebSocket JPEG stream.",
+            "longDesc": "Optional http:// or https:// origin required by some WebSocket servers. Enter only the scheme and authority, for example https://video.example.com. Leave empty when the server does not require Origin.",
+            "type": "string",
+            "default": "",
+            "label": "WebSocket Origin",
+            "keywords": "websocket,ws,wss,origin,security"
+        },
+        {
             "name": "tcpUrl",
             "shortDesc": "Network address and port for TCP video stream (e.g. 192.168.143.200:3001).",
             "longDesc": "TCP url address and port to bind to for video stream. Example: 192.168.143.200:3001",

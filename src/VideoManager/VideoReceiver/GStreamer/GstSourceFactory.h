@@ -25,6 +25,8 @@ struct Config
     bool doRetransmission = true;
     /// Blocking network I/O timeout for source elements that expose one, in seconds.
     uint32_t timeoutS = 8;
+    /// Optional normalized HTTP(S) Origin for WebSocket handshakes.
+    QString webSocketOrigin;
 };
 
 /// Build a source bin that exposes parsed encoded video for `uri`.

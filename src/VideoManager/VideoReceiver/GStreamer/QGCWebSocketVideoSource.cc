@@ -24,8 +24,8 @@ constexpr int kThreadLifecycleTimeoutMs = 3000;
 class WebSocketWorker final : public QObject
 {
 public:
-    WebSocketWorker(const QUrl& url, GstElement* appsrc)
-        : _url(url), _appsrc(appsrc ? GST_ELEMENT(gst_object_ref(appsrc)) : nullptr)
+    WebSocketWorker(const QUrl& url, const QString& origin, GstElement* appsrc)
+        : _url(url), _origin(origin), _appsrc(appsrc ? GST_ELEMENT(gst_object_ref(appsrc)) : nullptr)
     {}
 
     ~WebSocketWorker() override
@@ -40,7 +40,7 @@ public:
             return;
         }
 
-        _webSocket = new QWebSocket(QString(), QWebSocketProtocol::VersionLatest, this);
+        _webSocket = new QWebSocket(_origin, QWebSocketProtocol::VersionLatest, this);
         _webSocket->setMaxAllowedIncomingFrameSize(static_cast<quint64>(QGCWebSocketVideoSource::kMaximumJpegBytes));
         _webSocket->setMaxAllowedIncomingMessageSize(static_cast<quint64>(QGCWebSocketVideoSource::kMaximumJpegBytes));
         _webSocket->setReadBufferSize(static_cast<qint64>(QGCWebSocketVideoSource::kMaximumJpegBytes));
@@ -164,6 +164,7 @@ private:
     }
 
     const QUrl _url;
+    const QString _origin;
     GstElement* _appsrc = nullptr;
     QWebSocket* _webSocket = nullptr;
     std::atomic<bool> _accepting{true};
@@ -176,7 +177,8 @@ private:
 class QGCWebSocketVideoSource::Impl
 {
 public:
-    Impl(const QUrl& url, GstElement* appsrc) : _worker(new WebSocketWorker(url, appsrc)), _thread(new QThread)
+    Impl(const QUrl& url, const QString& origin, GstElement* appsrc)
+        : _worker(new WebSocketWorker(url, origin, appsrc)), _thread(new QThread)
     {
         _thread->setObjectName(QStringLiteral("QGCWebSocketVideo"));
     }
@@ -223,7 +225,7 @@ public:
             return;
         }
 
-        const QPointer<WebSocketWorker> worker = _worker;
+        WebSocketWorker* const worker = _worker.data();
         QThread* thread = _thread;
         _started = false;
         if (worker) {
@@ -236,11 +238,9 @@ public:
             } else {
                 const auto stopped = std::make_shared<QSemaphore>();
                 (void) QMetaObject::invokeMethod(
-                    worker.data(),
+                    worker,
                     [worker, stopped]() {
-                        if (worker) {
-                            worker->stop();
-                        }
+                        worker->stop();
                         stopped->release();
                     },
                     Qt::QueuedConnection);
@@ -284,8 +284,8 @@ private:
     bool _started = false;
 };
 
-QGCWebSocketVideoSource::QGCWebSocketVideoSource(const QUrl& url, GstElement* appsrc)
-    : _impl(std::make_unique<Impl>(url, appsrc))
+QGCWebSocketVideoSource::QGCWebSocketVideoSource(const QUrl& url, const QString& origin, GstElement* appsrc)
+    : _impl(std::make_unique<Impl>(url, origin, appsrc))
 {}
 
 QGCWebSocketVideoSource::~QGCWebSocketVideoSource() = default;
@@ -329,4 +329,26 @@ bool QGCWebSocketVideoSource::isCompleteJpeg(QByteArrayView message)
         return false;
     }
     return (static_cast<quint64>(size.width()) * static_cast<quint64>(size.height())) <= kMaximumDecodedPixels;
+}
+
+QString QGCWebSocketVideoSource::normalizedOrigin(const QString& origin)
+{
+    const QString candidate = origin.trimmed();
+    if (candidate.isEmpty()) {
+        return {};
+    }
+
+    const QUrl url(candidate, QUrl::StrictMode);
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || url.isRelative() ||
+        ((scheme != QLatin1String("http")) && (scheme != QLatin1String("https"))) || url.host().isEmpty() ||
+        !url.userInfo().isEmpty() || !url.query().isEmpty() || !url.fragment().isEmpty() ||
+        (!url.path().isEmpty() && (url.path() != QLatin1String("/")))) {
+        return {};
+    }
+
+    QUrl normalized(url);
+    normalized.setScheme(scheme);
+    normalized.setPath(QString());
+    return normalized.toString(QUrl::FullyEncoded | QUrl::RemoveQuery | QUrl::RemoveFragment | QUrl::RemoveUserInfo);
 }

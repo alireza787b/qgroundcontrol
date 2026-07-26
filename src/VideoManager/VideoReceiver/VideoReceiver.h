@@ -33,6 +33,8 @@ public:
     bool lowLatency() const { return _lowLatency; }
     int rtpJitterLatencyMs() const { return _rtpJitterLatencyMs; }
     bool autoReconnect() const { return _autoReconnect; }
+
+    QString webSocketOrigin() const { return _webSocketOrigin; }
     QGCVideoStreamInfo *videoStreamInfo() { return _videoStreamInfo; }
     QString recordingOutput() const { return _recordingOutput; }
 
@@ -44,6 +46,14 @@ public:
     void setLowLatency(bool lowLatency) { if (lowLatency != _lowLatency) { _lowLatency = lowLatency; emit lowLatencyChanged(_lowLatency); } }
     void setRtpJitterLatencyMs(int ms) { if (ms != _rtpJitterLatencyMs) { _rtpJitterLatencyMs = ms; emit rtpJitterLatencyMsChanged(_rtpJitterLatencyMs); } }
     void setAutoReconnect(bool enabled) { if (enabled != _autoReconnect) { _autoReconnect = enabled; emit autoReconnectChanged(_autoReconnect); } }
+
+    void setWebSocketOrigin(const QString& origin)
+    {
+        if (origin != _webSocketOrigin) {
+            _webSocketOrigin = origin;
+            emit webSocketOriginChanged(_webSocketOrigin);
+        }
+    }
     void setVideoStreamInfo(QGCVideoStreamInfo *videoStreamInfo) { if (videoStreamInfo != _videoStreamInfo) { _videoStreamInfo = videoStreamInfo; emit videoStreamInfoChanged(); } }
 
     // QMediaFormat::FileFormat
@@ -84,6 +94,7 @@ signals:
     void lowLatencyChanged(bool lowLatency);
     void rtpJitterLatencyMsChanged(int ms);
     void autoReconnectChanged(bool enabled);
+    void webSocketOriginChanged(const QString& origin);
     void videoStreamInfoChanged();
     void widgetChanged(QQuickItem *widget);
 
@@ -117,6 +128,7 @@ protected:
     bool _streaming = false;
     bool _lowLatency = false;
     int _rtpJitterLatencyMs = 80;
+    QString _webSocketOrigin;
     // Written live on the GUI thread, read on the receiver worker thread.
     std::atomic<bool> _autoReconnect = true;     ///< RTSP/UDP auto-reconnect with exponential backoff on watchdog/error.
     bool _resetVideoSink = false;

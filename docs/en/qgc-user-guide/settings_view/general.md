@@ -211,7 +211,9 @@ The settings are:
   HTTP MJPEG requires a full `http://` or `https://` URL serving
   `multipart/x-mixed-replace` JPEG frames.
   WebSocket JPEG requires a full `ws://` or `wss://` URL and one complete JPEG
-  image in each binary message.
+  image in each binary message. Set **WebSocket Origin** only when the server
+  requires one; use an `http://` or `https://` scheme and authority without a
+  path.
 - **Aspect Ratio**: Aspect ratio for scaling video in video widget (set to 0.0 to ignore scaling)
 - **Disabled When Disarmed**: Disable video feed when vehicle is disarmed.
 - **Low Latency Mode**: Enabling low latency mode reduces the video stream latency, but may cause frame loss and choppy video (especially with a poor network connection). <!-- disables the internal jitter buffer -->
