@@ -2,6 +2,7 @@
 #include "VideoManager.h"
 
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 #include <QtCore/QSettings>
 #include <QtCore/QVariantList>
 
@@ -243,22 +244,30 @@ bool VideoSettings::streamConfigured(void)
     }
     //-- If UDP, check for URL
     if(vSource == videoSourceUDPH264 || vSource == videoSourceUDPH265) {
-        qCDebug(VideoSettingsLog) << "Testing configuration for UDP Stream:" << udpUrl()->rawValue().toString();
+        const QString scheme = (vSource == videoSourceUDPH265) ? QStringLiteral("udp265") : QStringLiteral("udp");
+        qCDebug(VideoSettingsLog) << "Testing configuration for UDP Stream:"
+                                  << QGCNetworkHelper::redactedUrlForLogging(
+                                         QStringLiteral("%1://%2").arg(scheme, udpUrl()->rawValue().toString()));
         return !udpUrl()->rawValue().toString().isEmpty();
     }
     //-- If RTSP, check for URL
     if(vSource == videoSourceRTSP) {
-        qCDebug(VideoSettingsLog) << "Testing configuration for RTSP Stream:" << rtspUrl()->rawValue().toString();
+        qCDebug(VideoSettingsLog) << "Testing configuration for RTSP Stream:"
+                                  << QGCNetworkHelper::redactedUrlForLogging(rtspUrl()->rawValue().toString());
         return !rtspUrl()->rawValue().toString().isEmpty();
     }
     //-- If TCP, check for URL
     if(vSource == videoSourceTCP) {
-        qCDebug(VideoSettingsLog) << "Testing configuration for TCP Stream:" << tcpUrl()->rawValue().toString();
+        qCDebug(VideoSettingsLog) << "Testing configuration for TCP Stream:"
+                                  << QGCNetworkHelper::redactedUrlForLogging(
+                                         QStringLiteral("tcp://%1").arg(tcpUrl()->rawValue().toString()));
         return !tcpUrl()->rawValue().toString().isEmpty();
     }
     //-- If MPEG-TS, check for URL
     if(vSource == videoSourceMPEGTS) {
-        qCDebug(VideoSettingsLog) << "Testing configuration for MPEG-TS Stream:" << udpUrl()->rawValue().toString();
+        qCDebug(VideoSettingsLog) << "Testing configuration for MPEG-TS Stream:"
+                                  << QGCNetworkHelper::redactedUrlForLogging(
+                                         QStringLiteral("mpegts://%1").arg(udpUrl()->rawValue().toString()));
         return !udpUrl()->rawValue().toString().isEmpty();
     }
     //-- If Herelink Air unit, good to go

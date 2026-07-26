@@ -130,7 +130,10 @@ export GST_DEBUG_DUMP_DOT_DIR=/tmp/qgc-pipeline-dots
 dot -Tpng /tmp/qgc-pipeline-dots/0.00.00.*-pipeline-started.dot -o pipeline.png
 ```
 
-When the env var is **unset**, QGC still writes a rotating snapshot (≤10 files) to `<CacheLocation>/qgc-pipeline-dot/<tag>-<ts>.dot` on `ERROR` and on watchdog timeout, so field-bug-report bundles include the topology automatically. The `GstVideoReceiver::dumpPipelineGraph(tag)` slot (callable from QML) writes a snapshot on demand for use from a debug menu.
+When the env var is **unset**, QGC still writes a rotating snapshot (≤10 files) to `<CacheLocation>/qgc-pipeline-dot-v2/<tag>-<ts>.dot` on `ERROR` and on watchdog timeout, so field-bug-report bundles include the topology automatically. The `GstVideoReceiver::dumpPipelineGraph(tag)` slot (callable from QML) writes a snapshot on demand for use from a debug menu.
+
+Pipeline graphs include topology, caps, and element states, but intentionally omit element properties because those may contain stream credentials or tokens.
+On first use of this format, QGC removes legacy `.dot` files from the former `qgc-pipeline-dot` cache.
 
 ### Latency tracer
 
