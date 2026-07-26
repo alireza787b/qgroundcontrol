@@ -276,6 +276,7 @@ find_package(
                Quick3D
                StateMachine
     OPTIONAL_COMPONENTS Bluetooth MultimediaQuickPrivate OpenGL QuickTest SerialPort Test
+               WebSockets
 )
 
 if(LINUX AND NOT ANDROID)
