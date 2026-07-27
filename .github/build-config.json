@@ -38,6 +38,7 @@
         "app",
         "coreelements",
         "isomp4",
+        "jpeg",
         "jpegformat",
         "libav",
         "matroska",
