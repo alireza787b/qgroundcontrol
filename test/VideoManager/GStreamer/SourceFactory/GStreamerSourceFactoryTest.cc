@@ -225,11 +225,14 @@ void GStreamerTest::_testSourceFactoryHttpMjpegDelivery()
     QVERIFY2(image.save(&jpegBuffer, "JPEG"), "Qt JPEG encoder unavailable");
 
     const QByteArray boundary("qgc-test-boundary");
-    const QByteArray body = "--" + boundary +
-                            "\r\n"
-                            "Content-Type: image/jpeg\r\n"
-                            "Content-Length: " +
-                            QByteArray::number(jpeg.size()) + "\r\n\r\n" + jpeg + "\r\n--" + boundary + "--\r\n";
+    const QByteArray framePart = "--" + boundary +
+                                 "\r\n"
+                                 "Content-Type: image/jpeg\r\n"
+                                 "Content-Length: " +
+                                 QByteArray::number(jpeg.size()) + "\r\n\r\n" + jpeg + "\r\n";
+    // A multipart video stream contains repeated images. Supplying two also
+    // verifies delivery after multipartdemux exposes and links its dynamic pad.
+    const QByteArray body = framePart + framePart + "--" + boundary + "--\r\n";
     const QByteArray response =
         "HTTP/1.1 200 OK\r\n"
         "Content-Type: multipart/x-mixed-replace; boundary=" +
