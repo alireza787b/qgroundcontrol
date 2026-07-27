@@ -408,6 +408,10 @@ void GStreamerTest::_testQgcVideoSinkBinGpuZeroCopyProperty()
         bool sawGlupload = false;
         bool sawGlColorConvert = false;
 #endif
+#if defined(Q_OS_WIN) && (defined(QGC_HAS_GST_D3D11_GPU_PATH) || defined(QGC_HAS_GST_D3D12_GPU_PATH))
+        bool sawD3D11Upload = false;
+        bool sawD3D11Convert = false;
+#endif
         gboolean done = FALSE;
         GValue val = G_VALUE_INIT;
         while (!done) {
@@ -422,6 +426,14 @@ void GStreamerTest::_testQgcVideoSinkBinGpuZeroCopyProperty()
                     }
                     if (name && QString::fromUtf8(name).startsWith(QStringLiteral("glcolorconvert"))) {
                         sawGlColorConvert = true;
+                    }
+#endif
+#if defined(Q_OS_WIN) && (defined(QGC_HAS_GST_D3D11_GPU_PATH) || defined(QGC_HAS_GST_D3D12_GPU_PATH))
+                    if (name && QString::fromUtf8(name).startsWith(QStringLiteral("d3d11upload"))) {
+                        sawD3D11Upload = true;
+                    }
+                    if (name && QString::fromUtf8(name).startsWith(QStringLiteral("d3d11convert"))) {
+                        sawD3D11Convert = true;
                     }
 #endif
                     g_free(name);
@@ -445,6 +457,16 @@ void GStreamerTest::_testQgcVideoSinkBinGpuZeroCopyProperty()
         GstCaps* caps = nullptr;
         g_object_get(formatFilter, "caps", &caps, NULL);
         QVERIFY2(caps, "GPU bin format capsfilter has null caps");
+#if defined(Q_OS_WIN) && (defined(QGC_HAS_GST_D3D11_GPU_PATH) || defined(QGC_HAS_GST_D3D12_GPU_PATH))
+        bool hasSystemMemoryCaps = false;
+        for (guint i = 0; i < gst_caps_get_size(caps); ++i) {
+            const GstCapsFeatures* features = gst_caps_get_features(caps, i);
+            if (!features || gst_caps_features_is_equal(features, GST_CAPS_FEATURES_MEMORY_SYSTEM_MEMORY)) {
+                hasSystemMemoryCaps = true;
+                break;
+            }
+        }
+#endif
         gchar* capsStr = gst_caps_to_string(caps);
         const QString s = QString::fromUtf8(capsStr ? capsStr : "");
         g_free(capsStr);
@@ -475,6 +497,9 @@ void GStreamerTest::_testQgcVideoSinkBinGpuZeroCopyProperty()
                  qUtf8Printable(QStringLiteral("Direct DMABuf bin caps must not advertise GLMemory first: ") + s));
 #elif defined(Q_OS_WIN) && (defined(QGC_HAS_GST_D3D11_GPU_PATH) || defined(QGC_HAS_GST_D3D12_GPU_PATH))
         QCOMPARE(elementCount, 2);
+        QVERIFY2(!sawD3D11Upload, "Windows GPU sink must not upload software-decoded frames to D3D11");
+        QVERIFY2(!sawD3D11Convert, "Windows GPU sink must not force software-decoded frames through D3D11 conversion");
+        QVERIFY2(hasSystemMemoryCaps, "Windows GPU sink must retain a system-memory fallback for software decoders");
 #if defined(QGC_HAS_GST_D3D11_GPU_PATH)
         QVERIFY2(s.contains(QStringLiteral("memory:D3D11Memory")),
                  qUtf8Printable(QStringLiteral("GPU bin caps missing memory:D3D11Memory: ") + s));
