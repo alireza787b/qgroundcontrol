@@ -14,6 +14,14 @@
 
 namespace {
 
+GstSample* tryPullSampleOrPreroll(GstAppSink* sink)
+{
+    if (GstSample* sample = gst_app_sink_try_pull_sample(sink, 0)) {
+        return sample;
+    }
+    return gst_app_sink_try_pull_preroll(sink, 0);
+}
+
 // Borrowed (bin-owned) first child whose element-factory name matches, or nullptr.
 GstElement* findChildByFactoryName(GstElement* bin, const char* factoryName)
 {
@@ -269,8 +277,7 @@ void GStreamerTest::_testSourceFactoryHttpMjpegDelivery()
              "HTTP MJPEG delivery pipeline failed to start");
 
     GstSample* sample = nullptr;
-    QTRY_VERIFY_WITH_TIMEOUT((sample = gst_app_sink_try_pull_sample(GST_APP_SINK(sink), 0)) != nullptr,
-                             TestTimeout::mediumMs());
+    QTRY_VERIFY_WITH_TIMEOUT((sample = tryPullSampleOrPreroll(GST_APP_SINK(sink))) != nullptr, TestTimeout::mediumMs());
     const auto sampleCleanup = qScopeGuard([&] { gst_sample_unref(sample); });
     GstBuffer* buffer = gst_sample_get_buffer(sample);
     QVERIFY(buffer);
