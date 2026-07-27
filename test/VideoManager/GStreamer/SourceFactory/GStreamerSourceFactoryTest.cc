@@ -508,10 +508,13 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
     peer->setOutgoingFrameSize(64);
     (void) peer->sendTextMessage(QStringLiteral("metadata is ignored"));
     QCOMPARE(peer->sendBinaryMessage(jpeg), static_cast<qint64>(jpeg.size()));
+    // jpegparse can hold the first complete image until the next image marks
+    // its boundary. Exercise the sustained-stream behavior used in practice.
+    QCOMPARE(peer->sendBinaryMessage(jpeg), static_cast<qint64>(jpeg.size()));
     (void) peer->flush();
 
     GstSample* sample = nullptr;
-    QTRY_VERIFY_WITH_TIMEOUT((sample = gst_app_sink_try_pull_sample(GST_APP_SINK(binSink), 0)) != nullptr,
+    QTRY_VERIFY_WITH_TIMEOUT((sample = tryPullSampleOrPreroll(GST_APP_SINK(binSink))) != nullptr,
                              TestTimeout::mediumMs());
     QVERIFY(gst_buffer_get_size(gst_sample_get_buffer(sample)) > 0);
     gst_sample_unref(sample);
