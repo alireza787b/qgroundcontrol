@@ -21,8 +21,12 @@ DECLARE_SETTINGGROUP(Video, "Video")
     // Setup enum values for videoSource settings into meta data
     QVariantList videoSourceList;
     videoSourceList.append(videoSourceRTSP);
-    videoSourceList.append(videoSourceHTTPMJPEG);
-    videoSourceList.append(videoSourceWebSocketJPEG);
+    // These sources are implemented by the GStreamer backend. Do not expose
+    // choices that a Qt Multimedia-only build cannot open.
+    if (kGstEnabled) {
+        videoSourceList.append(videoSourceHTTPMJPEG);
+        videoSourceList.append(videoSourceWebSocketJPEG);
+    }
     videoSourceList.append(videoSourceUDPH264);
     videoSourceList.append(videoSourceUDPH265);
     videoSourceList.append(videoSourceTCP);
