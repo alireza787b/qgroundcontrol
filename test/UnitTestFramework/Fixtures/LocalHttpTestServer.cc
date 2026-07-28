@@ -80,16 +80,20 @@ void LocalHttpTestServer::installRawResponder(const QByteArray& rawResponse)
     (void) QObject::connect(&_server, &QTcpServer::newConnection, &_server, [this, rawResponse]() {
         while (_server.hasPendingConnections()) {
             QTcpSocket* const socket = _server.nextPendingConnection();
-            (void) QObject::connect(
-                socket, &QTcpSocket::readyRead, socket,
-                [socket, rawResponse]() {
-                    socket->readAll();
-                    socket->write(rawResponse);
-                    socket->flush();
-                    socket->disconnectFromHost();
-                },
-                Qt::SingleShotConnection);
             (void) QObject::connect(socket, &QTcpSocket::disconnected, socket, &QObject::deleteLater);
+
+            const auto sendResponse = [socket, rawResponse]() {
+                socket->readAll();
+                socket->write(rawResponse);
+                socket->flush();
+                socket->disconnectFromHost();
+            };
+
+            if (socket->bytesAvailable() > 0) {
+                sendResponse();
+            } else {
+                (void) QObject::connect(socket, &QTcpSocket::readyRead, socket, sendResponse, Qt::SingleShotConnection);
+            }
         }
     });
 }
