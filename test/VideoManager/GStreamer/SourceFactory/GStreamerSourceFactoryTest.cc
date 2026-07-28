@@ -3,10 +3,11 @@
 #ifdef QGC_GST_STREAMING
 
 #include <QtCore/QBuffer>
+#include <QtCore/QCoreApplication>
 #include <QtCore/QDeadlineTimer>
+#include <QtCore/QEventLoop>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
-#include <QtCore/QTimer>
 #include <QtGui/QImage>
 #include <QtGui/QImageReader>
 #include <QtGui/QImageWriter>
@@ -516,27 +517,20 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegDelivery()
     QVERIFY(peer);
     QCOMPARE(peer->origin(), QStringLiteral("https://operator.example.test"));
 
-    const QByteArray jpeg = makeTestJpeg();
+    const QByteArray jpeg = makeTestJpeg(16, 16);
     QVERIFY(!jpeg.isEmpty());
     peer->setOutgoingFrameSize(64);
     (void) peer->sendTextMessage(QStringLiteral("metadata is ignored"));
-    QCOMPARE(peer->sendBinaryMessage(jpeg), static_cast<qint64>(jpeg.size()));
-    (void) peer->flush();
-
-    QTimer frameTimer;
-    frameTimer.setInterval(100);
-    QObject::connect(&frameTimer, &QTimer::timeout, peer, [peer, jpeg]() {
-        if (peer->state() == QAbstractSocket::ConnectedState) {
-            (void) peer->sendBinaryMessage(jpeg);
-            (void) peer->flush();
-        }
-    });
-    frameTimer.start();
 
     GstSample* sample = nullptr;
-    QTRY_VERIFY_WITH_TIMEOUT((sample = gst_app_sink_try_pull_sample(GST_APP_SINK(binSink), 0)) != nullptr,
-                             TestTimeout::mediumMs());
-    frameTimer.stop();
+    QDeadlineTimer sampleDeadline(TestTimeout::mediumMs());
+    while (!sample && !sampleDeadline.hasExpired()) {
+        QCOMPARE(peer->sendBinaryMessage(jpeg), static_cast<qint64>(jpeg.size()));
+        (void) peer->flush();
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 25);
+        sample = gst_app_sink_try_pull_sample(GST_APP_SINK(binSink), 100 * GST_MSECOND);
+    }
+    QVERIFY2(sample, "WebSocket JPEG pipeline did not deliver a parsed JPEG sample");
     QVERIFY(gst_buffer_get_size(gst_sample_get_buffer(sample)) > 0);
     gst_sample_unref(sample);
 
