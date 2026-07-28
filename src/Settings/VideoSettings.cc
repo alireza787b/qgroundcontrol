@@ -2,6 +2,7 @@
 #include "VideoManager.h"
 
 #include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
 #include <QtCore/QSettings>
 #include <QtCore/QVariantList>
 
