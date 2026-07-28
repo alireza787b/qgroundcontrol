@@ -278,8 +278,7 @@ void linkPad(GstElement* element, GstPad* pad, gpointer data)
 GstElement* buildRtspSource(const QString& uri, const QUrl& sourceUrl, const Config& config, guint latencyMs)
 {
     if (!GStreamer::isValidRtspUri(uri.toUtf8().constData())) {
-        qCCritical(GstSourceFactoryLog) << "Invalid RTSP URI:"
-                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
+        qCCritical(GstSourceFactoryLog) << "Invalid RTSP URI:" << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -309,8 +308,8 @@ GstElement* buildRtspSource(const QString& uri, const QUrl& sourceUrl, const Con
     const QString rtspUser = sourceUrl.userName(QUrl::FullyDecoded);
     const QString rtspPassword = sourceUrl.password(QUrl::FullyDecoded);
     if (!rtspUser.isEmpty()) {
-        g_object_set(source, "user-id", rtspUser.toUtf8().constData(), "user-pw",
-                     rtspPassword.toUtf8().constData(), nullptr);
+        g_object_set(source, "user-id", rtspUser.toUtf8().constData(), "user-pw", rtspPassword.toUtf8().constData(),
+                     nullptr);
     }
     return source;
 }
@@ -320,13 +319,13 @@ GstElement* buildTcpSource(const QUrl& sourceUrl)
     const int port = sourceUrl.port();
     if (!validPort(port)) {
         qCCritical(GstSourceFactoryLog) << "Invalid TCP port" << port << "in"
-                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
+                                        << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
     const QString host = sourceUrl.host();
     if (host.isEmpty()) {
         qCCritical(GstSourceFactoryLog) << "Missing host in TCP URI"
-                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
+                                        << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -345,7 +344,7 @@ GstElement* buildUdpSource(const QUrl& sourceUrl, bool isUdpH264, bool isUdpH265
     const int port = sourceUrl.port();
     if (!validPort(port)) {
         qCCritical(GstSourceFactoryLog) << "Invalid UDP port" << port << "in"
-                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
+                                        << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -705,7 +704,7 @@ GstElement* create(const QString& uri, const Config& config)
 
     if (!isRtsp && !isUdpH264 && !isUdpH265 && !isUdpMPEGTS && !isTcpMPEGTS && !isHttpMjpeg && !isWebSocketJpeg) {
         qCWarning(GstSourceFactoryLog) << "Unsupported URI scheme:" << scheme << "in"
-                                      << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
+                                       << QGCNetworkHelper::redactedUrlForLogging(sourceUrl);
         return nullptr;
     }
 
@@ -745,8 +744,8 @@ GstElement* create(const QString& uri, const Config& config)
 
         parser = gst_element_factory_make(isUdpH265 ? "h265parse" : "parsebin", "parser");
         if (!parser) {
-            qCCritical(GstSourceFactoryLog) << "gst_element_factory_make("
-                                            << (isUdpH265 ? "'h265parse'" : "'parsebin'") << ") failed";
+            qCCritical(GstSourceFactoryLog)
+                << "gst_element_factory_make(" << (isUdpH265 ? "'h265parse'" : "'parsebin'") << ") failed";
             break;
         }
 
