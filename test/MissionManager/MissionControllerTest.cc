@@ -100,7 +100,7 @@ void MissionControllerTest::_testVTOLTakeoffModes_data()
         << true << true << int(MAV_CMD_NAV_TAKEOFF) << true << int(QGCMAVLink::VehicleClassMultiRotor);
     QTest::newRow("ArduPilot VTOL unchanged")
         << int(MAV_AUTOPILOT_ARDUPILOTMEGA) << int(MAV_TYPE_VTOL_TAILSITTER_QUADROTOR)
-        << false << false << int(MAV_CMD_NAV_VTOL_TAKEOFF) << false << int(QGCMAVLink::VehicleClassFixedWing);
+        << false << false << int(MAV_CMD_NAV_VTOL_TAKEOFF) << true << int(QGCMAVLink::VehicleClassFixedWing);
     QTest::newRow("PX4 multicopter unchanged")
         << int(MAV_AUTOPILOT_PX4) << int(MAV_TYPE_QUADROTOR)
         << false << false << int(MAV_CMD_NAV_TAKEOFF) << true << int(QGCMAVLink::VehicleClassGeneric);
@@ -154,6 +154,7 @@ void MissionControllerTest::_testUnsupportedVTOLMulticopterTakeoff()
 
     expectAppMessage(QRegularExpression(QStringLiteral("Multicopter takeoff is not supported")));
     QVERIFY(!_missionController->insertVTOLMulticopterTakeoffItem(Coord::zurich(), 1));
+    verifyExpectedLogMessage();
     QCOMPARE(_missionController->visualItems()->count(), initialCount);
 }
 

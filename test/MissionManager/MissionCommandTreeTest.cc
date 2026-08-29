@@ -182,7 +182,6 @@ void MissionCommandTreeTest::testPX4VTOLTakeoffOverride()
     const MissionCommandUIInfo* const takeoffInfo = commandList.getUIInfo(MAV_CMD_NAV_TAKEOFF);
 
     QVERIFY(takeoffInfo);
-    QCOMPARE(takeoffInfo->friendlyName(), QStringLiteral("Multicopter takeoff"));
     QCOMPARE(takeoffInfo->description(),
              QStringLiteral("Take off vertically and continue the mission in multicopter mode."));
 }

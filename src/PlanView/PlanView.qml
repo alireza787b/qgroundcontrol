@@ -450,7 +450,7 @@ Item {
                         visible: toolStrip._isMissionLayer && !_planMasterController.controllerVehicle.rover
                         dropPanelComponent: _planMasterController.controllerVehicle.supports.vtolMulticopterTakeoff
                                             ? vtolTakeoffDropPanel
-                                            : undefined
+                                            : null
                         onTriggered: {
                             insertTakeoffItemAfterCurrent()
                         }
