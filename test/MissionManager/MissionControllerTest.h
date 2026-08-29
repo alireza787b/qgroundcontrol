@@ -33,12 +33,19 @@ private slots:
     void _testInsertNonSurveyComplexItemMixedModeNoCrash();
     void _testInsertComplexItemFromKML();
     void _testInsertValidityHomePositionGating();
+    void _testVTOLTakeoffModes_data();
+    void _testVTOLTakeoffModes();
+    void _testUnsupportedVTOLMulticopterTakeoff();
+    void _testVTOLTakeoffJsonRoundTrip_data();
+    void _testVTOLTakeoffJsonRoundTrip();
 
     // Parameterized tests - runs once per autopilot type
     UT_PARAMETERIZED_TEST(_testEmptyVehicle);
 
 private:
     void _initForFirmwareType(MAV_AUTOPILOT firmwareType);
+    void _initForVehicleType(MAV_AUTOPILOT firmwareType, MAV_TYPE vehicleType);
+    void _startMasterController();
     void _setupVisualItemSignals(VisualMissionItem* visualItem);
 
     std::unique_ptr<PlanMasterController> _masterController;

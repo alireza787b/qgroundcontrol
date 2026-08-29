@@ -112,7 +112,7 @@ bool TakeoffMissionItem::isTakeoffCommand(MAV_CMD command)
 void TakeoffMissionItem::_initLaunchTakeoffAtSameLocation(void)
 {
     if (specifiesCoordinate()) {
-        if (_controllerVehicle->fixedWing() || _controllerVehicle->vtol()) {
+        if (_controllerVehicle->fixedWing() || mavCommand() == MAV_CMD_NAV_VTOL_TAKEOFF) {
             _setLaunchTakeoffAtSameLocation(false);
         } else {
             // PX4 specifies a coordinate for takeoff even for multi-rotor. But it makes more sense to not have a coordinate
