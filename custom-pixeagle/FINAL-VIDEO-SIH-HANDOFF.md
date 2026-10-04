@@ -17,25 +17,23 @@ Evidence is under:
 
 `/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-sih-final-v22/logs/`
 
-The separate `recorded-smart-final-v24` profile loads the installed
-`visdrone9m.pt` model with the Full-AI interpreter and produced live detections
-from `test9.mp4`. Automated clicks that were not tied to the exact displayed
-JPEG were rejected by the retained-frame/no-detections guards; this is the
-intended safety behavior, not a successful Smart selection claim. Use the
-fresh QGC handoff below for the operator click test. The profile's Smart logs
-are under:
+The `recorded-smart-final-v26` profile loads the installed `visdrone9m.pt`
+model with the Full-AI interpreter and uses the longer `test11.mp4`. A native
+probe selected a target from the exact delivered JPEG (`match: exact`),
+reported a selected bounding box, and stopped tracking successfully. Its raw
+Smart probe log is under:
 
-`/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v24/logs/`
+`/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v26/logs/smart-native-probe.log`
 
 ## Final QGC operator check
 
-The unused v25 credentials are in [credentials.json](/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25/credentials.json).
+The unused v27 credentials are in [credentials.json](/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v27/credentials.json).
 Start the owned stack:
 
 ```bash
 cd /home/alireza/PixEagle-qgc-integration
 bash tools/run_gimbal_sih_probe.sh --hold \
-  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25
+  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v27
 ```
 
 In another terminal:
@@ -44,7 +42,7 @@ In another terminal:
 cd /home/alireza/qgroundcontrol-pixeagle
 PIXEAGLE_QGC_BINARY=$PWD/build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl \
   bash custom-pixeagle/validation/open-gimbal-sih-qgc.sh \
-  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25
+  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v27
 ```
 
 Sign in with the linked credentials, verify the simulated vehicle, and keep
@@ -55,7 +53,7 @@ Stop. For the optional SIH-following check, take off in the simulator, clear
 the block only after QGC shows the verified aircraft, hold Start, observe
 `SIH following`, and press Stop. Finish with the block enabled and the vehicle
 landed. The longer v22 CSRT SIH result already covers the command-publication
-path; this v25 session is primarily the Smart and operator/UI check. Use this
+path; this v27 session is the Smart, Classic and operator/UI check. Use this
 profile only once; the launcher intentionally makes a used profile immutable.
 
 No physical camera is required for this handoff. Close QGC and press Ctrl-C in
