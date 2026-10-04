@@ -71,8 +71,13 @@ the remaining radio/Pi/process-loss evidence, then slice 5 portable harness
 and Linux/Windows/Android release/PR gates and slice 6 onboard ground
 acceptance.
 The older Linux prototype package does not include the new restart change.
-PixEagle main and release artifacts are not updated; work remains uncommitted
-and unpublished in separate integration worktrees. Real-flight qualification
+PixEagle main and release artifacts are not updated. Tested changes are being
+committed in reviewable groups on both integration branches; remaining source
+edits are uncommitted and nothing is published. Backend commits `e083f71` and
+`a1724a8` record sustained-link qualification and release boundaries; QGC commit
+`2f4599db8` records deployment and qualification documentation. The renewed
+focused gate passed 142 backend tests, four QGC client suites and the Linux
+package-identity test. Real-flight qualification
 remains later scope. The optional [recorded-video SIH handoff](OPERATOR-RECORDED-SIH.md)
 is prepared but stopped.
 

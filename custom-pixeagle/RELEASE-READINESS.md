@@ -1,6 +1,7 @@
 # Release preparation and remaining qualification
 
-Updated 2026-10-04. Integration work is still uncommitted/unpublished. The
+Updated 2026-10-04. Tested changes are being committed in separate reviewable
+groups; remaining integration edits are uncommitted and nothing is published. The
 camera is unavailable for the fresh physical retest; camera-free software
 qualification and release preparation proceed without recording acceptance.
 The ordinary Pi and explicit gimbal-lab deployment choices are in
@@ -119,3 +120,22 @@ all assertions. Retain both logs rather than claim an entirely green full run.
 Focused PixEagle/stock-UI/package checks passed 9/9 before the rebuild. All 14
 mocked SIH launcher/startup boundary tests pass. Broader lint and platform
 acceptance limitations above remain open.
+
+## Commit and regression checkpoint — October 4
+
+Backend commit `e083f71` records the sustained shared-link qualification;
+`a1724a8` records project-use and release boundaries. QGC commit `2f4599db8`
+records deployment profiles, publication status and qualification documents.
+These commits stay on their integration branches; neither main nor public
+artifacts are updated. The remaining source edits need separate reviewed commits.
+
+The renewed backend restart/defaults/replay/engine/altitude/fixed-wing boundary
+gate passed **142 tests**; the production shared-link fixture passed separately.
+Four QGC client/connection/video suites and `CMake.NativePackageIdentity` passed.
+Build configuration validation passed. These focused checks supplement the full
+suite results above and do not replace hardware or platform qualification.
+
+The Linux package modules and new identity fixture pass the locked CMake
+format/lint hooks. The existing `cmake/tests/CMakeLists.txt` still has baseline
+formatting differences and two missing function docstrings; the added test
+registration introduces neither issue. No whole-file reformat was applied.

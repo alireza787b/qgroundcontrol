@@ -113,3 +113,12 @@ add_test(
 set_tests_properties(CMake.GitConfigureDepends PROPERTIES LABELS "CMake;Unit" SKIP_REGULAR_EXPRESSION
                                                           "QGC_TEST_SKIPPED"
 )
+
+add_test(
+    NAME CMake.NativePackageIdentity
+    COMMAND
+        "${CMAKE_COMMAND}" "-DCMAKE_EXECUTABLE=${CMAKE_COMMAND}" "-DQGC_MODULE_DIR=${PROJECT_SOURCE_DIR}/cmake"
+        "-DTEST_BINARY_DIR=${CMAKE_CURRENT_BINARY_DIR}/NativePackageIdentity" -P
+        "${CMAKE_CURRENT_SOURCE_DIR}/run_native_package_identity_test.cmake"
+)
+set_tests_properties(CMake.NativePackageIdentity PROPERTIES LABELS "CMake;Unit")
