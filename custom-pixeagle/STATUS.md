@@ -1,5 +1,13 @@
 # PixEagle–QGC status — 2026-10-04
 
+Latest: the operator accepted the vertical **camera-final-v28** workflow.
+Logs record 796 successful Offboard publications, 10 successful target actions,
+81 successful camera actions and the automatic discovery request. The recorded
+follower is Vector; this does not establish a fresh physical Chase-follow run.
+See [the remaining release/deployment plan](NEXT-CHECKPOINTS-2026-10-04.md).
+Basic camera acceptance is retained; physical failure/load, platform packaging,
+reviewed publication and onboard ground acceptance remain open.
+
 Latest [v21 operator review and next-slice plan](SLICE-4B-V21-ACCEPTANCE.md):
 operator accepted the recorded workflow; all 38 audited target starts succeeded
 and all 277 recorded publications succeeded. Chase retargeting restored authority
@@ -11,9 +19,8 @@ normal recovery/altitude overlays. Camera hardware is not needed for that softwa
 The [final recorded-video/SIH handoff](FINAL-VIDEO-SIH-HANDOFF.md) is now
 prepared. The fresh longer-video CSRT/Chase SIH probe recorded 169 successful
 publications, a −163.93° simulated yaw response and confirmed Hold. Smart model
-loading and live detections were observed on test9 with the Full-AI runtime;
-the exact displayed-frame click remains an operator check because stale-frame
-requests were correctly rejected.
+loading and exact displayed-frame selection passed on test11 with the Full-AI
+runtime in v26; the v27 operator subsequently accepted the recorded workflow.
 
 The 4b.4d software gate is now renewed: 245 recovery/controller tests passed and
 the full backend CI unit sweep passed 3,463 tests,
@@ -45,8 +52,8 @@ and the local manifest at ~/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/l
 Slices 0–3b, normal following in 4a, and camera-v5/v6 tracking/control in 4b.3
 have local operator acceptance. The subsequent gimbal repairs and both followers
 on synthetic horizontal/vertical mounts have software/SIH evidence; final new
-physical camera acceptance remains open. The operator is away from the camera,
-so that test is postponed until return. No hardware connection is needed now.
+physical camera workflow is now accepted in v28. Physical failure behavior and
+onboard acceptance remain open, as recorded in the latest plan above.
 
 The [shared restart and recorded-video checkpoint](SLICE-4B-RESTART.md) now passes:
 normal Linux/SIH use one backend supervisor; QGC Backend settings offer guarded

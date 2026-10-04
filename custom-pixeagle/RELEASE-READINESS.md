@@ -2,8 +2,8 @@
 
 Updated 2026-10-04. Tested changes are being committed in separate reviewable
 groups; remaining integration edits are uncommitted and nothing is published. The
-camera is unavailable for the fresh physical retest; camera-free software
-qualification and release preparation proceed without recording acceptance.
+camera-final-v28 physical workflow is now operator accepted; actual camera
+network/process-failure behavior and onboard qualification remain open.
 The ordinary Pi and explicit gimbal-lab deployment choices are in
 [DEPLOYMENT-PROFILES.md](DEPLOYMENT-PROFILES.md).
 The public PixEagle versus private customized-QGC boundary is in
@@ -16,7 +16,7 @@ The public PixEagle versus private customized-QGC boundary is in
 | 0–3b optional connection/video/local tracking | Local workflow accepted; retain stock-QGC/default-off regression |
 | 4a normal following | Five multicopter dispatch/response/Stop cases passed; attitude-envelope and fixed-wing blockers remain |
 | 4b.3 camera control and camera-owned Classic/Smart | Operator accepted before latest guidance repair |
-| 4b.4 geometry/control/SIH | Four gimbal follower/mount synthetic cases passed; fresh camera retest and log review pending |
+| 4b.4 geometry/control/SIH | Four gimbal follower/mount synthetic cases passed; camera-final-v28 vertical workflow accepted, with 796 successful Vector publication records; fresh physical Chase-follow evidence is not established by this log |
 | 4b.4d network/load | 68 focused software checks passed, including shared-relay/reconnect and suspension evidence; radio, Pi load and camera network/process-failure motor behavior pending |
 | 5 Linux release | Release build, isolated boot, native package identity CTest, and DEB generation passed. The package declares `libxcb-cursor0`; the host still does not have that runtime installed, so local package installation/launch remains a separate prerequisite |
 | 5 Windows x64 | Installer build, bundled-runtime launch, secure credential store, upgrade/removal/coexistence and operator checks pending |
@@ -96,11 +96,14 @@ publish artifacts while acceptance/platform gates remain unresolved.
 
 ## Operator actions later
 
-When the camera is available, run the [fresh camera retest](OPERATOR-RETEST-4B-4.md)
-for both gimbal followers, invalid-edge preservation, retarget/recovery,
-altitude guidance and Stop. A subsequent physical network/process-failure
-check must record the camera's actual motor behavior; transmitted UDP Stop
-alone does not prove stopping.
+The [accepted camera checkpoint and next-step plan](NEXT-CHECKPOINTS-2026-10-04.md)
+records v28 evidence, repository/platform gates and the explicit vertical Pi
+profile. Preserve basic workflow acceptance while qualifying physical failures.
+
+The [fresh camera workflow](FINAL-CAMERA-SIH-HANDOFF.md) is operator accepted.
+Retain a targeted Chase-follow evidence check if needed; the v28 publication log
+only identifies Vector. The next physical network/process-failure check must
+record actual motor behavior; transmitted UDP Stop alone does not prove stopping.
 
 After simulated/physical acceptance, inventory the onboard Pi, OS, accelerator,
 camera firmware, PX4 firmware, router/datalink topology and credential/trust
