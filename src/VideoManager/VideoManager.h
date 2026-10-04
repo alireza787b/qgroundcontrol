@@ -5,9 +5,10 @@
 
 #include <QtCore/QFuture>
 #include <QtCore/QMutex>
-#include <QtCore/QPromise>
 #include <QtCore/QObject>
+#include <QtCore/QPromise>
 #include <QtCore/QSize>
+#include <QtCore/QUrl>
 #include <QtQmlIntegration/QtQmlIntegration>
 
 #ifdef QGC_UNITTEST_BUILD
@@ -43,6 +44,8 @@ class VideoManager : public QObject
     Q_PROPERTY(QSize    videoSize               READ videoSize                                  NOTIFY videoSizeChanged)
     Q_PROPERTY(QString  imageFile               READ imageFile                                  NOTIFY imageFileChanged)
     Q_PROPERTY(QString  uvcVideoSourceID        READ uvcVideoSourceID                           NOTIFY uvcVideoSourceIDChanged)
+    Q_PROPERTY(QUrl externalVideoSource READ externalVideoSource NOTIFY externalVideoSourceChanged)
+    Q_PROPERTY(bool externalVideoActive READ externalVideoActive NOTIFY externalVideoSourceChanged)
 
     friend class VideoManagerInitTest;
 
@@ -63,14 +66,16 @@ public:
     bool waitForVideoBackendReady(std::chrono::milliseconds timeout = std::chrono::minutes(1));
     void cleanup();
     bool autoStreamConfigured() const;
-    bool decoding() const { return _decoding; }
+
+    bool decoding() const { return externalVideoActive() ? _externalVideoDecoding : _decoding.loadAcquire(); }
     bool fullScreen() const { return _fullScreen; }
     bool hasThermal() const;
     bool hasVideo() const;
     bool isStreamSource() const;
     bool isUvc() const;
     bool recording() const { return _recording; }
-    bool streaming() const { return _streaming; }
+
+    bool streaming() const { return externalVideoActive() ? _externalVideoDecoding : _streaming.loadAcquire(); }
     double aspectRatio() const;
     double hfov() const;
     double thermalAspectRatio() const;
@@ -79,6 +84,14 @@ public:
     QString imageFile() const { return _imageFile; }
     QString uvcVideoSourceID() const { return _uvcVideoSourceID; }
     void setfullScreen(bool on);
+
+    QUrl externalVideoSource() const { return _externalVideoSource; }
+
+    bool externalVideoActive() const { return !_externalVideoSource.isEmpty(); }
+
+    /// An optional custom-build view owns its receiver while using the standard video/PiP layout.
+    void setExternalVideoSource(const QUrl& source);
+    void setExternalVideoState(bool decoding, const QSize& size);
 
 signals:
     void aspectRatioChanged();
@@ -95,6 +108,9 @@ signals:
     void streamingChanged();
     void uvcVideoSourceIDChanged();
     void videoSizeChanged();
+    void externalVideoSourceChanged();
+    void externalVideoStartRequested();
+    void externalVideoStopRequested();
 
 private slots:
     void _communicationLostChanged(bool communicationLost);
@@ -145,6 +161,9 @@ private:
     QSize _videoSize;
     QString _imageFile;
     QString _uvcVideoSourceID;
+    QUrl _externalVideoSource;
+    QSize _externalVideoSize;
+    bool _externalVideoDecoding = false;
 
 #ifdef QGC_UNITTEST_BUILD
     std::function<void()> _createVideoReceiversForTest;

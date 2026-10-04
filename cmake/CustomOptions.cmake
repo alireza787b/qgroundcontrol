@@ -38,6 +38,10 @@ set(QGC_ORG_DOMAIN
     "qgroundcontrol.com"
     CACHE STRING "Organization domain"
 )
+set(QGC_APP_HOMEPAGE_URL
+    "https://${QGC_ORG_DOMAIN}"
+    CACHE STRING "Application homepage URL"
+)
 set(QGC_PACKAGE_NAME
     "org.mavlink.qgroundcontrol"
     CACHE STRING "Package identifier"

@@ -1,0 +1,70 @@
+#pragma once
+
+#include "UnitTest.h"
+
+class PixEagleClientTest : public UnitTest
+{
+    Q_OBJECT
+
+private slots:
+    void _emptyEndpointUsesLocalDefault();
+    void _endpointPolicy_data();
+    void _endpointPolicy();
+    void _signInAtValidatesDestination_data();
+    void _signInAtValidatesDestination();
+    void _csrfHeaderContract_data();
+    void _csrfHeaderContract();
+    void _disabledMakesNoRequests();
+    void _loginRequiresExplicitVerification();
+    void _matchingSingleVehicleAutoVerification();
+    void _identityValidation_data();
+    void _identityValidation();
+    void _contextChangesInvalidateVerification_data();
+    void _contextChangesInvalidateVerification();
+    void _verificationRequiresFreshMatchingConfirmation();
+    void _lateConfirmationCannotVerify();
+    void _conflictingAircraftIdentity_data();
+    void _conflictingAircraftIdentity();
+    void _duplicateAssociationRequiresVerificationAgain();
+    void _endpointsIsolateCookiesAndCsrf();
+    void _endpointPrefixPreserved();
+    void _cancelPendingRequest_data();
+    void _cancelPendingRequest();
+    void _redirectDoesNotForwardCredentials();
+    void _tlsCertificateRejected();
+    void _sessionErrors_data();
+    void _sessionErrors();
+    void _credentialsStayOutOfSettings();
+    void _rememberSignInPreferenceIsPerEndpoint();
+    void _companionVideoWithoutAircraft();
+    void _companionTracksWithAircraftButCannotFollow();
+    void _companionCanChooseFollowerWithoutStarting();
+    void _mediaRequiresAssociationAndPermissions();
+    void _runtimeStatusExpiresAndRejectsLateSession();
+    void _targetReadsRequireVerifiedBinding();
+    void _targetMutationEnvelope_data();
+    void _targetMutationEnvelope();
+    void _targetMutationGates_data();
+    void _targetMutationGates();
+    void _retargetWhileFollowingKeepsOtherTargetMutationsBlocked();
+    void _followingRequiresAirborneVehicle();
+    void _targetGuardInvalidation_data();
+    void _targetGuardInvalidation();
+    void _targetActionErrors_data();
+    void _targetActionErrors();
+    void _targetTimeoutDoesNotRetry();
+    void _targetLateReplyCannotCrossSessions();
+    void _nativeFollowingUsesCapturedVehicleAndSurvivesVideoLoss();
+    void _followingContinuityStatusIsVisible_data();
+    void _followingContinuityStatusIsVisible();
+    void _followingSimulationIsVisible();
+    void _lastFollowingHandoffIsAuthoritative();
+    void _pendingNativeStartCanBeStopped();
+    void _followingStateExpiresAndRecovers();
+    void _followingStartRejectsChangedContext_data();
+    void _followingStartRejectsChangedContext();
+    void _followingActionErrorSurvivesPolling();
+    void _safetyRequiresBackendCapabilityAndFreshState();
+    void _safetyMutationUsesCapturedBackendState();
+    void _followerPreviewIsNotAircraftFollowing();
+};

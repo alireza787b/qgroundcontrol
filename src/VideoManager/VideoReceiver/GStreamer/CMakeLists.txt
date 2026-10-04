@@ -113,6 +113,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         GstVideoReceiver.h
         QGCQVideoSinkController.cc
         QGCQVideoSinkController.h
+        QGCVideoFrameContextStore.cc
+        QGCVideoFrameContextStore.h
         QGCWebSocketVideoSource.cc
         QGCWebSocketVideoSource.h
 )

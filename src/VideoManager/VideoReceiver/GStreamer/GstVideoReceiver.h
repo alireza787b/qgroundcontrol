@@ -1,16 +1,16 @@
 #pragma once
 
 #include <atomic>
+#include <glib.h>
+#include <gst/gstelement.h>
+#include <gst/gstpad.h>
+#include <memory>
 
 #include <QtCore/QMutex>
 #include <QtCore/QQueue>
 #include <QtCore/QThread>
 #include <QtCore/QTimer>
 #include <QtCore/QWaitCondition>
-
-#include <glib.h>
-#include <gst/gstelement.h>
-#include <gst/gstpad.h>
 
 #include "VideoReceiver.h"
 
@@ -43,6 +43,7 @@ private:
 typedef struct _GstElement GstElement;
 
 class GStreamerTest;
+struct QGCWebSocketVideoOptions;
 
 class GstVideoReceiver : public VideoReceiver
 {
@@ -57,6 +58,9 @@ class GstVideoReceiver : public VideoReceiver
 public:
     explicit GstVideoReceiver(QObject *parent = nullptr);
     ~GstVideoReceiver();
+
+    /// Serialized with start/stop; applies to the next source construction, never a running socket.
+    void setWebSocketOptions(std::shared_ptr<const QGCWebSocketVideoOptions> options);
 
     QString decoderName()     const { QMutexLocker locker(&_decoderNameMutex); return _decoderName; }
     quint64 processedFrames() const { return _processedFrames.load(std::memory_order_relaxed); }
@@ -139,6 +143,7 @@ private:
     GstElement *_tee = nullptr;
     GstElement *_videoSink = nullptr;
     GstVideoWorker *_worker = nullptr;
+    std::shared_ptr<const QGCWebSocketVideoOptions> _webSocketOptions;
     std::atomic<int> _reconnectAttempts = 0;     ///< Written on the streaming thread (_noteTeeFrame) and GUI thread (reconnect lambda); atomic.
     std::atomic<quint64> _reconnectEpoch = 0;    ///< Bumped on every stop() — pending singleShot lambdas check this before firing, replacing an explicit cancel/pending-flag pair.
     std::atomic<quint64> _sourceFrameCount =

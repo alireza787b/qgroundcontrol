@@ -1,0 +1,111 @@
+target_sources(
+    ${CMAKE_PROJECT_NAME}
+    PRIVATE PixEagleClientTest.cc
+            PixEagleClientTest.h
+            PixEagleModelClientTest.cc
+            PixEagleModelClientTest.h
+            PixEagleConfigClientTest.cc
+            PixEagleConfigClientTest.h
+            PixEagleCameraClientTest.cc
+            PixEagleCameraClientTest.h
+            PixEagleTestServer.h
+            PixEagleManagerTest.cc
+            PixEagleManagerTest.h
+            PixEagleVideoItemTest.cc
+            PixEagleVideoItemTest.h
+            PixEagleVideoControllerTest.cc
+            PixEagleVideoControllerTest.h
+            PixEagleTargetControllerTest.cc
+            PixEagleTargetControllerTest.h
+)
+target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+
+add_qgc_test(
+    PixEagleConfigClientTest
+    LABELS
+    Unit
+    PixEagle
+    TIMEOUT
+    60
+    RESOURCE_LOCK
+    Settings
+)
+add_qgc_test(
+    PixEagleClientTest
+    LABELS
+    Unit
+    PixEagle
+    TIMEOUT
+    60
+    RESOURCE_LOCK
+    Settings
+)
+add_qgc_test(
+    PixEagleManagerTest
+    LABELS
+    Integration
+    Vehicle
+    PixEagle
+    TIMEOUT
+    60
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
+    PixEagleModelClientTest
+    LABELS
+    Unit
+    PixEagle
+    TIMEOUT
+    90
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
+    PixEagleVideoItemTest
+    LABELS
+    Integration
+    PixEagle
+    Video
+    TIMEOUT
+    90
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
+    PixEagleVideoControllerTest
+    LABELS
+    Integration
+    PixEagle
+    Video
+    TIMEOUT
+    60
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
+    PixEagleTargetControllerTest
+    LABELS
+    Integration
+    PixEagle
+    Video
+    TIMEOUT
+    90
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
+    PixEagleCameraClientTest
+    LABELS
+    Unit
+    PixEagle
+    TIMEOUT
+    60
+    RESOURCE_LOCK
+    Settings
+)

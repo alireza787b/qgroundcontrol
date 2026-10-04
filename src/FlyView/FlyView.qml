@@ -119,6 +119,7 @@ Item {
         FlyViewVideo {
             id:         videoControl
             pipView:    _pipView
+            toolInsets: customOverlay.totalToolInsets
         }
 
         PipView {

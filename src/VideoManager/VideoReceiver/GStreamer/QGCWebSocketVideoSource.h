@@ -1,9 +1,21 @@
 #pragma once
 
+#include <memory>
+
 #include <QtCore/QByteArrayView>
 #include <QtCore/QUrl>
 #include <QtCore/QtGlobal>
-#include <memory>
+
+class QGCVideoFrameContextStore;
+
+/// Memory-only request/session options. The caller restricts credentials to the approved endpoint.
+struct QGCWebSocketVideoOptions
+{
+    QByteArray cookie;
+    QString origin;
+    bool requireFrameMetadata = false;
+    std::shared_ptr<QGCVideoFrameContextStore> frameContexts;
+};
 
 typedef struct _GstElement GstElement;
 typedef struct _GstBus GstBus;
@@ -20,7 +32,8 @@ public:
     // Bound a decoded four-byte display surface to 64 MiB while retaining 4K and 5K sources.
     static constexpr quint64 kMaximumDecodedPixels = 16 * 1024 * 1024;
 
-    QGCWebSocketVideoSource(const QUrl& url, GstElement* appsrc);
+    QGCWebSocketVideoSource(const QUrl& url, GstElement* appsrc,
+                            std::shared_ptr<const QGCWebSocketVideoOptions> options = {});
     ~QGCWebSocketVideoSource();
 
     Q_DISABLE_COPY_MOVE(QGCWebSocketVideoSource)

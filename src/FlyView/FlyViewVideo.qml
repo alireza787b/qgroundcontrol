@@ -7,7 +7,9 @@ Item {
     id: _root
 
     property Item pipView
+    property var toolInsets: null
     property Item pipState: videoPipState
+    readonly property bool externalVideoActive: QGroundControl.videoManager.externalVideoActive
 
     PipState {
         id:         videoPipState
@@ -44,7 +46,9 @@ Item {
         id:             videoStreaming
         anchors.fill:   parent
         useSmallFont:   _root.pipState.state !== _root.pipState.fullState
+        toolInsets:     _root.toolInsets
         visible:        QGroundControl.videoManager.isStreamSource || QGroundControl.videoManager.isUvc
+        z:              _root.externalVideoActive ? 1 : 0
     }
 
     QGCLabel {
@@ -72,14 +76,17 @@ Item {
         id:                      onScreenGimbalController
         anchors.fill:            parent
         cameraTrackingEnabled:   !!(videoStreaming._camera && videoStreaming._camera.trackingEnabled)
+        visible:                 !_root.externalVideoActive
     }
 
     OnScreenCameraTrackingController {
         id:                      cameraTrackingController
         anchors.fill:            parent
-        camera:                  videoStreaming._camera
+        camera:                  _root.externalVideoActive ? null : videoStreaming._camera
         videoWidth:              videoStreaming.getWidth()
         videoHeight:             videoStreaming.getHeight()
+        externalController:      videoStreaming.externalTrackingController
+        z:                       _root.externalVideoActive ? 2 : 0
     }
 
     MouseArea {
@@ -91,7 +98,41 @@ Item {
         property real _pressY:      0
         property bool _dragging:    false
         property bool _doubleClicked: false
+        property string _gestureOwner: ""
         readonly property real _dragThreshold: 10
+
+        function cancelGesture() {
+            singleClickTimer.stop()
+            onScreenGimbalController.mouseDragEnd()
+            cameraTrackingController.cancelSelection()
+            _dragging = false
+            _doubleClicked = false
+            _gestureOwner = ""
+        }
+
+        Connections {
+            target: _root
+            function onExternalVideoActiveChanged() { flyViewVideoMouseArea.cancelGesture() }
+        }
+
+        Connections {
+            target: videoStreaming
+            function onExternalTrackingControllerChanged() { flyViewVideoMouseArea.cancelGesture() }
+        }
+
+        Connections {
+            target: QGroundControl.multiVehicleManager
+            function onActiveVehicleChanged() { flyViewVideoMouseArea.cancelGesture() }
+        }
+
+        Connections {
+            target: QGroundControl.videoManager
+            function onFullScreenChanged() { cameraTrackingController.cancelSelection() }
+        }
+
+        onCanceled: cancelGesture()
+        onEnabledChanged: { if (!enabled) cancelGesture() }
+        onVisibleChanged: { if (!visible) cancelGesture() }
 
         // Defer single-click handling so a double-click (fullscreen toggle) doesn't also
         // fire an unintended gimbal click-to-point/tracking command on its first click.
@@ -104,8 +145,9 @@ Item {
             property real clickY: 0
 
             onTriggered: {
-                onScreenGimbalController.mouseClicked(clickX, clickY)
-                cameraTrackingController.mouseClicked(clickX, clickY)
+                if (flyViewVideoMouseArea._gestureOwner === "gimbal") onScreenGimbalController.mouseClicked(clickX, clickY)
+                else if (flyViewVideoMouseArea._gestureOwner === "tracking") cameraTrackingController.mouseClicked(clickX, clickY)
+                flyViewVideoMouseArea._gestureOwner = ""
             }
         }
 
@@ -114,34 +156,42 @@ Item {
             // onReleased, so flag it to prevent re-arming the single-click timer.
             _doubleClicked = true
             singleClickTimer.stop()
+            cameraTrackingController.cancelSelection()
+            onScreenGimbalController.mouseDragEnd()
+            _gestureOwner = ""
             QGroundControl.videoManager.fullScreen = !QGroundControl.videoManager.fullScreen
         }
 
         onPressed: (mouse) => {
+            singleClickTimer.stop()
             _pressX = mouse.x
             _pressY = mouse.y
             _dragging = false
             // Clear any stale flag (e.g. double-click followed by drag releases through the
             // drag branch without consuming it). Safe: pressed is emitted before doubleClicked.
             _doubleClicked = false
+            _gestureOwner = _root.externalVideoActive || cameraTrackingController._trackingEnabled ? "tracking" : "gimbal"
+            cameraTrackingController.beginGesture(flyViewVideoMouseArea, mouse.x, mouse.y)
         }
 
         onPositionChanged: (mouse) => {
+            if (!pressed || !_gestureOwner) return
             if (!_dragging && (Math.abs(mouse.x - _pressX) >= _dragThreshold || Math.abs(mouse.y - _pressY) >= _dragThreshold)) {
                 _dragging = true
-                onScreenGimbalController.mouseDragStart(_pressX, _pressY)
-                cameraTrackingController.mouseDragStart(_pressX, _pressY)
+                if (_gestureOwner === "gimbal") onScreenGimbalController.mouseDragStart(_pressX, _pressY)
+                else cameraTrackingController.mouseDragStart(_pressX, _pressY)
             }
             if (_dragging) {
-                onScreenGimbalController.mouseDragPositionChanged(mouse.x, mouse.y)
-                cameraTrackingController.mouseDragPositionChanged(mouse.x, mouse.y)
+                if (_gestureOwner === "gimbal") onScreenGimbalController.mouseDragPositionChanged(mouse.x, mouse.y)
+                else cameraTrackingController.mouseDragPositionChanged(mouse.x, mouse.y)
             }
         }
 
         onReleased: (mouse) => {
             if (_dragging) {
-                onScreenGimbalController.mouseDragEnd()
-                cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
+                if (_gestureOwner === "gimbal") onScreenGimbalController.mouseDragEnd()
+                else if (_gestureOwner === "tracking") cameraTrackingController.mouseDragEnd(mouse.x, mouse.y)
+                _gestureOwner = ""
             } else if (_doubleClicked) {
                 // Second release of a double-click - fullscreen toggle already handled
                 _doubleClicked = false
@@ -155,11 +205,13 @@ Item {
     }
 
     ProximityRadarVideoView{
+        visible:        !_root.externalVideoActive
         anchors.fill:   parent
         vehicle:        QGroundControl.multiVehicleManager.activeVehicle
     }
 
     ObstacleDistanceOverlayVideo {
+        visible: !_root.externalVideoActive
         id: obstacleDistance
         showText: pipState.state === pipState.fullState
     }

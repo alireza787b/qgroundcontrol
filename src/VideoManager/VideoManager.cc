@@ -355,6 +355,10 @@ void VideoManager::_cleanupOldVideos()
 
 void VideoManager::startRecording(const QString &videoFile)
 {
+    if (externalVideoActive()) {
+        QGC::showAppMessage(tr("Recording is unavailable for this custom video source."));
+        return;
+    }
     const VideoReceiver::FILE_FORMAT fileFormat = static_cast<VideoReceiver::FILE_FORMAT>(_videoSettings->recordingFormat()->rawValue().toInt());
     if (!VideoReceiver::isValidFileFormat(fileFormat)) {
         QGC::showAppMessage(tr("Invalid video format defined."));
@@ -394,6 +398,10 @@ void VideoManager::stopRecording()
 
 void VideoManager::grabImage(const QString &imageFile)
 {
+    if (externalVideoActive()) {
+        QGC::showAppMessage(tr("Photo capture is unavailable for this custom video source."));
+        return;
+    }
     if (imageFile.isEmpty()) {
         _imageFile = SettingsManager::instance()->appSettings()->photoSavePath();
         _imageFile += QStringLiteral("/") + QDateTime::currentDateTime().toString("yyyy-MM-dd_hh.mm.ss.zzz") + QStringLiteral(".jpg");
@@ -411,6 +419,11 @@ void VideoManager::grabImage(const QString &imageFile)
 
 double VideoManager::aspectRatio() const
 {
+    if (externalVideoActive()) {
+        return _externalVideoSize.isEmpty()
+                   ? 16.0 / 9.0
+                   : static_cast<double>(_externalVideoSize.width()) / _externalVideoSize.height();
+    }
     // Live decoded resolution wins — set by VideoReceiver::videoSizeChanged once frames flow.
     if (!_videoSize.isEmpty()) {
         return static_cast<double>(_videoSize.width()) / _videoSize.height();
@@ -464,6 +477,9 @@ double VideoManager::thermalHfov() const
 
 bool VideoManager::hasThermal() const
 {
+    if (externalVideoActive()) {
+        return false;
+    }
     for (VideoReceiver *receiver : _videoReceivers) {
         QGCVideoStreamInfo *pInfo = receiver->videoStreamInfo();
         if (receiver->isThermal() && pInfo && pInfo->isThermal()) {
@@ -476,17 +492,18 @@ bool VideoManager::hasThermal() const
 
 bool VideoManager::hasVideo() const
 {
-    return (_videoSettings->streamEnabled()->rawValue().toBool() && _videoSettings->streamConfigured());
+    return _videoSettings->streamEnabled()->rawValue().toBool() &&
+           (externalVideoActive() || _videoSettings->streamConfigured());
 }
 
 bool VideoManager::isUvc() const
 {
-    return (!_uvcVideoSourceID.isEmpty() && UVCReceiver::enabled() && hasVideo());
+    return !externalVideoActive() && !_uvcVideoSourceID.isEmpty() && UVCReceiver::enabled() && hasVideo();
 }
 
 void VideoManager::setfullScreen(bool on)
 {
-    if (on) {
+    if (on && !externalVideoActive()) {
         if (!_activeVehicle || _activeVehicle->vehicleLinkManager()->communicationLost()) {
             on = false;
         }
@@ -500,6 +517,9 @@ void VideoManager::setfullScreen(bool on)
 
 bool VideoManager::isStreamSource() const
 {
+    if (externalVideoActive()) {
+        return true;
+    }
     static const QStringList videoSourceList = {
         VideoSettings::videoSourceUDPH264,
         VideoSettings::videoSourceUDPH265,
@@ -520,6 +540,15 @@ bool VideoManager::isStreamSource() const
 
 void VideoManager::_videoSourceChanged()
 {
+    if (externalVideoActive()) {
+        emit hasVideoChanged();
+        if (hasVideo()) {
+            emit externalVideoStartRequested();
+        } else {
+            emit externalVideoStopRequested();
+        }
+        return;
+    }
     bool changed = false;
     if (_activeVehicle) {
         QGCCameraManager* camMgr = _activeVehicle->cameraManager();
@@ -582,6 +611,9 @@ bool VideoManager::_updateUVC(VideoReceiver * /*receiver*/)
 
 bool VideoManager::autoStreamConfigured() const
 {
+    if (externalVideoActive()) {
+        return false;
+    }
     for (VideoReceiver *receiver : _videoReceivers) {
         QGCVideoStreamInfo *pInfo = receiver->videoStreamInfo();
         if (!receiver->isThermal() && pInfo && !pInfo->isThermal()) {
@@ -594,6 +626,9 @@ bool VideoManager::autoStreamConfigured() const
 
 bool VideoManager::_updateAutoStream(VideoReceiver *receiver)
 {
+    if (externalVideoActive() || !receiver) {
+        return false;
+    }
     const QGCVideoStreamInfo *pInfo = receiver->videoStreamInfo();
     if (!pInfo) {
         return false;
@@ -667,6 +702,9 @@ bool VideoManager::_updateVideoUri(VideoReceiver *receiver, const QString &uri)
 
 bool VideoManager::_updateSettings(VideoReceiver *receiver)
 {
+    if (externalVideoActive()) {
+        return false;
+    }
     if (!receiver) {
         qCDebug(VideoManagerLog) << "VideoReceiver is NULL";
         return false;
@@ -808,7 +846,9 @@ void VideoManager::_restartVideo(VideoReceiver *receiver)
 
     qCDebug(VideoManagerLog) << "Restart video receiver" << receiver->name();
 
-    if (receiver->started()) {
+    if (externalVideoActive()) {
+        _stopReceiver(receiver);
+    } else if (receiver->started()) {
         _stopReceiver(receiver);
         // onStopComplete Signal Will Restart It
     } else {
@@ -830,6 +870,9 @@ void VideoManager::_stopReceiver(VideoReceiver *receiver)
 
 void VideoManager::stopVideo()
 {
+    if (externalVideoActive()) {
+        emit externalVideoStopRequested();
+    }
     for (VideoReceiver *receiver : std::as_const(_videoReceivers)) {
         _stopReceiver(receiver);
     }
@@ -837,6 +880,9 @@ void VideoManager::stopVideo()
 
 void VideoManager::_startReceiver(VideoReceiver *receiver)
 {
+    if (externalVideoActive()) {
+        return;
+    }
     if (!receiver) {
         qCDebug(VideoManagerLog) << "VideoReceiver is NULL";
         return;
@@ -1003,5 +1049,62 @@ void VideoManager::startVideo()
         return;
     }
 
-    _restartAllVideos();
+    if (externalVideoActive()) {
+        emit externalVideoStartRequested();
+    } else {
+        _restartAllVideos();
+    }
+}
+
+void VideoManager::setExternalVideoSource(const QUrl& source)
+{
+    if (_externalVideoSource == source) {
+        return;
+    }
+    if (externalVideoActive()) {
+        emit externalVideoStopRequested();
+    }
+    _externalVideoSource = source;
+    if (source.isEmpty()) {
+        setfullScreen(false);
+    }
+    _externalVideoDecoding = false;
+    _externalVideoSize = {};
+    emit externalVideoSourceChanged();
+    emit autoStreamConfiguredChanged();
+    emit hasVideoChanged();
+    emit isStreamSourceChanged();
+    emit isUvcChanged();
+    emit decodingChanged();
+    emit streamingChanged();
+    emit aspectRatioChanged();
+    if (externalVideoActive()) {
+        for (auto* receiver : std::as_const(_videoReceivers)) {
+            _stopReceiver(receiver);
+        }
+        if (hasVideo()) {
+            emit externalVideoStartRequested();
+        }
+    } else {
+        _videoSourceChanged();
+        if (hasVideo()) {
+            _restartAllVideos();
+        }
+    }
+}
+
+void VideoManager::setExternalVideoState(bool decoding, const QSize& size)
+{
+    if (!externalVideoActive()) {
+        return;
+    }
+    if (_externalVideoDecoding != decoding) {
+        _externalVideoDecoding = decoding;
+        emit decodingChanged();
+        emit streamingChanged();
+    }
+    if (_externalVideoSize != size) {
+        _externalVideoSize = size;
+        emit aspectRatioChanged();
+    }
 }

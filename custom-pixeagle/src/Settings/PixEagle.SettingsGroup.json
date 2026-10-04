@@ -1,0 +1,30 @@
+{
+    "version": 1,
+    "fileType": "FactMetaData",
+    "QGC.MetaData.Facts": [
+        {
+            "name": "integrationEnabled",
+            "label": "Enable PixEagle",
+            "shortDesc": "Enable PixEagle",
+            "longDesc": "Connect to a PixEagle companion for each vehicle. Saved sign-in uses this device's system password store when selected.",
+            "type": "bool",
+            "default": false
+        },
+        {
+            "name": "videoEnabled",
+            "label": "Show PixEagle video in Fly View",
+            "shortDesc": "Show PixEagle video in Fly View",
+            "longDesc": "Show the selected PixEagle companion's authenticated video. Turn off to use QGC's configured camera source.",
+            "type": "bool",
+            "default": true
+        },
+        {
+            "name": "tapToTarget",
+            "label": "Tap video to select targets",
+            "shortDesc": "Tap video to select targets",
+            "longDesc": "Select or replace a target directly in the video. When disabled, use Select target or Retarget before each selection.",
+            "type": "bool",
+            "default": true
+        }
+    ]
+}
