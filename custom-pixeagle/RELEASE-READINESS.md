@@ -112,11 +112,12 @@ checkpoints.
 
 ## Latest rebuilt QGC regression
 
-Debug build passes with version tags available. The full Unit/Integration run
-with standard Flaky/Network exclusions recorded **413/414 passes**. Unchanged
-`GPSReceiverSettingsTest::_disconnectedPage(mobile)` exceeded its 1 s visibility
-check by about 100 ms under four-worker load; its isolated unchanged retry passed
-all assertions. Retain both logs rather than claim an entirely green full run.
+Debug build passes with version tags available. The fresh Unit/Integration run
+with standard Flaky/Network exclusions recorded **413/414 passes**. The only
+failure was `CMake.QGCTestMultiConfig`, whose fixture could not find the
+`Ninja Multi-Config` build program on this host. The earlier isolated GPS
+visibility retry also passed; retain both logs rather than claim an entirely
+green full run until the missing generator is available.
 Focused PixEagle/stock-UI/package checks passed 9/9 before the rebuild. All 14
 mocked SIH launcher/startup boundary tests pass. Broader lint and platform
 acceptance limitations above remain open.
