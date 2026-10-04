@@ -1,0 +1,285 @@
+name: PixEagle Platform Artifacts
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: Platform to build
+        required: true
+        type: choice
+        default: all
+        options:
+          - all
+          - windows
+          - android
+      build_type:
+        description: CMake build type
+        required: true
+        type: choice
+        default: Release
+        options:
+          - Release
+          - Debug
+
+concurrency:
+  group: pixeagle-platform-${{ github.ref }}-${{ inputs.platform }}-${{ inputs.build_type }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  AQT_SOURCE: git+https://github.com/miurahr/aqtinstall.git@8d961e61720b3c06583517fbc68d57ec0a4e9f95
+  CUSTOM_DIR: custom-pixeagle
+
+jobs:
+  windows:
+    name: PixEagle Windows ${{ inputs.build_type }}
+    if: inputs.platform == 'all' || inputs.platform == 'windows'
+    runs-on: windows-2022
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    defaults:
+      run:
+        shell: cmd
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build Setup
+        id: setup
+        uses: ./.github/actions/build-setup
+        with:
+          qt-host: windows
+          qt-arch: win64_msvc2022_64
+          aqt-source: ${{ env.AQT_SOURCE }}
+          build-type: ${{ inputs.build_type }}
+          cache-variant: pixeagle
+
+      - name: Configure
+        uses: ./.github/actions/cmake-configure
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          preset: ${{ inputs.build_type == 'Debug' && 'Windows-debug' || 'Windows' }}
+          extra-args: >-
+            -DQGC_CUSTOM_DIR=${{ env.CUSTOM_DIR }}
+            -DQGC_ENABLE_GST_VIDEOSTREAMING=ON
+            -DQGC_BUILD_PORTABLE_TESTS=ON
+            -DQGC_CPACK_GENERATOR=NSIS
+
+      - name: Build
+        id: build
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+
+      - name: Run portable tests
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        uses: ./.github/actions/run-unit-tests
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          include-labels: Portable
+          junit-output: junit-portable-windows.xml
+          ctest-output: portable-windows-output.txt
+
+      - name: Create installer
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          target: qgc-package
+          parallel: 'false'
+
+      - name: Prepare installer artifact
+        id: installer
+        shell: pwsh
+        env:
+          BUILD_ROOT: ${{ runner.temp }}\build
+        run: |
+          $installer = Get-ChildItem -LiteralPath $env:BUILD_ROOT -Recurse -Filter '*installer*.exe' |
+            Where-Object { $_.FullName -notmatch '\\CMakeFiles\\' } |
+            Select-Object -First 1
+          if ($null -eq $installer) {
+            throw "PixEagle installer was not produced under $env:BUILD_ROOT"
+          }
+          $checksumPath = "$($installer.FullName).sha256"
+          $hash = (Get-FileHash -LiteralPath $installer.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  $($installer.Name)" | Set-Content -LiteralPath $checksumPath -NoNewline
+          "path=$($installer.FullName)" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+          "checksum=$checksumPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+
+      - name: Verify executable identity
+        if: inputs.build_type == 'Release'
+        uses: ./.github/actions/verify-executable
+        with:
+          binary-path: ${{ runner.temp }}/build/Release/PixEagle-QGroundControl.exe
+          type: exe
+          build-dir: ${{ runner.temp }}/build
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixeagle-qgroundcontrol-windows-${{ inputs.build_type }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ steps.installer.outputs.path }}
+            ${{ steps.installer.outputs.checksum }}
+            ${{ runner.temp }}/build/junit-portable-windows.xml
+            ${{ runner.temp }}/build/portable-windows-output.txt
+
+      - name: Attest Windows installer
+        if: inputs.build_type == 'Release'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.installer.outputs.path }}
+
+  android:
+    name: PixEagle Android ${{ inputs.build_type }}
+    if: inputs.platform == 'all' || inputs.platform == 'android'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    defaults:
+      run:
+        shell: bash
+
+    env:
+      BUILD_TYPE: ${{ inputs.build_type }}
+      QT_ANDROID_ABIS: arm64-v8a;armeabi-v7a
+      QT_ANDROID_KEYSTORE_ALIAS: pixeagle-debug
+      QT_ANDROID_KEYSTORE_STORE_PASS: android
+      QT_ANDROID_KEYSTORE_KEY_PASS: android
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set Android CI paths
+        run: |
+          echo "QT_ANDROID_KEYSTORE_PATH=${RUNNER_TEMP}/pixeagle-debug.keystore" >> "$GITHUB_ENV"
+          echo "ANDROID_SDK_ROOT=${RUNNER_TEMP}/android-sdk" >> "$GITHUB_ENV"
+          echo "ANDROID_HOME=${RUNNER_TEMP}/android-sdk" >> "$GITHUB_ENV"
+
+      - name: Build Setup
+        id: setup
+        uses: ./.github/actions/build-setup
+        with:
+          mode: android
+          qt-host: linux
+          qt-arch: linux_gcc_64
+          aqt-source: ${{ env.AQT_SOURCE }}
+          abis: ${{ env.QT_ANDROID_ABIS }}
+          build-type: ${{ env.BUILD_TYPE }}
+          cache-variant: pixeagle
+          cache-key-suffix: pixeagle-android
+          cpm-modules: .cache/CPM
+
+      - name: Install host dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Create temporary debug keystore
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$QT_ANDROID_KEYSTORE_PATH" \
+            -storepass "$QT_ANDROID_KEYSTORE_STORE_PASS" \
+            -alias "$QT_ANDROID_KEYSTORE_ALIAS" \
+            -keypass "$QT_ANDROID_KEYSTORE_KEY_PASS" \
+            -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname 'CN=PixEagle CI,O=PixEagle,C=US'
+
+      - name: Configure
+        id: configure
+        uses: ./.github/actions/cmake-configure
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ env.BUILD_TYPE }}
+          preset: ${{ env.BUILD_TYPE == 'Debug' && 'Android-debug' || 'Android' }}
+          use-qt-cmake: 'false'
+          extra-args: >-
+            -DQGC_CUSTOM_DIR=${{ env.CUSTOM_DIR }}
+            -DQGC_ENABLE_GST_VIDEOSTREAMING=ON
+            -DCMAKE_WARN_DEPRECATED=FALSE
+            -DCMAKE_TOOLCHAIN_FILE=${{ steps.setup.outputs.target_qt_root_dir }}/lib/cmake/Qt6/qt.toolchain.cmake
+            -DCMAKE_PREFIX_PATH=${{ steps.setup.outputs.target_qt_root_dir }}
+            -DQT_ANDROID_ABIS=${{ env.QT_ANDROID_ABIS }}
+            -DQT_HOST_PATH=${{ steps.setup.outputs.host_qt_root_dir }}
+            -DQT_ANDROID_SIGN_APK=ON
+
+      - name: Build
+        id: build
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ env.BUILD_TYPE }}
+          output-file: android-build.log
+
+      - name: Android lint
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        working-directory: ${{ runner.temp }}/build/android-build
+        run: ./gradlew lint${BUILD_TYPE} --no-daemon
+
+      - name: Prepare APK artifact
+        id: apk
+        run: |
+          apk_source="$(find "${RUNNER_TEMP}/build/android-build" -type f -name '*.apk' -print -quit)"
+          if [[ -z "$apk_source" ]]; then
+            echo "::error::No APK was produced"
+            exit 1
+          fi
+          apk_path="${RUNNER_TEMP}/build/PixEagle-QGroundControl.apk"
+          cp "$apk_source" "$apk_path"
+          (cd "$(dirname "$apk_path")" && sha256sum "$(basename "$apk_path")" > "$(basename "$apk_path").sha256")
+          {
+            echo "PixEagle QGroundControl Android CI artifact"
+            echo "Build type: ${BUILD_TYPE}"
+            echo "Package: io.github.alireza787b.pixeagle.qgroundcontrol"
+            echo "Signing: temporary CI debug keystore; not a release signing identity"
+          } > "${RUNNER_TEMP}/build/android-artifact-info.txt"
+          echo "path=$apk_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Android artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixeagle-qgroundcontrol-android-${{ inputs.build_type }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ steps.apk.outputs.path }}
+            ${{ steps.apk.outputs.path }}.sha256
+            ${{ runner.temp }}/build/android-artifact-info.txt
+            ${{ runner.temp }}/build/android-build.log
+
+      - name: Attest Android APK
+        if: inputs.build_type == 'Release'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.apk.outputs.path }}

@@ -52,6 +52,13 @@ Linux Qt. A native Windows build runner/MSVC/NSIS and Android Qt/SDK/NDK/runtime
 are prerequisites for their artifacts. Do not label a Linux binary a Windows
 executable or claim a checksum for an artifact that has not been built.
 
+The manual [PixEagle platform workflow](PLATFORM-CI.md) now provides the
+reproducible Windows and Android path on GitHub-hosted runners. It selects
+`QGC_CUSTOM_DIR=custom-pixeagle`, uploads short-lived checksummed artifacts and
+attests Release outputs, but does not sign with production credentials or
+publish to a store. A successful workflow run still needs the platform and
+operator acceptance checks listed below.
+
 The existing SIH runners accept explicit backend repository, Python runtime,
 SDK/router executable and library paths, and record hashes/packages/images.
 Their current convenience defaults refer to this private baseline cache;
@@ -136,11 +143,14 @@ acceptance limitations above remain open.
 
 ## Commit and regression checkpoint — October 4
 
-Backend commit `e083f71` records the sustained shared-link qualification;
-`a1724a8` records project-use and release boundaries. QGC commits `9d9e5f275`
-(native overlay/video path), `04ba98b5b` (SIH validation harness),
-`dd917e5ef` (qualification evidence), `6ca249720` (package identity), and
-`2f4599db8` (deployment/publication status) record the tested integration
+Backend commit `e083f711e071895263f815dff084caed7d752a17` records the sustained
+shared-link qualification; `a1724a8a8eda12a7b2e7741dc086a09e3adb5dc0` records
+project-use and release boundaries. QGC commits
+`9d9e5f275ae12f3a1f0e27f7b7595b3b4136d78d` (native overlay/video path),
+`04ba98b5b2ec743128fcc417ee07d3bbb498f5d5` (SIH validation harness),
+`dd917e5efdafe8f2731152f8489b149f041ca1a1` (qualification evidence),
+`6ca2497209eb5ec4a21b76bef0e41c45a52aafa4` (package identity), and
+`2f4599db899246d275df76827a53bef7e9831eec` (deployment/publication status) record the tested integration
 groups. These commits stay on their integration branches; neither main nor
 public artifacts are updated. Remaining source edits need separate reviewed
 commits.
