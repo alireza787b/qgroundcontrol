@@ -9,6 +9,9 @@ include_guard(GLOBAL)
 # Basic Package Information
 # ----------------------------------------------------------------------------
 set(CPACK_PACKAGE_NAME "${CMAKE_PROJECT_NAME}")
+set(CPACK_QGC_APP_NAME "${CMAKE_PROJECT_NAME}")
+set(CPACK_QGC_PACKAGE_ID "${QGC_PACKAGE_NAME}")
+string(TOLOWER "${CMAKE_PROJECT_NAME}" CPACK_QGC_NATIVE_PACKAGE_NAME)
 set(CPACK_PACKAGE_VENDOR "${QGC_ORG_NAME}")
 set(CPACK_PACKAGE_DIRECTORY "${CMAKE_BINARY_DIR}")
 set(CPACK_PACKAGE_VERSION_MAJOR "${PROJECT_VERSION_MAJOR}")

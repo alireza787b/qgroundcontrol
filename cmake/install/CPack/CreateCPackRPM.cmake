@@ -15,10 +15,10 @@ set(CPACK_BINARY_RPM ON)
 # Package Metadata
 # ----------------------------------------------------------------------------
 set(CPACK_RPM_COMPONENT_INSTALL ON)
-set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/QGroundControl")
+set(CPACK_PACKAGING_INSTALL_PREFIX "/opt/${CPACK_QGC_APP_NAME}")
 list(APPEND CPACK_PRE_BUILD_SCRIPTS "${CMAKE_SOURCE_DIR}/cmake/install/FinalizeNativePackage.cmake")
 # CPACK_RPM_PACKAGE_SUMMARY
-set(CPACK_RPM_PACKAGE_NAME "qgroundcontrol")
+set(CPACK_RPM_PACKAGE_NAME "${CPACK_QGC_NATIVE_PACKAGE_NAME}")
 set(CPACK_RPM_FILE_NAME "RPM-DEFAULT")
 # CPACK_RPM_MAIN_COMPONENT
 # CPACK_RPM_PACKAGE_EPOCH

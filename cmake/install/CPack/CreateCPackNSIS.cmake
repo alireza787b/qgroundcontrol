@@ -130,6 +130,12 @@ set(_qgc_nsis_extra_install
 )
 string(CONFIGURE "${_qgc_nsis_extra_install}" CPACK_NSIS_EXTRA_INSTALL_COMMANDS @ONLY)
 
+if(QGC_CUSTOM_BUILD)
+    set(_qgc_nsis_user_data_cleanup "")
+else()
+    set(_qgc_nsis_user_data_cleanup "RMDir /r /REBOOTOK \"\$APPDATA\\${QGC_ORG_NAME}\"")
+endif()
+
 set(_qgc_nsis_extra_uninstall
     [=[
     !include "FileFunc.nsh"
@@ -152,7 +158,7 @@ set(_qgc_nsis_extra_uninstall
     StrCmp $R1 "1" qgc_keep_app_data
     SetShellVarContext current
     ${DisableX64FSRedirection}
-    RMDir /r /REBOOTOK "$APPDATA\@QGC_ORG_NAME@"
+    @_qgc_nsis_user_data_cleanup@
     ${EnableX64FSRedirection}
     SetShellVarContext all
 
