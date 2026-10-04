@@ -132,8 +132,8 @@ command-blocked onboard ground test. See [release readiness](RELEASE-READINESS.m
 After the operator-requested ground-speed fallback, full backend Unit passes
 **3,391** with 41 optional dependency skips; Integration passes 195. Dashboard
 passes 490 tests/64 suites, build and lint. The renewed software link 68-test
-gate records a stable source manifest. The rebuilt QGC run passes 413/414 plus an
-isolated passing retry of its unchanged GPS visibility test; the failed full
-run remains retained. No current SIH snapshot is relabelled to conceal the
+gate records a stable source manifest. The rebuilt QGC run passes 414/414 with
+the standard Flaky/Network exclusions; earlier failed attempts remain retained
+for provenance. No current SIH snapshot is relabelled to conceal the
 subsequent ground-speed receipt/metadata additions. Their focused/full gates
 are separate from actual sustained attitude/fixed-wing qualification.

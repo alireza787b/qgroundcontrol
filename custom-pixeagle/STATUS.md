@@ -87,8 +87,11 @@ record the native overlay, validation harness, qualification evidence, package
 identity, and deployment/publication documentation. The renewed
 focused gate passed 142 backend tests, an additional 226-test recovery/transport
 suite, four QGC client suites and the Linux package-identity test. The fresh QGC
-Unit/Integration run passed **413/414**; the sole failure was the
-`CMake.QGCTestMultiConfig` fixture because this host lacks Ninja Multi-Config.
+Unit/Integration run passed **414/414** with standard Flaky/Network exclusions,
+including the `CMake.QGCTestMultiConfig` fixture after selecting the locked
+Ninja tool. The Release DEB was generated with its `libxcb-cursor0` dependency
+declared; installing it on this host remains unverified because that runtime is
+not installed locally.
 Real-flight qualification
 remains later scope. The optional [recorded-video SIH handoff](OPERATOR-RECORDED-SIH.md)
 is prepared but stopped.
