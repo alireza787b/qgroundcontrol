@@ -18,6 +18,8 @@ private slots:
     void _loginRequiresExplicitVerification();
     void _matchingSingleVehicleAutoVerification();
     void _autoVerificationStartsWhenSingleVehicleIsLearnedAfterLogin();
+    void _autoVerificationDiscoversDisconnectedBackend_data();
+    void _autoVerificationDiscoversDisconnectedBackend();
     void _identityValidation_data();
     void _identityValidation();
     void _contextChangesInvalidateVerification_data();

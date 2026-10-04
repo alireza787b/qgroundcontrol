@@ -782,12 +782,16 @@ bool PixEagleClient::_identitiesReadyForVerification() const
     const auto command = _context.value("command").toObject();
     const auto telemetry = _context.value("telemetry").toObject();
     const QString commandUid = command.value("autopilot_uid").toString();
+    // Discovery establishes the command connection; requiring it here prevents
+    // automatic discovery on a fresh backend. Known identities must still match.
+    const QString telemetryUid = telemetry.value("autopilot_uid").toString();
     return _enabled && _authenticated && _online && !_identityConflict && !_duplicateAssociation &&
-           validUid(_aircraftUid) && validUid(commandUid) && commandUid == _aircraftUid &&
-           telemetry.value("autopilot_uid").toString() == _aircraftUid && command.value("connected").toBool() &&
-           telemetry.value("connected").toBool() && telemetry.value("fresh").toBool() &&
-           telemetry.value("system_id").toInt(-1) == _systemId &&
-           (command.value("system_id").isNull() || command.value("system_id").toInt(-1) == _systemId);
+           !_context.isEmpty() && validUid(_aircraftUid) && (commandUid.isEmpty() || commandUid == _aircraftUid) &&
+           (telemetryUid.isEmpty() || telemetryUid == _aircraftUid) &&
+           (!telemetry.contains("system_id") || telemetry.value("system_id").isNull() ||
+            telemetry.value("system_id").toInt(-1) == _systemId) &&
+           (!command.contains("system_id") || command.value("system_id").isNull() ||
+            command.value("system_id").toInt(-1) == _systemId);
 }
 
 bool PixEagleClient::associationVerified() const
@@ -1272,13 +1276,13 @@ bool PixEagleClient::canStartFollowing() const
 bool PixEagleClient::canStopFollowing() const
 {
     const QString sessionId = followingActive() ? _followingStatus.value("follow_session_id").toString()
-                                                : _followingStatus.value("follow_session_id").toString().isEmpty()
-                                                      ? _followingStatus.value("pending_start_id").toString()
-                                                      : _followingStatus.value("follow_session_id").toString();
+                              : _followingStatus.value("follow_session_id").toString().isEmpty()
+                                  ? _followingStatus.value("pending_start_id").toString()
+                                  : _followingStatus.value("follow_session_id").toString();
     const QString uid = followingActive() ? _followingStatus.value("follow_aircraft_uid").toString()
-                                          : _followingStatus.value("follow_aircraft_uid").toString().isEmpty()
-                                                ? _followingStatus.value("pending_aircraft_uid").toString()
-                                                : _followingStatus.value("follow_aircraft_uid").toString();
+                        : _followingStatus.value("follow_aircraft_uid").toString().isEmpty()
+                            ? _followingStatus.value("pending_aircraft_uid").toString()
+                            : _followingStatus.value("follow_aircraft_uid").toString();
     const bool pendingStart = !followingActive() && _followingStatus.value("follow_session_id").toString().isEmpty();
     return _enabled && _authenticated && !_companionOnly && !_identityConflict && !_duplicateAssociation &&
            _followingStatus.value("stop_allowed").toBool() &&
@@ -1477,11 +1481,11 @@ bool PixEagleClient::stopFollowing(const QString& context)
                                 {{"instance_id", _followingStatus.value("instance_id")},
                                  {"runtime_id", _followingStatus.value("runtime_id")},
                                  {"follow_session_id", !_followingStatus.value("follow_session_id").toString().isEmpty()
-                                                              ? _followingStatus.value("follow_session_id")
-                                                              : _followingStatus.value("pending_start_id")},
+                                                           ? _followingStatus.value("follow_session_id")
+                                                           : _followingStatus.value("pending_start_id")},
                                  {"aircraft_uid", !_followingStatus.value("follow_aircraft_uid").toString().isEmpty()
-                                                         ? _followingStatus.value("follow_aircraft_uid")
-                                                         : _followingStatus.value("pending_aircraft_uid")}},
+                                                      ? _followingStatus.value("follow_aircraft_uid")
+                                                      : _followingStatus.value("pending_aircraft_uid")}},
                                 15000);
 }
 
