@@ -336,7 +336,21 @@ void PixEagleClient::setDuplicateAssociation(bool duplicate, const QString& othe
 
 void PixEagleClient::setAutoVerifySingleVehicle(bool enabled)
 {
-    _autoVerifySingleVehicle = enabled && !_companionOnly;
+    const bool next = enabled && !_companionOnly;
+    if (_autoVerifySingleVehicle == next) {
+        return;
+    }
+    _autoVerifySingleVehicle = next;
+    if (!_autoVerifySingleVehicle) {
+        _autoVerificationPending = false;
+        _autoVerificationAttemptedKey.clear();
+    } else {
+        // The manager can learn that this is the only vehicle after sign-in and
+        // context discovery have already completed. Re-evaluate the current
+        // context instead of waiting for another identity event.
+        _maybeAutoVerify();
+    }
+    emit changed();
 }
 
 void PixEagleClient::_clearContext()
@@ -642,24 +656,37 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
             refreshConfig();
         }
     }
-    if (kind == Request::Context && _autoVerifySingleVehicle && !associationVerified() &&
-        _identitiesReadyForVerification() &&
-        _autoVerificationAttemptedKey != _contextKey()) {
-        const auto key = _contextKey();
-        const auto contextGeneration = _generation;
-        _autoVerificationAttemptedKey = key;
-        _autoVerificationPending = true;
-        QTimer::singleShot(0, this, [this, contextGeneration, key]() {
-            if (_generation == contextGeneration && _contextKey() == key && _autoVerifySingleVehicle && canVerify() &&
-                !associationVerified()) {
-                _autoVerificationPending = false;
-                verifyVehicle();
-            } else {
-                _autoVerificationPending = false;
-            }
-            emit changed();
-        });
+    if (kind == Request::Context) {
+        _maybeAutoVerify();
     }
+}
+
+void PixEagleClient::_maybeAutoVerify()
+{
+    if (!_autoVerifySingleVehicle || _companionOnly || _autoVerificationPending || associationVerified() ||
+        !_identitiesReadyForVerification() || !canVerify()) {
+        return;
+    }
+
+    const QString key = _contextKey();
+    if (key.isEmpty() || _autoVerificationAttemptedKey == key) {
+        return;
+    }
+
+    const quint64 contextGeneration = _generation;
+    _autoVerificationPending = true;
+    emit changed();
+    QTimer::singleShot(0, this, [this, contextGeneration, key]() {
+        _autoVerificationPending = false;
+        if (_generation == contextGeneration && _contextKey() == key && _autoVerifySingleVehicle && canVerify() &&
+            !associationVerified()) {
+            // Record an attempt only when the request is actually admitted.
+            // A context or identity race before dispatch must remain retryable.
+            _autoVerificationAttemptedKey = key;
+            verifyVehicle();
+        }
+        emit changed();
+    });
 }
 
 bool PixEagleClient::_acceptSession(const QJsonObject& data)

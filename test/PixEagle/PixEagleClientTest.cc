@@ -574,6 +574,24 @@ void PixEagleClientTest::_matchingSingleVehicleAutoVerification()
     QCOMPARE(server.lastRequest(VERIFY_PATH).target, VERIFY_PATH);
 }
 
+void PixEagleClientTest::_autoVerificationStartsWhenSingleVehicleIsLearnedAfterLogin()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    PixEagleClient client;
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QVERIFY(!client.associationVerified());
+    QVERIFY(server.lastRequestIndex(VERIFY_PATH) < 0);
+
+    // Vehicle-count information can arrive after login/context discovery. The
+    // manager must be able to turn on automatic verification without requiring
+    // another sign-in or a manual Verify button press.
+    client.setAutoVerifySingleVehicle(true);
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(VERIFY_PATH) >= 0, TestTimeout::mediumMs());
+    QTRY_VERIFY_WITH_TIMEOUT(client.associationVerified(), TestTimeout::mediumMs());
+}
+
 void PixEagleClientTest::_identityValidation_data()
 {
     QTest::addColumn<QString>("qgcUid");

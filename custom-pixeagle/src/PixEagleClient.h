@@ -269,6 +269,7 @@ private:
     void _finished(QNetworkReply* reply, Request kind, quint64 generation);
     bool _acceptSession(const QJsonObject& data);
     bool _acceptContext(const QJsonObject& data);
+    void _maybeAutoVerify();
     bool _identitiesMatch() const;
     bool _identitiesReadyForVerification() const;
     QString _contextKey() const;
