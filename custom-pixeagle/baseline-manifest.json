@@ -1,0 +1,408 @@
+{
+  "recorded_at_utc": "2026-09-21",
+  "inputs": {
+    "base_qgc": "6f1f4368de08fe093291c63ac7f012c797aaf3c4",
+    "base_pixeagle": "989d9662173b364de03b307f4208e9d0ca96451f",
+    "http_pr_head": "7100b92dfadf5c20ccdabbc22f65bb651e2d9690",
+    "websocket_pr_head": "1f5432b38bf761b2bde921bfa64a610c3819dadc",
+    "combined_qgc": "2e6190bafc4f4796e29ae24cbd1d27f73b96d07d"
+  },
+  "toolchain": {
+    "qt": "6.11.1",
+    "qt_extra_module": "qttasktree",
+    "host_gstreamer": "1.24.2",
+    "node": "v24.18.0",
+    "npm": "11.16.0",
+    "cmake": "cmake version 3.31.10",
+    "ninja": "1.13.0.git.kitware.jobserver-pipe-1"
+  },
+  "container_image_id": "sha256:ecfaf2358be090447ff9948397075ce76cefff3a152fbfab006a2d26495ea14b",
+  "resolved_repositories": [
+    {
+      "name": "ardupilotparams",
+      "revision": "6a8165531148318d9d5975e36d1a8b5323f0030a",
+      "remote": "https://github.com/ArduPilot/ParameterRepository.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "earcut_hpp",
+      "revision": "f36ced7e50254738c4e5af1a239f5fb7b1094007",
+      "remote": "https://github.com/mapbox/earcut.hpp.git",
+      "submodules": "2948b6a2e61ccabecc952c24794c6960d86c9ed6 vendor/benchmark (v1.9.4-43-g2948b6a)\n 7d5a16ce714f0b5f4efa3262de22e4d948851525 vendor/glfw (3.3.6)\n 0934b7e112354d609133d2c5f973c402c9efc9b9 vendor/googletest (release-1.8.0-3582-g0934b7e1)",
+      "status": ""
+    },
+    {
+      "name": "expat",
+      "revision": "f31adfd584b7f6c50bbf4d22eb928538ffc9145a",
+      "remote": "https://github.com/libexpat/libexpat.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "geographiclib",
+      "revision": "475cbde5b8528a6294dfeb054bc177d90be9f7bb",
+      "remote": "https://github.com/geographiclib/geographiclib.git",
+      "submodules": "",
+      "status": "M CMakeLists.txt"
+    },
+    {
+      "name": "libarchive",
+      "revision": "7219b0134d771dc4b51bf86b4d01761b87398b1b",
+      "remote": "https://github.com/libarchive/libarchive.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "libevents",
+      "revision": "840a88ea226d4eb0fd4c391ce860317422756435",
+      "remote": "https://github.com/mavlink/libevents.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "libexif",
+      "revision": "b2edc5a8adf4d1b79ce9413a9c9d8f3ab871c082",
+      "remote": "https://github.com/libexif/libexif.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "liblzma",
+      "revision": "4b73f2ec19a99ef465282fbce633e8deb33691b3",
+      "remote": "https://github.com/tukaani-project/xz.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "libosmium",
+      "revision": "9c49c960569c15dd09ff9eb9e9dce7f383ab6ed2",
+      "remote": "https://github.com/osmcode/libosmium.git",
+      "submodules": "ecfdeb0d5ffcfcb60939651d517d5d7d1bb041a3 test/data-tests/osm-testdata (ecfdeb0)",
+      "status": ""
+    },
+    {
+      "name": "mavlink",
+      "revision": "c409cf690454db6d3e004bd14173bc6c7ff1e0ff",
+      "remote": "https://github.com/mavlink/mavlink.git",
+      "submodules": "5977f44504f01715a44bed44a4601e6c12cef92d pymavlink (v2.4.49-31-g5977f445)",
+      "status": "M CMakeLists.txt\n M pymavlink"
+    },
+    {
+      "name": "nanobench",
+      "revision": "a5a50c2b33eea2ff1fcb355cacdface43eb42b25",
+      "remote": "https://github.com/martinus/nanobench.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "protozero",
+      "revision": "89a55ad2962cca3adbe8383a4b6d9a8411352ef2",
+      "remote": "https://github.com/mapbox/protozero.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "rapidcheck",
+      "revision": "b96a4e626ef4c7348dcd16c500353c2f997a9f3f",
+      "remote": "https://github.com/emil-e/rapidcheck.git",
+      "submodules": "03d122a35c3f5c398c43095a87bc82ed44642516 ext/catch (v2.0.1-403-g03d122a3)\n e38ef3be887afc0089005e394c5001002e313960 ext/googletest (release-1.8.0-3122-ge38ef3be)",
+      "status": ""
+    },
+    {
+      "name": "sdl3",
+      "revision": "683181b47cfabd293e3ea409f838915b8297a4fd",
+      "remote": "https://github.com/libsdl-org/SDL.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "sdl_gamecontrollerdb",
+      "revision": "513c72e34569e0f471dde7aa26eecb23946c3ef7",
+      "remote": "https://github.com/mdqinc/SDL_GameControllerDB.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "shapelib",
+      "revision": "d9052c867616295d1bdf1b8a413fedd03a8a9ee0",
+      "remote": "https://github.com/OSGeo/shapelib.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "ulog_cpp",
+      "revision": "144f027e7bd47ea90b814a2455b05fa5b44f1e53",
+      "remote": "https://github.com/PX4/ulog_cpp.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "valijson",
+      "revision": "b12841e3fa23a8cc477179face0a5ce5f80b64ab",
+      "remote": "https://github.com/tristanpenman/valijson.git",
+      "submodules": "8c3d56df71754e6b1fd4c5e48e93e4047840bbe5 thirdparty/JSON-Schema-Test-Suite (8c3d56d)\n 52204f78f94d7512df1f0f3bea1d47437a2c3a58 thirdparty/googletest (52204f78)\n 2df9473fb3605980db55ecddf34392a2e832ad35 thirdparty/json11 (heads/master)\n 5defb4ed1a4293b8e2bf641e16b156fb9de498cc thirdparty/jsoncpp (5defb4e)\n 183390c10b8ba4aa33934ae593f82f352befefc8 thirdparty/nlohmann-json (183390c1)\n 9dfda04e89c28a9e602ce9ef626dd9b6acbc6e60 thirdparty/picojson (heads/master)\n 06d58b9e848c650114556a23294d0b6440078c61 thirdparty/rapidjson (06d58b9)\n ba96d0b1161f540656efdaed035b3c062b60e006 thirdparty/rapidjson/thirdparty/gtest (release-1.8.0-1003-gba96d0b1)\n 0579ae3d976091d7d664aa9d2527e0d0cff25763 thirdparty/yaml-cpp (0579ae3)",
+      "status": "M include/valijson/adapters/qtjson_adapter.hpp"
+    },
+    {
+      "name": "zlib",
+      "revision": "da607da739fa6047df13e66a2af6b8bec7c2a498",
+      "remote": "https://github.com/madler/zlib.git",
+      "submodules": "",
+      "status": ""
+    },
+    {
+      "name": "zstd",
+      "revision": "f8745da6ff1ad1e7bab384bd1f9d742439278e99",
+      "remote": "https://github.com/facebook/zstd.git",
+      "submodules": "",
+      "status": ""
+    }
+  ],
+  "evidence_directory": "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21",
+  "environment_checksums": {
+    "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21/qt-installed-SHA256SUMS": "fda58d14bb14294da45d7085c5bb48c4dbd79143e9e4f9c56fcbbe04bbef574c",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21/container-image.tar.gz": "94cb410427b8798385e5672da811869e24577216c3d5c34df2b1a30acfefef1c",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21/container-packages.tsv": "b4a06ce0fd4496459811d76cbd162aa02f892bef2df8fdd9d84cdd88b578c5b7",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21/qgc-tools-packages.txt": "022750f11fb52a2dc5cbb351161cfb966cb4e39a58b6fafa8648070fae4ce694",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/2026-09-21/backend-packages.txt": "8651754e3e40a03a459fc2ce2089303729eb46c83802e361c1f68f9fc9d57bd1",
+    "tools/uv.lock": "8e9b950c1d98c7beaf409009e30ec838c9b5f1170ba76d45d9f664c0069cfb18"
+  },
+  "cmake_configurations": [
+    {
+      "name": "upstream-debug",
+      "source": "build/upstream-source",
+      "build": "build/upstream-source/build/baseline-debug",
+      "preset": "Linux-debug",
+      "args": [
+        "-C",
+        "../../custom-pixeagle/cmake/BaselineDependencies.cmake"
+      ],
+      "configure_environment": {
+        "QGC_PYTHON_ENV": "/home/alireza/qgroundcontrol-pixeagle/tools/.venv"
+      },
+      "build_parallelism": 12
+    },
+    {
+      "name": "stock-debug",
+      "source": ".",
+      "build": "build/pixeagle-stock-debug",
+      "preset": "Linux-debug",
+      "args": [
+        "-C",
+        "custom-pixeagle/cmake/BaselineDependencies.cmake"
+      ],
+      "build_parallelism": 10
+    },
+    {
+      "name": "stock-release",
+      "source": ".",
+      "build": "build/pixeagle-stock-release",
+      "preset": "Linux",
+      "args": [
+        "-C",
+        "custom-pixeagle/cmake/BaselineDependencies.cmake"
+      ],
+      "build_parallelism": 10
+    },
+    {
+      "name": "custom-debug",
+      "source": ".",
+      "build": "build/pixeagle-custom-debug",
+      "preset": "Linux-debug",
+      "args": [
+        "-C",
+        "custom-pixeagle/cmake/BaselineDependencies.cmake",
+        "-DQGC_CUSTOM_DIR=custom-pixeagle"
+      ],
+      "build_parallelism": 10
+    },
+    {
+      "name": "custom-release",
+      "source": ".",
+      "build": "build/pixeagle-custom-release",
+      "preset": "Linux",
+      "args": [
+        "-C",
+        "custom-pixeagle/cmake/BaselineDependencies.cmake",
+        "-DQGC_CUSTOM_DIR=custom-pixeagle"
+      ],
+      "build_parallelism": 10
+    }
+  ],
+  "ctest_selection": {
+    "include_labels": "Unit|Integration",
+    "exclude_labels": "Flaky|Network",
+    "jobs": 4,
+    "stock_ui_included": true,
+    "unset_environment": [
+      "QGC_PYTHON_ENV"
+    ],
+    "upstream_initial_jobs": 8
+  },
+  "overlay_source_sha256": {
+    "custom-pixeagle/CMakeLists.txt": "50904e2c47f40dde07be8743737ff77c189b8d25a28bb0079bb1bae5c02dd3e8",
+    "custom-pixeagle/cmake/CustomOverrides.cmake": "e1f1076d8db0b6728d0b9decb08712eeedc7319ffbcaf590b7701255eaa0b576",
+    "custom-pixeagle/cmake/BaselineDependencies.cmake": "c63c4c80bf0956ea613967e04f809bbf1f79094ec5d6284b36dddca9d3e036a9",
+    "custom-pixeagle/src/PixEaglePlugin.cc": "8a884339dd16aeb7f0eb740b57b854e1ae331a1cfaa5b18b0b44b4b661d64383",
+    "custom-pixeagle/src/PixEaglePlugin.h": "6932fd6fbe272019321e57bd88dada086b0aee5551c17f180d7a453d779c7cb8"
+  },
+  "test_results": {
+    "upstream": {
+      "targets": 405,
+      "focused_reruns": {
+        "upstream-gps-retry.xml": {
+          "targets": 1,
+          "failures": []
+        },
+        "upstream-python-retry.xml": {
+          "targets": 1,
+          "failures": []
+        }
+      },
+      "initial_failures": [
+        "GPSReceiverSettingsTest",
+        "CMake.PythonVenvStaleCache"
+      ],
+      "initial_targets_passed": 403,
+      "all_selected_targets_have_passing_evidence": true
+    },
+    "stock": {
+      "targets": 405,
+      "focused_reruns": {
+        "stock-gps-retry.xml": {
+          "targets": 1,
+          "failures": []
+        }
+      },
+      "jpeg_cases_passed": 13,
+      "initial_failures": [
+        "GPSReceiverSettingsTest"
+      ],
+      "initial_targets_passed": 404,
+      "all_selected_targets_have_passing_evidence": true
+    },
+    "custom": {
+      "targets": 404,
+      "jpeg_cases_passed": 13,
+      "initial_failures": [],
+      "initial_targets_passed": 404,
+      "all_selected_targets_have_passing_evidence": true
+    }
+  },
+  "debug_binaries": {
+    "build/upstream-source/build/baseline-debug/Debug/QGroundControl": {
+      "sha256": "f0e20a5cbecba35116b83a35a4c76ea0bfa4feb19a159067440b78bf3e533106",
+      "size_bytes": 778122056
+    },
+    "build/pixeagle-stock-debug/Debug/QGroundControl": {
+      "sha256": "15b19b0adec18686075f81bac3df1713b147584a81ea08e841ad61ae59446544",
+      "size_bytes": 779356016
+    },
+    "build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl": {
+      "sha256": "c2d99ea89d6950c7dc1c9a4cfb1ae277d4f3d3083c30c577f9859185f92eb56f",
+      "size_bytes": 779926128
+    }
+  },
+  "release_smoke": {
+    "environment": {
+      "display": "Xvfb :99, 1440x900x24",
+      "rendering": "Mesa software rendering",
+      "network": "none; loopback only",
+      "vehicles": "tools/simulation/mock_vehicle.py, system IDs 1 and 2",
+      "video": "PixEagle tools/qgc_media_test_source.py at pinned backend revision, loopback:8095"
+    },
+    "limitations": [
+      "Online basemap tile downloads were unavailable by design.",
+      "The existing four-parameter mock does not implement complete parameters, mission, geofence or rally downloads; notices were dismissed.",
+      "Speech dispatcher was absent in the container.",
+      "No aircraft, flight execution, mission upload or physical GPU/camera qualification."
+    ],
+    "configurations": {
+      "stock": {
+        "build": "passed",
+        "simple_boot_test_exit_code": 0,
+        "binary": "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-stock-release/Release/QGroundControl",
+        "binary_sha256": "f0790a6aad24e95ebecc1e812ee1f2482d0bcc6792fc0127f98e338fbcc543fd",
+        "cases": {
+          "fly_view": "passed",
+          "vehicle_switching": "passed",
+          "map_coordinates_and_overlays_offline": "passed",
+          "http_jpeg_display": "passed",
+          "websocket_jpeg_display": "passed",
+          "pip_swap": "passed",
+          "fullscreen_entry_and_exit": "passed",
+          "mission_create_and_save": "passed",
+          "native_flight_controls_access": "passed"
+        },
+        "screenshots_directory": "ui-stock",
+        "saved_plan": "ui-stock/home/Documents/QGroundControl Daily/Missions/baseline-smoke.plan",
+        "saved_mission_commands": [
+          22,
+          16
+        ]
+      },
+      "custom": {
+        "build": "passed",
+        "simple_boot_test_exit_code": 0,
+        "binary": "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-release/Release/PixEagle-QGroundControl",
+        "binary_sha256": "53f944cb07dbffeaadce70f0b0a6e2df5cfe3f620e4252c7f05051e21428d95f",
+        "cases": {
+          "fly_view": "passed",
+          "vehicle_switching": "passed",
+          "map_coordinates_and_overlays_offline": "passed",
+          "http_jpeg_display": "passed",
+          "websocket_jpeg_display": "passed",
+          "pip_swap": "passed",
+          "fullscreen_entry_and_exit": "passed",
+          "mission_create_and_save": "passed",
+          "native_flight_controls_access": "passed"
+        },
+        "screenshots_directory": "ui-custom",
+        "saved_plan": "ui-custom/home/Documents/PixEagle-QGroundControl Daily/Missions/baseline-smoke.plan",
+        "saved_mission_commands": [
+          22,
+          16
+        ]
+      }
+    }
+  },
+  "pinned_recipe_verification": {
+    "image_id": "sha256:a0d307328efefc3d76c9a05d177a411cc0dc61ac08123674167feffa4b5e67a1",
+    "packages_match_recorded_image": true,
+    "log": "pinned-container-build.log"
+  },
+  "completed_at_utc": "2026-09-21T04:34:26.420556+00:00",
+  "status": "slice_0_evidence_complete_with_documented_baseline_blockers",
+  "lint_results": {
+    "upstream_full_sweep_initial_failing_hooks": 14,
+    "upstream_remaining_failing_hooks": 13,
+    "pyright_focused_retry": "passed after installing audit tools/.venv",
+    "imported_transport_changed_files_failing_hooks": 4,
+    "overlay_and_validation_files": "passed",
+    "logs": [
+      "upstream-full-lint.log",
+      "upstream-lint-summary.json",
+      "pyright-environment-retry.log",
+      "combined-changed-lint.log",
+      "overlay-lint-complete.log"
+    ]
+  },
+  "backend_results": {
+    "focused_tests_passed": 268,
+    "schema_parameters": 604,
+    "schema_sections": 43,
+    "dashboard_suites_passed": 62,
+    "dashboard_tests_passed": 471,
+    "dashboard_production_build": "passed",
+    "dashboard_lint_errors": 4,
+    "ci_guardrails_passed": 152,
+    "ci_guardrails_failed": 1,
+    "checkpoint": "/home/alireza/PixEagle-qgc-integration/docs/reporting/agent-ops/codex-modernization/checkpoints/2026-09-21-qgc-native-baseline.md"
+  },
+  "required_release_targets_not_validated": [
+    "Windows",
+    "Android"
+  ],
+  "evidence_inventory": "SHA256SUMS"
+}

@@ -1,0 +1,168 @@
+{
+  "backend_checks": {
+    "camera_stop_gate": {
+      "passed": 264,
+      "seconds": 17.53
+    },
+    "config_gate": {
+      "passed": 136,
+      "seconds": 72.88
+    },
+    "dashboard_previous_gate": {
+      "production_build": "passed",
+      "suites": 62,
+      "tests": 472
+    },
+    "schema_parameters": 606
+  },
+  "build_container": "sha256:ecfaf2358be090447ff9948397075ce76cefff3a152fbfab006a2d26495ea14b",
+  "checkpoint": "4b.1\u20134b.2",
+  "date": "2026-09-30",
+  "limitations": [
+    "Camera motor direction, real Stop and camera-owned target retention await Ethernet bench",
+    "Single dominant axis and provider-default finite steps; not analog simultaneous-axis control",
+    "Windows/Android and field qualification pending",
+    "Whole-repository lint and fresh upstream-stock full suite not claimed"
+  ],
+  "linux_ctest": {
+    "exclude_labels": "Flaky|Network",
+    "failed": 0,
+    "include_labels": "Unit|Integration",
+    "passed": 413,
+    "seconds": 465.95,
+    "workers": 2
+  },
+  "prior_runs": [
+    {
+      "failed": 0,
+      "name": "combined-tests",
+      "passed": 413,
+      "seconds": 299.94
+    },
+    {
+      "failed": 3,
+      "name": "final-tests (before joystick redesign)",
+      "passed": 410,
+      "recheck": "Three unchanged isolated rechecks passed; failed logs retained"
+    }
+  ],
+  "private_ui": [
+    "OSD off/on saved and running state verified; original enabled state restored",
+    "Mock three-second hold: ten pan pulses then captured-owner Stop",
+    "Mock five-second hold cap: Stop before pointer release",
+    "Movable nonmodal pad; initial thumb centered",
+    "No physical device connected"
+  ],
+  "sha256": {
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-29/ui/43-config-audit-off.png": "02df915d04b954de266ace14a9db62f96e51f57e21862002b5217955342cc565",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-29/ui/50-joystick-drag.png": "8f674636172c4e8ec6ba13864954339823f404a867c16ad38faa5c81a9f7d159",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-29/ui/52-joystick-final-neutral.png": "306fce1b7e975245e60e7bfe466fbdfb9305649397b9271639e79e90e32dad5e",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-29/ui/53-joystick-hold-limit.png": "3e9a9ffff608ccf9ec8dd33f4b6adcf070c0657f7341c95024b26201b18a9fd6",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/backend-camera-4b2-final-tests.log": "6ef4a1f7b7fc510c7aea6ff34830b251fb9b702e3d4076350acc8e745e646462",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/backend-camera-4b2-tests.log": "7f770ec87f436b4dd70bbad10d436b4fcad57749984c0f392b476f7261db793e",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/backend-camera-stop-review-tests.log": "68f56c3753556b1f5f5958cdd0b26ed2b2a1937b58e963f41706dfe264e0e29f",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/camera-pad-lint.log": "624adf7250a76b8860e2fdab7ba8a1fce264a24ada886c57d30dfc8c48bb2324",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/camera-pad-tests.log": "e43e9c20a6f9efcb6ed84bb2cff2effd7bbf31bc5d3b0a53ddac11e6a6491244",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/camera-pad-tests.xml": "aae832b5ba367fd32db7ca3f3a138e47fdd179917e42f9e21c4f67339cc3fa50",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/camera-ui/joystick-audit.jsonl": "7fb277b968b861d29a823e21cb52372fb3a8916b395bd931f079852aacbafc5e",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/camera-ui/joystick-final-qgc.log": "e079248642c121ec39159fb3bd910b8e3506414cbc2ad89f3eda33bf4488f30d",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/combined-tests.log": "8ee49fa32826327ef28cd3513d7330d96ab167ae25c61bde0efd379cc0846df0",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/combined-tests.xml": "c693123c5e798f52472b3b899ac71479715c906ec7d7cc764a73730b842cdd3d",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/config-backend-final.log": "c9db73dea5ad8efcfa2c6e011ffb41ed6f42cb7455274d79e11e81efd8c660f2",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/config-ui-audit-fix/osd-off.json": "20328485681bad5f69f484eb855e1f4e9c0955b80fd5f227359ab80946e42f7a",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/config-ui-audit-fix/osd-restored.json": "dd5279013e8d85bd1a7bf845f9c8a5a95d37ac27d7f78a6b11374a693c25e782",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/config-ui-audit-fix/security-audit.jsonl": "84a7d628be6b29c58efc871e36abdc2ec8d1c9cc048fa8003997958ab6b5f958",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/final-tests.xml": "453c767ad714ddf7a5cc2edd765581e67e038e28c00fa6cc48b9d51ca2cc78ae",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/joystick-doc-lint.log": "18bd21e6e123ca57b8c170144f9d6046e428f22da32190d42306089ed383bac2",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/joystick-final-tests-driver.log": "a31d13f10341b40b1604b3067e70be500c1dae0a45976de53ce9748524d6a12e",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/joystick-final-tests.log": "33162e070ec03e7a12e9539e00ba59c6f71ac9508e013f2e37c0617ef447f064",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/joystick-final-tests.xml": "ade08c0238ad9f39416e6a5a7e766e2e5834c72007ccc2861cda3aeea74c4cfd",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/joystick-release-final-build.log": "6a97e6d5f6bd82c9b4e789c69ba3212f1ffbff421d3ec71d7bcb35593c081e6a",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/recheck-tests.xml": "54a1c9eed61b932fae36e1cea338ac8cb6eed4f900685d133c8d7ec2cb897bb4",
+    "/home/alireza/PixEagle-qgc-integration/configs/config_default.yaml": "8cdd02019cdf30f9bfa62f9548015fb247e035c6b7c001027abe10f3f03ade1e",
+    "/home/alireza/PixEagle-qgc-integration/configs/config_schema.yaml": "7bba445127e652c60c637bf1ff8be38e97988d6d069ba70e3ad950e73f2be960",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/api_security_policy.py": "9b5b24e6fc4e880595a1b3eccbf356fc07f031de2c2528e96ed803e4097a1dea",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/api_v1_native_camera.py": "5b73f80ee1c0b9f9169f5eef405b20b331f3ff3fecb7ca00f664981e558b441b",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/api_v1_native_config.py": "ef9b00389025a24c45cc79e9f91fcd357e1d83677be2d4f137bad7724cbd4820",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/app_controller.py": "ae4ce6292b4a70999625c8b95e028a35fa3da16c3d1ae48a9c502cb73beadbf6",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/camera_runtime.py": "37b9a95dcde76896accbfc2d47b05aa71b08643d2ace28f7f70396dd6ba0720f",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/fastapi_handler.py": "84ecdc0c3d097dd72dd1dd0b4b89bb510a9e8732cec3e07492fae16e4ff91873",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/gimbal_control.py": "262dec6217106ed5b3dcbd29214b2a305c020f00db58a99168a94dcc0277d211",
+    "/home/alireza/PixEagle-qgc-integration/src/classes/gimbal_provider.py": "e0bdc84d6c7e1f1db94be190ba752e538aba25004e94a0bd4345b52569cf8135",
+    "/home/alireza/PixEagle-qgc-integration/tools/native_integration_fixture.py": "857c0aecfb9a5196105ff733049dbe4dcfbd44e4f85719c22afdd62b27b13995",
+    "/home/alireza/PixEagle-qgc-integration/tools/refresh_native_demo_sources.py": "d7825e248e5baed2c9a6f45dc08e12b5c9feca23c60b99078e0e1b2ae29d7376",
+    "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl": "3b2d88fa22c5c766d770871902314cef402ff699ac308420053c73dc8a781d57",
+    "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-release/Release/PixEagle-QGroundControl": "c276ebbc8e099aab83c7904ef740ed8f322a10ae22bf37c4194f7d9ba31f48d3",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleCameraClient.cc": "ea324e1e26b1310838f0a8f3d61298e22c6107962e374b7a96cb1114aa38740c",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleCameraControls.qml": "f05e09faef5a0e79223513cde8875d1bdd5439c730972799935604f6058c4782",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleClient.cc": "29cc25eb62a8c4043342f5d6049803429d07fa88a21f9857235c15247ae2eaea",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleClient.h": "f769e712c3f2d23c49f9873f506ba6334e845c18cf7014b641531aae0090086f",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleConfigClient.cc": "7dde6df9ea4f7b7bc7f74029015241c0734179bba606a51001e254a31701a00d",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleConfigSection.qml": "ad3efd315fb5ed83ffc53c07aefe2d4f8f7a7f24bf30f2773ccd77b2a2882b43",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleIndicator.qml": "b93452a67ce965a3653a0031d0438a60f86ed0e421e930dbf68c52a67eebdcd2",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleManager.cc": "6a82f5df626c8d02fbb2a775db38eedb30bb8a6e5885f439e57d07c745468a76",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleManager.h": "bbc3293f0a63068a2ddcb03b00ad9d99b3149cecdfbdf24dadb468ff8a375643",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleModelDialog.qml": "a61d9ea6c7b928a3dc94878275fcf64eeaec7f5cb20246b34af3d64498838e8e",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleMovablePanel.qml": "94349c4218095378656e010b5883d15a5c56e997dd233397965c7645b7747e4e",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleOptionsDialog.qml": "b2eac9be8e31f33596e069984321f930f3157d1aee52a26f5cb989a3f6808fd5",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEaglePlugin.cc": "c2490ed43558297e91b3917b4a157a40e8d398b1085f1b6bd1779e668bc27649",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEaglePlugin.h": "cd803c90fd5b93f1d2fc4de364b54fe20a543b01bce366cf9a473d6cc1d770b9",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleSettings.qml": "1b3fbe63beafd152032b192f981f550f469af5311c4c61174c22c89e535aed3d",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleTargetController.cc": "9581c90fa7dcea5f923504a9c48596c0440c36bd92012cfd56aaff02d22b07cb",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleTargetController.h": "d68d2e86ef6a07dd8def7a82e83c2d82e7beec6471c1e79fda4fa7cd1683e83a",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleVideoController.cc": "30a5f7ea3ed9122ec0cd6690427b2045dc31c2c4e5b059cef4b27c2bf6d357df",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleVideoController.h": "ad5ab6490539e40ecaa0ac66410659517c1f738d42ad8e962ff52ab8c51c0e13",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleVideoItem.cc": "27d9bb651c0f0eea156f989b6317a6c9102ded53d0b38d42fd9b96867e04d38f",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleVideoItem.h": "e899f53c966d527fea0ce29c7e989afe979025e2abab1c1dc646a448a51aaca5",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleVideoView.qml": "aefdb8cdd29f86619d859a265b8692b4efb64c5e971d551f2eec36108cb0dcd6",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/validation/run-sih-desktop.sh": "774301cc14e3e6bca12def733e83dbcec7e67f12f8294601ddd055d9a4faff22",
+    "/home/alireza/qgroundcontrol-pixeagle/src/QmlControls/JoystickThumbPad.qml": "2d8231a60369a28e96d6b46a8ad35f3722645ef49c2a88537019e92e7631fe1b",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/CMakeLists.txt": "d83b4c7104ddfc97e868c96c5dbb9e299c735a085b8df9b0c13e6710318b1921",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleCameraClientTest.cc": "db6ac440ee2e30e70c44e8af87d0daf6eceebd92faa3982dd0d009fb882b6ead",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleCameraClientTest.h": "a732de114bff1f576e836b771313162f60bc3a0edbcbefb4b038630b04d97def",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleClientTest.cc": "a75122480014a5fcc72df9c204ad03b9f06f04883d991a70301455a00a88f667",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleClientTest.h": "1c22088ec26929003b7225fc4e612181dd2d1358886347b98b2cf16cc4fcdec4",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleConfigClientTest.cc": "2f720e990edad8a107e72e0bdbabb5073072de76920674cdb785fa75cd345348",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleConfigClientTest.h": "1b1b2ef5c141a5030ed2bda5dd4872bb5ae0fab6dc95d5f92185735f90c0bb3e",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleManagerTest.cc": "5e173385c2b5181fa7372ec3664821659c7712084923003575160a762d54fe01",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleManagerTest.h": "f794154c8040f6b1109a057616ae564aacfcff34845189d9ac5f60e681ae4d53",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleModelClientTest.cc": "a3a1dadca3c0d628f36546151a77db99045d41fc71d11ed452ddd6ac16a6e700",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleModelClientTest.h": "5a92784c877aa8e51b2c1b1c7f84ee869adc041afbea9cda4f5b326cf82a4d95",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleTargetControllerTest.cc": "4470190281ad5194d30b093247f95be0a538c7fb47d8d3e0d54d20168fe05cf9",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleTargetControllerTest.h": "e98cbad7aaa586432481ab350da10d73cd8f63735601a7ce48c5de992265be10",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleTestServer.h": "a3e87dff0ee33827566bb149488512aba33c16d26b13208e64d61989e4eeb5b5",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleVideoControllerTest.cc": "9eecd84c96b4a968f8695e32e280cee80a4462f0d5034ff7128f52f314f6f1ed",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleVideoControllerTest.h": "7a988965e4137216d79f86ac6421f75647338ac7d8e75369ba2e1606000845b8",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleVideoItemTest.cc": "39abdace80bf7eda6a9b2c57ddcaa4975e8a4fb8a47f1573d13ad5d5db36d4b1",
+    "/home/alireza/qgroundcontrol-pixeagle/test/PixEagle/PixEagleVideoItemTest.h": "89a5b523472cc2768c9f5c8df2fa4f6395c1506f107635f1b002bcb347adbe7c"
+  },
+  "source_identity": {
+    "/home/alireza/PixEagle-qgc-integration": {
+      "head": "989d9662173b364de03b307f4208e9d0ca96451f",
+      "source_files": 175,
+      "source_scope": [
+        "src",
+        "configs/config_schema.yaml",
+        "configs/config_default.yaml",
+        "configs/tracker_schemas.yaml",
+        "configs/follower_commands.yaml",
+        "configs/config_retirements.yaml"
+      ],
+      "source_tree_sha256": "770e7ef3759827c4eb80841346b999a0f0826bca946edd2c1d6e160423905f32",
+      "working_tree": "Uncommitted integration work; HEAD alone does not identify this build"
+    },
+    "/home/alireza/qgroundcontrol-pixeagle": {
+      "head": "2e6190bafc4f4796e29ae24cbd1d27f73b96d07d",
+      "source_files": 2292,
+      "source_scope": [
+        "src",
+        "custom-pixeagle/src",
+        "test/PixEagle",
+        "custom-pixeagle/CMakeLists.txt"
+      ],
+      "source_tree_sha256": "9d769715faf053e68a80b57ff7b5a49ba305202cacc92c2026220b935e022671",
+      "working_tree": "Uncommitted integration work; HEAD alone does not identify this build"
+    }
+  },
+  "status": "software_mock_gate_passed_hardware_pending"
+}

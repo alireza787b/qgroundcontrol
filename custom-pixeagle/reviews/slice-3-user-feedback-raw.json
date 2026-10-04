@@ -1,0 +1,12 @@
+{
+  "context": "Raw human feedback after first desktop replay; excerpts preserve original wording.",
+  "feedback": [
+    "ok I did some test. my feedabcks. overaly perect it worked perfect. confirm if I am wrong. you havent started smart tracker and gimbal mode (with its control if enabled)? only classic tracker is there? ( if gimabl tracker is enabled and its contorl enabled we must have gimabl controllers as imlmtend recently in pixeagle dashborad here as wel lbut with QGC standrds and UI/UX standard guidlines )",
+    "the feedbacsk I ahve: once we enabled tracking its a good idea we can click again and quickly selct new taret witohtut need to reclick select target (this feature can be even fleixble toggle enable or disbale in settings if really needed) so oeprator can easily quickly click and select new target",
+    "2- right now click doesnt work? it only works with drag and draw? click is also a good option to have quick best pracice and considertsion",
+    "3- why other classci trackers are not there? we only had three? or we are missing sth ? it shuld read from what aviable and use them",
+    "4- that PIxeagel titel and no vehciel stufs is too noisya nd verbose. we better ahve minamlal wasy cvisiable texts intrusiv eand keep them minmal more visual and cleaner",
+    "once these solved what is the next slice stps ?"
+  ],
+  "clarification": "now that you said I am not sure i fI lciekd retaregt or not.. just verify the behvaior yourself"
+}

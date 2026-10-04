@@ -1,0 +1,55 @@
+{
+  "checkpoint": "4b.0",
+  "date": "2026-09-30",
+  "status": "operator_smart_acceptance_pending",
+  "source_identity": {
+    "/home/alireza/qgroundcontrol-pixeagle": {
+      "head": "2e6190bafc4f4796e29ae24cbd1d27f73b96d07d",
+      "working_tree": "contains uncommitted integration work; HEAD alone does not identify this build"
+    },
+    "/home/alireza/PixEagle-qgc-integration": {
+      "head": "989d9662173b364de03b307f4208e9d0ca96451f",
+      "working_tree": "contains uncommitted integration work; HEAD alone does not identify this build"
+    }
+  },
+  "build_container": "sha256:ecfaf2358be090447ff9948397075ce76cefff3a152fbfab006a2d26495ea14b",
+  "linux_ctest": {
+    "passed": 411,
+    "failed": 0,
+    "seconds": 301.32,
+    "include_labels": "Unit|Integration",
+    "exclude_labels": "Flaky|Network",
+    "workers": 4
+  },
+  "runtime": {
+    "source": "looping test9",
+    "device": "cpu",
+    "cuda_available": false,
+    "hardware_connected": false,
+    "following_started": false
+  },
+  "sha256": {
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleIndicator.qml": "b93452a67ce965a3653a0031d0438a60f86ed0e421e930dbf68c52a67eebdcd2",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleOptionsDialog.qml": "0052d5fb741202c00c664b82c97420b303d307a3cb908dff54d3d7550bc6d9ed",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/src/PixEagleSettings.qml": "19d989a9c57de4b666be5b4fc526f92d066dbbb705ab37dea8d3b518b03aca3a",
+    "/home/alireza/qgroundcontrol-pixeagle/custom-pixeagle/validation/run-sih-desktop.sh": "fa78e0c8e4b9f59cd79725f9874cb0f76aad1ff4131322b1726b14ad70410ce0",
+    "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-release/Release/PixEagle-QGroundControl": "64bed3385a8d11c2e92d815f10e1189a72b3193bfc2d6a623036f8ea8721989f",
+    "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl": "633dd769111f1d3e8497991f2b5c04633d263a013daa5fe67b19965a6d12e3a7",
+    "/home/alireza/PixEagle-qgc-integration/tests/unit/core_app/test_native_models.py": "b941d521899b5efb6f710ee1f62292b413b19bf1b0d7d32c45d28a4d7a62b8c8",
+    "/home/alireza/PixEagle-qgc-integration/docs/apis/native-model-operations.md": "17fbf86c1f93b3454d006251c71ef75d487f8d1ed787561a2945410e78f98285",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/tests.xml": "5cb396c7ecfcb26fb85377203234e5ab76eabde7d39f3b8fa698f2b361eb707c",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/tests.log": "93f8763d9a8494faa05704ab11bbf65017bd534c1c8c8c9e9b30ceaddecf5dd3",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/tests-driver.log": "0f216c9de71bc3ef5c0fda8b5f9f1b664267d05c0aae35e7aa940a4a0471df69",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/smart9-pacing.json": "81f0f0eeffd1de6135d20005d9547a579c74ad393a77d1fa1548b3c34e753924",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/smart26-pacing.json": "4b6e58ac59deb0c5e5e7526431e9ead1f9535554d222819bd97c935c29c76f1a",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/inference-benchmark.json": "bce2a38ec5ae316cb102ce7862d12fb89101cf52acaa31a7d8d8d478e8b3d861",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/runtime-evidence/qgc.log": "c9535bea0a387a46208104ef32fc12b6c00b4df242307bf6a0e1039998a6f887",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/runtime-evidence/pixeagle.log": "8e001b92567ec5b3b6ccecb4e21514772931565223f6ac539a83acb906c4ef8c",
+    "/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b-2026-09-30/runtime-evidence/security-audit.jsonl": "7fa9623ea810aba8b9593751f4c9ff76dcfbdf7d7275eaba27e71bf0bb9cc0b6"
+  },
+  "limitations": [
+    "Smart selection, retarget, Cancel and loss/recovery await operator evidence.",
+    "Frame samples measure WebSocket delivery, not display latency or accuracy.",
+    "No Windows, Android, physical camera or aircraft qualification in this checkpoint."
+  ]
+}
