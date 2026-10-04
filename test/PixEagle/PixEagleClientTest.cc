@@ -592,6 +592,53 @@ void PixEagleClientTest::_autoVerificationStartsWhenSingleVehicleIsLearnedAfterL
     QTRY_VERIFY_WITH_TIMEOUT(client.associationVerified(), TestTimeout::mediumMs());
 }
 
+void PixEagleClientTest::_autoVerificationDiscoversDisconnectedBackend_data()
+{
+    QTest::addColumn<QString>("commandUid");
+    QTest::addColumn<QString>("telemetryUid");
+    QTest::addColumn<bool>("discover");
+    QTest::newRow("command-not-yet-discovered") << QString() << AIRCRAFT_UID << true;
+    QTest::newRow("both-not-yet-discovered") << QString() << QString() << true;
+    QTest::newRow("wrong-command-aircraft") << QStringLiteral("999") << AIRCRAFT_UID << false;
+    QTest::newRow("wrong-telemetry-aircraft") << QString() << QStringLiteral("999") << false;
+    QTest::newRow("invalid-known-command-identity") << QStringLiteral("0") << AIRCRAFT_UID << false;
+}
+
+void PixEagleClientTest::_autoVerificationDiscoversDisconnectedBackend()
+{
+    QFETCH(QString, commandUid);
+    QFETCH(QString, telemetryUid);
+    QFETCH(bool, discover);
+    CompanionServer server;
+    QVERIFY(server.start());
+    const QJsonObject ready = server.context;
+    setContextField(server.context, "command", "connected", false);
+    setContextField(server.context, "command", "autopilot_uid", commandUid);
+    setContextField(server.context, "telemetry", "autopilot_uid", telemetryUid);
+    setContextField(server.context, "association", "verified", false);
+    setContextField(server.context, "readiness", "connection_ready", false);
+    server.deferredPath = VERIFY_PATH;
+    PixEagleClient client;
+    configure(client, server);
+    client.setAutoVerifySingleVehicle(true);
+    client.signIn("pilot", "secret");
+    if (discover) {
+        QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(VERIFY_PATH) >= 0, TestTimeout::mediumMs());
+        QVERIFY(!client.associationVerified());
+        server.context = ready;
+        QVERIFY(
+            server.respond(server.lastRequestIndex(VERIFY_PATH), server.responseFor(server.lastRequest(VERIFY_PATH))));
+        QTRY_VERIFY_WITH_TIMEOUT(client.associationVerified(), TestTimeout::mediumMs());
+    } else {
+        QTRY_VERIFY_WITH_TIMEOUT(client.authenticated() && !client.connectionContext().isEmpty() && !client.busy(),
+                                 TestTimeout::mediumMs());
+        client.refresh();
+        QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), TestTimeout::mediumMs());
+        QVERIFY(server.lastRequestIndex(VERIFY_PATH) < 0);
+        QVERIFY(!client.associationVerified());
+    }
+}
+
 void PixEagleClientTest::_identityValidation_data()
 {
     QTest::addColumn<QString>("qgcUid");
