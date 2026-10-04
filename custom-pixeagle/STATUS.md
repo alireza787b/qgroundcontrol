@@ -30,6 +30,9 @@ Single-vehicle sign-in now automatically starts the normal identity verification
 request when command and telemetry identities match, even before the backend
 reports its association flag; multi-vehicle and conflict guards remain explicit.
 This does not qualify QGC desktop UI, radio, Pi, camera or motor behavior.
+The follow-up race fix also triggers that check when the manager learns the
+single-vehicle state after login/context discovery; a pre-dispatch identity
+change remains retryable instead of being reported as a completed check.
 The fresh shutdown-retry and link evidence is recorded in the backend checkpoint
 at docs/reporting/agent-ops/codex-modernization/checkpoints/2026-10-03-qgc-4b4d-shutdown-retry.md
 and the local manifest at ~/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/link-v3-sustained/manifest.json.

@@ -56,5 +56,11 @@ landed. The longer v22 CSRT SIH result already covers the command-publication
 path; this v27 session is the Smart, Classic and operator/UI check. Use this
 profile only once; the launcher intentionally makes a used profile immutable.
 
+The custom QGC build now starts the single-vehicle association check
+automatically even when QGC learns that it is the only vehicle after sign-in.
+The Verify vehicle action remains available as an explicit retry, and
+multi-vehicle or conflicting-identity sessions still require an explicit
+selection and verification.
+
 No physical camera is required for this handoff. Close QGC and press Ctrl-C in
 the launcher terminal; its owned containers are cleaned automatically.

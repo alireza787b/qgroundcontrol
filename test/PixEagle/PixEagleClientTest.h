@@ -17,6 +17,7 @@ private slots:
     void _disabledMakesNoRequests();
     void _loginRequiresExplicitVerification();
     void _matchingSingleVehicleAutoVerification();
+    void _autoVerificationStartsWhenSingleVehicleIsLearnedAfterLogin();
     void _identityValidation_data();
     void _identityValidation();
     void _contextChangesInvalidateVerification_data();
