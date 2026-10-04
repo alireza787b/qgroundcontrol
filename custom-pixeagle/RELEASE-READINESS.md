@@ -80,14 +80,12 @@ CMake CTest passes stock/custom metadata, staged payload, coexistence and invali
 identity checks. Git tags were fetched without moving source HEAD, resolving
 the missing version prerequisite to `v5.2.0-dev-21-g2e6190baf`.
 
-The real DEB attempt then failed dependency inspection because this host lacks
-`libxcb-cursor.so.0`, required by the bundled Qt xcb plugins. The canonical setup
-lists `libxcb-cursor-dev`; install that dependency before retrying
-`cmake --build build/pixeagle-custom-release --target qgc-package`. Local sudo
-requires an operator password, so no system installation was attempted. Do not
-disable dependency inspection or claim a complete installer from the staged
-runtime. Logs: `slice-4b4-2026-10-02/linux-deb-package-tagged.log` in the private
-baseline cache. Windows and Android artifacts have not been built.
+The first DEB attempt exposed the host's missing `libxcb-cursor.so.0` runtime.
+The final package was then generated reproducibly with the pinned library kept
+as a private CPack dependency-search path and an explicit `libxcb-cursor0`
+package dependency; no system package was installed. The current artifact is
+`build/pixeagle-custom-release/pixeagle-qgroundcontrol_5.2.0-38.ge10e53f3f_amd64.deb`.
+Windows and Android artifacts have not been built.
 
 Preserve unrelated local edits and the separate clean PixEagle `main` checkout.
 Keep generic QGC fixes (for example native package parameterization) distinct
@@ -113,21 +111,25 @@ zero aircraft command dispatch, sustained load/temperature/memory and recovery.
 Release publication and any real-flight qualification remain explicit later
 checkpoints.
 
-## Latest rebuilt QGC regression
+## Recorded QGC regression
 
 Debug and Release builds pass with the pinned Qt 6.11.1 toolchain and the
-locked Ninja executable. The fresh Unit/Integration run with standard
+locked Ninja executable. The path-corrected Unit/Integration run with standard
 Flaky/Network exclusions recorded **414/414 passes** in 305.05 seconds,
 including the previously isolated `CMake.QGCTestMultiConfig` fixture. The
-full log is retained at
+corresponding log is retained at
 `/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/qgc-final-path-corrected.log`.
 
-The Release package was generated with CPack using the extracted pinned
+The current Release package was generated with CPack using the extracted pinned
 `libxcb-cursor0` library as a private dependency-search path and an explicit
-`libxcb-cursor0` package dependency. Its checksum is recorded beside
-`build/pixeagle-custom-release/pixeagle-qgroundcontrol_5.2.0-31.g78286f417_amd64.deb`;
-the package is evidence of a reproducible artifact, not proof that this host
-can install it without that dependency.
+`libxcb-cursor0` package dependency. The executable and package are staged in
+`/home/alireza/Desktop/PixEagle-QGC-final-2026-10-04/linux/` with sidecar
+SHA-256 files. The executable checksum is
+`3e47aec82add14a8f042e3a79ca5d0a1964e32d60af436796c717fc206e8d428`; the DEB
+checksum is
+`cc1aaa61c8b30df36c5d7575896b1e50b89a9829cfc3a3431fcfb9200fb15c2b`.
+The package is a reproducible artifact, not proof that this host can install it
+without its declared runtime dependencies.
 Focused PixEagle/stock-UI/package checks passed 9/9 before the rebuild. All 14
 mocked SIH launcher/startup boundary tests pass. Broader lint and platform
 acceptance limitations above remain open.
@@ -156,3 +158,11 @@ The Linux package modules and new identity fixture pass the locked CMake
 format/lint hooks. The existing `cmake/tests/CMakeLists.txt` still has baseline
 formatting differences and two missing function docstrings; the added test
 registration introduces neither issue. No whole-file reformat was applied.
+
+After the final automatic-verification change, the debug tree contained 415
+tests: `PixEagleClientTest` passed. A fresh all-label run remains blocked by two
+host-environment tests: QtKeychain's `basic` test cannot access a configured
+desktop keychain, and `CMake.QGCTestMultiConfig` needs the locked Ninja
+executable on `PATH` when launched directly. The earlier path-corrected run
+recorded 414/414 passes before that final source change. These are recorded
+environment prerequisites, not ignored product failures.
