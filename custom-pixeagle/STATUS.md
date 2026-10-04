@@ -33,6 +33,11 @@ This does not qualify QGC desktop UI, radio, Pi, camera or motor behavior.
 The follow-up race fix also triggers that check when the manager learns the
 single-vehicle state after login/context discovery; a pre-dispatch identity
 change remains retryable instead of being reported as a completed check.
+The final discovery repair also allows that authenticated request to establish
+an initially disconnected backend observation, while known mismatched UIDs
+remain rejected. The fresh physical-camera/SIH handoff is in
+[FINAL-CAMERA-SIH-HANDOFF.md](FINAL-CAMERA-SIH-HANDOFF.md); its read-only
+profile preflight passed and services remain stopped pending camera connection.
 The fresh shutdown-retry and link evidence is recorded in the backend checkpoint
 at docs/reporting/agent-ops/codex-modernization/checkpoints/2026-10-03-qgc-4b4d-shutdown-retry.md
 and the local manifest at ~/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/link-v3-sustained/manifest.json.
