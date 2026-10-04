@@ -134,7 +134,10 @@ commits.
 
 The renewed backend restart/defaults/replay/engine/altitude/fixed-wing boundary
 gate passed **142 tests**; the production shared-link fixture passed separately.
-Four QGC client/connection/video suites and `CMake.NativePackageIdentity` passed.
+The focused recovery/transport suite passed **226 tests**, covering ownership,
+SIH validation contracts, supervision, streaming lifecycle, WebSocket reconnects,
+and video integration. Four QGC client/connection/video suites and
+`CMake.NativePackageIdentity` passed.
 Build configuration validation passed. These focused checks supplement the full
 suite results above and do not replace hardware or platform qualification.
 
