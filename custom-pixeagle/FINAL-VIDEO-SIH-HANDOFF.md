@@ -1,8 +1,8 @@
 # Final recorded-video/SIH handoff — 2026-10-04
 
-This is the last camera-free qualification profile before the physical camera
-and onboard Pi checkpoint. It uses an isolated, launcher-owned PX4 SIH stack;
-it cannot prove visual closed-loop convergence or real aircraft safety.
+This is the current camera-free qualification profile before the physical
+camera and onboard Pi checkpoint. It uses an isolated, launcher-owned PX4 SIH
+stack; it cannot prove visual closed-loop convergence or real aircraft safety.
 
 ## Automated evidence
 
@@ -19,10 +19,11 @@ Evidence is under:
 
 The separate `recorded-smart-final-v24` profile loads the installed
 `visdrone9m.pt` model with the Full-AI interpreter and produced live detections
-from `test9.mp4`. Automated clicks were rejected when the detection snapshot
-and the displayed frame no longer matched; this is the intended stale-frame
-guard, not a successful Smart selection claim. Use the fresh QGC handoff below
-for the operator click test. The profile's Smart logs are under:
+from `test9.mp4`. Automated clicks that were not tied to the exact displayed
+JPEG were rejected by the retained-frame/no-detections guards; this is the
+intended safety behavior, not a successful Smart selection claim. Use the
+fresh QGC handoff below for the operator click test. The profile's Smart logs
+are under:
 
 `/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v24/logs/`
 

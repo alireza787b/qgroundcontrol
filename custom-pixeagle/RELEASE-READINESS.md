@@ -18,7 +18,7 @@ The public PixEagle versus private customized-QGC boundary is in
 | 4b.3 camera control and camera-owned Classic/Smart | Operator accepted before latest guidance repair |
 | 4b.4 geometry/control/SIH | Four gimbal follower/mount synthetic cases passed; fresh camera retest and log review pending |
 | 4b.4d network/load | 68 focused software checks passed, including shared-relay/reconnect and suspension evidence; radio, Pi load and camera network/process-failure motor behavior pending |
-| 5 Linux release | Release build/isolated boot and native package identity CTest passed; DEB generation blocked by missing host `libxcb-cursor0` |
+| 5 Linux release | Release build, isolated boot, native package identity CTest, and DEB generation passed. The package declares `libxcb-cursor0`; the host still does not have that runtime installed, so local package installation/launch remains a separate prerequisite |
 | 5 Windows x64 | Installer build, bundled-runtime launch, secure credential store, upgrade/removal/coexistence and operator checks pending |
 | 5 Android | Target SDK build, install/launch, touch/PiP/suspension/disconnect and secure credential store checks pending |
 | 5 source publication | Classify existing edits, coherent tested commits, backend/QGC compatibility/rollback docs and reviewed PRs pending |
@@ -112,12 +112,19 @@ checkpoints.
 
 ## Latest rebuilt QGC regression
 
-Debug build passes with version tags available. The fresh Unit/Integration run
-with standard Flaky/Network exclusions recorded **413/414 passes**. The only
-failure was `CMake.QGCTestMultiConfig`, whose fixture could not find the
-`Ninja Multi-Config` build program on this host. The earlier isolated GPS
-visibility retry also passed; retain both logs rather than claim an entirely
-green full run until the missing generator is available.
+Debug and Release builds pass with the pinned Qt 6.11.1 toolchain and the
+locked Ninja executable. The fresh Unit/Integration run with standard
+Flaky/Network exclusions recorded **414/414 passes** in 305.05 seconds,
+including the previously isolated `CMake.QGCTestMultiConfig` fixture. The
+full log is retained at
+`/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/qgc-final-path-corrected.log`.
+
+The Release package was generated with CPack using the extracted pinned
+`libxcb-cursor0` library as a private dependency-search path and an explicit
+`libxcb-cursor0` package dependency. Its checksum is recorded beside
+`build/pixeagle-custom-release/pixeagle-qgroundcontrol_5.2.0-31.g78286f417_amd64.deb`;
+the package is evidence of a reproducible artifact, not proof that this host
+can install it without that dependency.
 Focused PixEagle/stock-UI/package checks passed 9/9 before the rebuild. All 14
 mocked SIH launcher/startup boundary tests pass. Broader lint and platform
 acceptance limitations above remain open.

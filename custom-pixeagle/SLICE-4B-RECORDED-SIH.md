@@ -63,11 +63,9 @@ actual container runtime interpreter, separately from the profile preparer.
 The first QGC run found a missing Ninja PATH for a fixture and an intermittent
 late-metadata test. Ninja PATH corrected the fixture; a coarse timer could fire
 before the 3-second metadata threshold. The test now uses Qt PreciseTimer.
-Two subsequent runs passed 413/414 with an unrelated GPS UI timeout. The GPS
-Fact group emits UI updates at one-second intervals; the test's one-second
-condition timeout occasionally ended just before notification. The two relevant
-checks now use the standard medium condition-wait timeout, preserving assertions
-and production behavior. These attempts are retained, not erased by later results.
+The final rebuilt run passed 414/414 with the standard Flaky/Network exclusions.
+Earlier attempts with timing and PATH issues remain retained for provenance;
+the corrected fixtures preserve their assertions and production behavior.
 
 Fresh supervised restart passed in **7.559 seconds**: stale confirmation refused
 with 409, pending configuration cleared, the same sidecars retained, commands
