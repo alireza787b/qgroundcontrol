@@ -28,13 +28,13 @@ for the operator click test. The profile's Smart logs are under:
 
 ## Final QGC operator check
 
-The v24 credentials are in [credentials.json](/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v24/credentials.json).
+The unused v25 credentials are in [credentials.json](/home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25/credentials.json).
 Start the owned stack:
 
 ```bash
 cd /home/alireza/PixEagle-qgc-integration
 bash tools/run_gimbal_sih_probe.sh --hold \
-  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v24
+  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25
 ```
 
 In another terminal:
@@ -43,7 +43,7 @@ In another terminal:
 cd /home/alireza/qgroundcontrol-pixeagle
 PIXEAGLE_QGC_BINARY=$PWD/build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl \
   bash custom-pixeagle/validation/open-gimbal-sih-qgc.sh \
-  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v24
+  /home/alireza/.cache/pixeagle-qgc-baseline/slice-4b4d-2026-10-04/recorded-smart-final-v25
 ```
 
 Sign in with the linked credentials, verify the simulated vehicle, and keep
@@ -54,7 +54,8 @@ Stop. For the optional SIH-following check, take off in the simulator, clear
 the block only after QGC shows the verified aircraft, hold Start, observe
 `SIH following`, and press Stop. Finish with the block enabled and the vehicle
 landed. The longer v22 CSRT SIH result already covers the command-publication
-path; this v24 session is primarily the Smart and operator/UI check.
+path; this v25 session is primarily the Smart and operator/UI check. Use this
+profile only once; the launcher intentionally makes a used profile immutable.
 
 No physical camera is required for this handoff. Close QGC and press Ctrl-C in
 the launcher terminal; its owned containers are cleaned automatically.
