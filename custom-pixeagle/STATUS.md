@@ -8,6 +8,13 @@ uncertainty handoffs remain explicitly recorded. The selection repair is accepte
 full 4b.4 and release qualification remain open. Next is remaining 4b.4d shared-link/load, application suspension and
 normal recovery/altitude overlays. Camera hardware is not needed for that software work.
 
+The [final recorded-video/SIH handoff](FINAL-VIDEO-SIH-HANDOFF.md) is now
+prepared. The fresh longer-video CSRT/Chase SIH probe recorded 169 successful
+publications, a −163.93° simulated yaw response and confirmed Hold. Smart model
+loading and live detections were observed on test9 with the Full-AI runtime;
+the exact displayed-frame click remains an operator check because stale-frame
+requests were correctly rejected.
+
 The 4b.4d software gate is now renewed: 245 recovery/controller tests passed and
 the full backend CI unit sweep passed 3,463 tests,
 and the deterministic link envelope again met dispatch, expiry, heartbeat,
