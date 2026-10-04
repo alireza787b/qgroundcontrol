@@ -2,11 +2,18 @@
 
 #ifdef QGC_GST_STREAMING
 
+#include <array>
+#include <gst/app/gstappsink.h>
+#include <gst/app/gstappsrc.h>
+#include <gst/gst.h>
+
 #include <QtConcurrent/QtConcurrent>
 #include <QtCore/QBuffer>
 #include <QtCore/QDeadlineTimer>
+#include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
+#include <QtCore/QTimer>
 #include <QtGui/QImage>
 #include <QtGui/QImageReader>
 #include <QtGui/QImageWriter>
@@ -18,14 +25,11 @@
 #include <QtTest/QSignalSpy>
 #include <QtWebSockets/QWebSocket>
 #include <QtWebSockets/QWebSocketServer>
-#include <array>
-#include <gst/app/gstappsink.h>
-#include <gst/app/gstappsrc.h>
-#include <gst/gst.h>
 
 #include "GstSourceFactory.h"
 #include "LocalHttpTestServer.h"
 #include "QGCNetworkHelper.h"
+#include "QGCVideoFrameContextStore.h"
 #include "QGCWebSocketVideoSource.h"
 
 namespace {
@@ -160,7 +164,407 @@ bool configureSecureTestServer(QWebSocketServer& server, const QSslCertificate& 
     return true;
 }
 
+std::shared_ptr<QGCWebSocketVideoOptions> nativeVideoOptions()
+{
+    auto options = std::make_shared<QGCWebSocketVideoOptions>();
+    options->cookie = "session=local-test-session";
+    options->origin = QStringLiteral("https://operator.example.test");
+    options->requireFrameMetadata = true;
+    options->frameContexts = std::make_shared<QGCVideoFrameContextStore>();
+    return options;
+}
+
+QJsonObject nativeFrameMetadata(qint64 id, const QByteArray& jpeg)
+{
+    const QSize dimensions = jpegDimensions(jpeg);
+    return {{"type", "frame"},
+            {"timestamp", 1234.5},
+            {"quality", 85},
+            {"size", jpeg.size()},
+            {"frame_id", id},
+            {"frame_age_ms", 2.0},
+            {"provenance", QJsonObject{{"version", "1"},
+                                       {"instance_id", "instance-a"},
+                                       {"runtime_id", "runtime-a"},
+                                       {"stream_id", "front"},
+                                       {"stream_epoch", "stream-1"},
+                                       {"source_epoch", "source-1"},
+                                       {"frame_id", QString::number(id)},
+                                       {"capture_id", QString::number(id)},
+                                       {"capture_state", "fresh"},
+                                       {"capture_age_ms", 2.0},
+                                       {"publication_age_ms", 1.0},
+                                       {"encoded_width", dimensions.width()},
+                                       {"encoded_height", dimensions.height()},
+                                       {"variant", "processed_osd"},
+                                       {"geometry_verified", false}}}};
+}
+
+void sendMetadata(QWebSocket* peer, const QJsonObject& metadata)
+{
+    QJsonObject wireMetadata = metadata;
+    if (wireMetadata.value("type").toString() == QLatin1String("frame") && !wireMetadata.contains("delivery_token")) {
+        wireMetadata.insert("delivery_token", peer->property("deliveryToken").toString());
+    }
+    peer->sendTextMessage(QString::fromUtf8(QJsonDocument(wireMetadata).toJson(QJsonDocument::Compact)));
+}
+
+class NativeWebSocketPeer
+{
+public:
+    explicit NativeWebSocketPeer(QWebSocketServer& server)
+    {
+        _connection = QObject::connect(&server, &QWebSocketServer::newConnection, &server, [this, &server] {
+            peer = server.nextPendingConnection();
+            if (peer) {
+                messages = std::make_unique<QSignalSpy>(peer, &QWebSocket::textMessageReceived);
+                QObject::connect(peer, &QWebSocket::textMessageReceived, peer, [socket = peer](const QString& text) {
+                    const QJsonObject message = QJsonDocument::fromJson(text.toUtf8()).object();
+                    if (message.value("delivery_token").isString()) {
+                        socket->setProperty("deliveryToken", message.value("delivery_token").toString());
+                        socket->setProperty("deliveryReceivedMs", QGCVideoFrameContextStore::monotonicMs());
+                    }
+                });
+            }
+        });
+    }
+
+    ~NativeWebSocketPeer() { QObject::disconnect(_connection); }
+
+    QPointer<QWebSocket> peer;
+    std::unique_ptr<QSignalSpy> messages;
+
+private:
+    QMetaObject::Connection _connection;
+};
+
+class NativeVideoPipeline
+{
+public:
+    ~NativeVideoPipeline()
+    {
+        if (_pipeline) {
+            GStreamer::SourceFactory::deactivate(source);
+            gst_element_set_state(_pipeline, GST_STATE_NULL);
+            gst_object_unref(_pipeline);
+        }
+    }
+
+    bool start(const QString& url, const std::shared_ptr<const QGCWebSocketVideoOptions>& options)
+    {
+        GStreamer::SourceFactory::Config config;
+        config.webSocketOptions = options;
+        source = GStreamer::SourceFactory::create(url, config);
+        GstElement* decoder = gst_element_factory_make("jpegdec", nullptr);
+        sink = gst_element_factory_make("appsink", nullptr);
+        _pipeline = gst_pipeline_new(nullptr);
+        if (!source || !decoder || !sink || !_pipeline) {
+            gst_clear_object(&source);
+            gst_clear_object(&decoder);
+            gst_clear_object(&sink);
+            return false;
+        }
+        g_object_set(sink, "sync", FALSE, "max-buffers", 16u, "drop", TRUE, nullptr);
+        gst_bin_add_many(GST_BIN(_pipeline), source, decoder, sink, nullptr);
+        return gst_element_link_many(source, decoder, sink, nullptr) &&
+               gst_element_set_state(_pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE &&
+               GStreamer::SourceFactory::activate(source);
+    }
+
+    GstMessage* error() const
+    {
+        GstBus* bus = gst_element_get_bus(_pipeline);
+        GstMessage* message = gst_bus_pop_filtered(bus, GST_MESSAGE_ERROR);
+        gst_object_unref(bus);
+        return message;
+    }
+
+    GstElement* source = nullptr;
+    GstElement* sink = nullptr;
+
+private:
+    GstElement* _pipeline = nullptr;
+};
+
 }  // namespace
+
+void GStreamerTest::_testWebSocketFrameContextEvictionAndEpochs()
+{
+    QGCVideoFrameContextStore store(2);
+    const quint64 firstEpoch = store.beginEpoch();
+    const qint64 first = store.insert(firstEpoch, {{"frame_id", "1"}});
+    const qint64 second = store.insert(firstEpoch, {{"frame_id", "2"}});
+    const qint64 earlierArrival = QGCVideoFrameContextStore::monotonicMs() - 37;
+    const qint64 third = store.insert(firstEpoch, {{"frame_id", "3"}}, earlierArrival);
+    QVERIFY(first >= 0 && first < second && second < third);
+    QVERIFY(!store.lookup(first));
+    QVERIFY(store.lookup(second));
+    QCOMPARE(store.lookup(third)->metadata.value("frame_id").toString(), QStringLiteral("3"));
+    QCOMPARE(store.lookup(third)->receivedMonotonicMs, earlierArrival);
+
+    const quint64 secondEpoch = store.beginEpoch();
+    QVERIFY(!store.lookup(third));
+    QCOMPARE(store.insert(firstEpoch, {{"frame_id", "late"}}), qint64(-1));
+    const qint64 restarted = store.insert(secondEpoch, {{"frame_id", "1"}});
+    store.endEpoch(firstEpoch);
+    QVERIFY(store.lookup(restarted));
+    QVERIFY(restarted > third);
+    QGCVideoFrameContextStore otherStore;
+    const qint64 other = otherStore.insert(otherStore.beginEpoch(), {});
+    QVERIFY(other > restarted);
+    QVERIFY(!store.lookup(other));
+    store.endEpoch(secondEpoch);
+    QVERIFY(!store.lookup(restarted));
+}
+
+void GStreamerTest::_testWebSocketNativeFramesSurviveDrops()
+{
+    QWebSocketServer server(QStringLiteral("Native JPEG"), QWebSocketServer::NonSecureMode);
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    auto options = nativeVideoOptions();
+    const auto store = options->frameContexts;
+    NativeWebSocketPeer connection(server);
+    NativeVideoPipeline pipeline;
+    QVERIFY(pipeline.start(QStringLiteral("ws://127.0.0.1:%1/prefix/ws/video_feed").arg(server.serverPort()), options));
+    QTRY_VERIFY_WITH_TIMEOUT(connection.peer, TestTimeout::mediumMs());
+    QWebSocket* peer = connection.peer;
+    QVERIFY(peer);
+    QCOMPARE(peer->request().rawHeader("Cookie"), options->cookie);
+    QCOMPARE(peer->origin(), options->origin);
+    QCOMPARE(peer->requestUrl().path(), QStringLiteral("/prefix/ws/video_feed"));
+
+    QSignalSpy& messages = *connection.messages;
+    QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+    const QJsonObject capabilities = QJsonDocument::fromJson(messages.takeFirst().at(0).toString().toUtf8()).object();
+    QCOMPARE(capabilities.value("type").toString(), QStringLiteral("stream_capabilities"));
+    QVERIFY(capabilities.value("latest_frame_ack").toBool());
+    QVERIFY(!capabilities.value("delivery_token").toString().isEmpty());
+
+    GstElement* appsrc = findChildByFactoryName(pipeline.source, "appsrc");
+    QVERIFY(appsrc);
+    GstPad* pad = gst_element_get_static_pad(appsrc, "src");
+    QVERIFY(pad);
+    const gulong block = gst_pad_add_probe(
+        pad, static_cast<GstPadProbeType>(GST_PAD_PROBE_TYPE_BLOCK_DOWNSTREAM | GST_PAD_PROBE_TYPE_BUFFER),
+        [](GstPad*, GstPadProbeInfo*, gpointer) { return GST_PAD_PROBE_OK; }, nullptr, nullptr);
+    QVERIFY(block);
+    bool released = false;
+    const auto unblock = qScopeGuard([&] {
+        if (!released) {
+            gst_pad_remove_probe(pad, block);
+        }
+        gst_object_unref(pad);
+    });
+    QMap<qint64, qint64> latestTokenReceipt;
+    QMap<qint64, QJsonObject> expectedMetadata;
+    for (qint64 id = 1; id <= 8; ++id) {
+        const QByteArray jpeg = makeTestJpeg(static_cast<int>(id) + 4, 4);
+        QJsonObject metadata = nativeFrameMetadata(id, jpeg);
+        metadata.insert("delivery_token", peer->property("deliveryToken").toString());
+        latestTokenReceipt.insert(id, peer->property("deliveryReceivedMs").toLongLong());
+        expectedMetadata.insert(id, metadata);
+        sendMetadata(peer, metadata);
+        sendMetadata(peer, {{"type", "pong"}, {"timestamp", 4567.0}});
+        peer->sendBinaryMessage(jpeg);
+        QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+        const QJsonObject ack = QJsonDocument::fromJson(messages.takeFirst().at(0).toString().toUtf8()).object();
+        QCOMPARE(ack.value("type").toString(), QStringLiteral("frame_ack"));
+        QCOMPARE(ack.value("frame_id").toInteger(), id);
+    }
+    guint64 queued = 0;
+    g_object_get(appsrc, "current-level-buffers", &queued, nullptr);
+    QCOMPARE(queued, quint64(2));
+    gst_pad_remove_probe(pad, block);
+    released = true;
+
+    QList<qint64> received;
+    bool contextsMatch = true;
+    auto drain = [&]() {
+        while (GstSample* sample = gst_app_sink_try_pull_sample(GST_APP_SINK(pipeline.sink), 0)) {
+            const auto release = qScopeGuard([&] { gst_sample_unref(sample); });
+            GstBuffer* buffer = gst_sample_get_buffer(sample);
+            const qint64 ptsUs = static_cast<qint64>(GST_BUFFER_PTS(buffer) / GST_USECOND);
+            const auto entry = store->lookup(ptsUs);
+            if (!entry) {
+                contextsMatch = false;
+                return false;
+            }
+            int width = 0;
+            const qint64 id = entry->metadata.value("frame_id").toInteger();
+            if (!gst_structure_get_int(gst_caps_get_structure(gst_sample_get_caps(sample), 0), "width", &width) ||
+                width != id + 4 || entry->metadata != expectedMetadata.value(id) ||
+                entry->receivedMonotonicMs > latestTokenReceipt.value(id)) {
+                contextsMatch = false;
+                return false;
+            }
+            received.append(entry->metadata.value("frame_id").toInteger());
+        }
+        return true;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT((drain() && received.contains(8)), TestTimeout::mediumMs());
+    QVERIFY(contextsMatch);
+    QVERIFY(received.size() < 8);
+}
+
+void GStreamerTest::_testWebSocketNativeRejectsAmbiguousFrames_data()
+{
+    QTest::addColumn<QString>("fault");
+    for (const char* fault : {"missing", "duplicate-metadata", "wrong-size", "wrong-dimensions", "wrong-id",
+                              "duplicate-frame", "late-metadata", "malformed-json", "fractional-id", "wrong-token",
+                              "replayed-token", "missing-negotiated-token"}) {
+        QTest::newRow(fault) << QString::fromLatin1(fault);
+    }
+}
+
+void GStreamerTest::_testWebSocketNativeRejectsAmbiguousFrames()
+{
+    QFETCH(QString, fault);
+    QWebSocketServer server(QStringLiteral("Invalid native JPEG"), QWebSocketServer::NonSecureMode);
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+    auto options = nativeVideoOptions();
+    NativeWebSocketPeer connection(server);
+    NativeVideoPipeline pipeline;
+    QVERIFY(pipeline.start(QStringLiteral("ws://127.0.0.1:%1/video").arg(server.serverPort()), options));
+    QTRY_VERIFY_WITH_TIMEOUT(connection.peer, TestTimeout::mediumMs());
+    QWebSocket* peer = connection.peer;
+    QVERIFY(peer);
+    QSignalSpy& messages = *connection.messages;
+    QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+    messages.clear();
+
+    const QByteArray jpeg = makeTestJpeg();
+    QJsonObject metadata = nativeFrameMetadata(1, jpeg);
+    if (fault == QLatin1String("duplicate-frame") || fault == QLatin1String("replayed-token") ||
+        fault == QLatin1String("missing-negotiated-token")) {
+        const QString previousToken = peer->property("deliveryToken").toString();
+        sendMetadata(peer, metadata);
+        peer->sendBinaryMessage(jpeg);
+        QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+        messages.clear();
+        if (fault != QLatin1String("duplicate-frame")) {
+            metadata = nativeFrameMetadata(2, jpeg);
+            metadata.insert("delivery_token", fault == QLatin1String("replayed-token") ? QJsonValue(previousToken)
+                                                                                       : QJsonValue(QJsonValue::Null));
+        }
+    } else if (fault == QLatin1String("wrong-size")) {
+        metadata.insert("size", jpeg.size() + 1);
+    } else if (fault == QLatin1String("wrong-dimensions") || fault == QLatin1String("wrong-id")) {
+        QJsonObject provenance = metadata.value("provenance").toObject();
+        provenance.insert(fault == QLatin1String("wrong-id") ? "frame_id" : "encoded_width",
+                          fault == QLatin1String("wrong-id") ? QJsonValue("2") : QJsonValue(5));
+        metadata.insert("provenance", provenance);
+    } else if (fault == QLatin1String("fractional-id")) {
+        metadata.insert("frame_id", 1.5);
+    } else if (fault == QLatin1String("wrong-token")) {
+        metadata.insert("delivery_token", "unrequested-token");
+    }
+    if (fault == QLatin1String("malformed-json")) {
+        peer->sendTextMessage(QStringLiteral("{invalid"));
+    } else if (fault != QLatin1String("missing")) {
+        sendMetadata(peer, metadata);
+    }
+    if (fault == QLatin1String("duplicate-metadata")) {
+        sendMetadata(peer, metadata);
+    }
+    if (fault == QLatin1String("late-metadata")) {
+        QTimer::singleShot(3100, Qt::PreciseTimer, peer, [peer, jpeg] { peer->sendBinaryMessage(jpeg); });
+    } else {
+        peer->sendBinaryMessage(jpeg);
+    }
+    GstMessage* error = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT(error || (error = pipeline.error()), TestTimeout::longMs());
+    const auto release = qScopeGuard([&] { gst_message_unref(error); });
+    GError* detail = nullptr;
+    gst_message_parse_error(error, &detail, nullptr);
+    QVERIFY(detail);
+    QCOMPARE(QString::fromUtf8(detail->message), QStringLiteral("WebSocket frame context was rejected"));
+    g_clear_error(&detail);
+    QVERIFY(messages.isEmpty());
+    QVERIFY(!options->frameContexts->isCurrentEpoch(1));
+}
+
+void GStreamerTest::_testWebSocketNativeSessionIsolation()
+{
+    QWebSocketServer firstServer(QStringLiteral("First companion"), QWebSocketServer::NonSecureMode);
+    QWebSocketServer secondServer(QStringLiteral("Second companion"), QWebSocketServer::NonSecureMode);
+    QVERIFY(firstServer.listen(QHostAddress::LocalHost, 0));
+    QVERIFY(secondServer.listen(QHostAddress::LocalHost, 0));
+    auto firstOptions = nativeVideoOptions();
+    auto secondOptions = nativeVideoOptions();
+    secondOptions->cookie = "session=other-session";
+    secondOptions->frameContexts = firstOptions->frameContexts;
+    qint64 previousPts = -1;
+    const QByteArray jpeg = makeTestJpeg();
+    for (int run = 0; run != 2; ++run) {
+        QWebSocketServer& server = run ? secondServer : firstServer;
+        const auto options = run ? secondOptions : firstOptions;
+        NativeWebSocketPeer connection(server);
+        NativeVideoPipeline pipeline;
+        const QByteArray expectedCookie = options->cookie;
+        QVERIFY(pipeline.start(QStringLiteral("ws://127.0.0.1:%1/video").arg(server.serverPort()), options));
+        options->cookie = "session=changed-after-source-construction";
+        QTRY_VERIFY_WITH_TIMEOUT(connection.peer, TestTimeout::mediumMs());
+        QWebSocket* peer = connection.peer;
+        QVERIFY(peer);
+        QCOMPARE(peer->request().rawHeader("Cookie"), expectedCookie);
+        QSignalSpy& messages = *connection.messages;
+        QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+        const QString initialToken = peer->property("deliveryToken").toString();
+        const qint64 tokenReceipt = peer->property("deliveryReceivedMs").toLongLong();
+        messages.clear();
+        // This pair was emitted before the server processed capability negotiation.
+        peer->sendTextMessage(QString::fromUtf8(QJsonDocument(nativeFrameMetadata(1, jpeg)).toJson()));
+        peer->sendBinaryMessage(jpeg);
+        QTRY_VERIFY_WITH_TIMEOUT(!messages.isEmpty(), TestTimeout::mediumMs());
+        QCOMPARE(peer->property("deliveryToken").toString(), initialToken);
+        QVERIFY(!gst_app_sink_try_pull_sample(GST_APP_SINK(pipeline.sink), 0));
+        constexpr qint64 frameId = 9007199254740993LL;
+        QTimer::singleShot(run ? 0 : 250, peer, [peer, jpeg] {
+            sendMetadata(peer, nativeFrameMetadata(frameId, jpeg));
+            peer->sendBinaryMessage(jpeg);
+        });
+        GstSample* sample = nullptr;
+        QTRY_VERIFY_WITH_TIMEOUT(sample || (sample = gst_app_sink_try_pull_sample(GST_APP_SINK(pipeline.sink), 0)),
+                                 TestTimeout::mediumMs());
+        const qint64 pts = static_cast<qint64>(GST_BUFFER_PTS(gst_sample_get_buffer(sample)) / GST_USECOND);
+        gst_sample_unref(sample);
+        QVERIFY(pts > previousPts);
+        QVERIFY(options->frameContexts->lookup(pts));
+        QCOMPARE(options->frameContexts->lookup(pts)->metadata.value("frame_id").toInteger(), frameId);
+        QVERIFY(options->frameContexts->lookup(pts)->receivedMonotonicMs <= tokenReceipt);
+        if (!run) {
+            QVERIFY(QGCVideoFrameContextStore::monotonicMs() -
+                        options->frameContexts->lookup(pts)->receivedMonotonicMs >=
+                    200);
+        }
+        QVERIFY(!options->frameContexts->lookup(previousPts));
+        previousPts = pts;
+        GStreamer::SourceFactory::deactivate(pipeline.source);
+        QVERIFY(!options->frameContexts->lookup(pts));
+    }
+}
+
+void GStreamerTest::_testWebSocketNativeRedirectRejected()
+{
+    TestFixtures::LocalHttpTestServer redirect;
+    QWebSocketServer destination(QStringLiteral("Must not receive credentials"), QWebSocketServer::NonSecureMode);
+    QVERIFY(redirect.listen());
+    QVERIFY(destination.listen(QHostAddress::LocalHost, 0));
+    redirect.installRawResponder(
+        "HTTP/1.1 302 Found\r\nLocation: ws://127.0.0.1:" + QByteArray::number(destination.serverPort()) +
+        "/video\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    expectLogMessage("Video.GStreamer.WebSocketVideoSource", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("WebSocket transport error code")));
+    NativeVideoPipeline pipeline;
+    auto options = nativeVideoOptions();
+    QVERIFY(pipeline.start(QStringLiteral("ws://127.0.0.1:%1/video").arg(redirect.port()), options));
+    GstMessage* error = nullptr;
+    QTRY_VERIFY_WITH_TIMEOUT(error || (error = pipeline.error()), TestTimeout::mediumMs());
+    gst_message_unref(error);
+    verifyExpectedLogMessage();
+    QVERIFY(!destination.hasPendingConnections());
+    QVERIFY(!options->frameContexts->isCurrentEpoch(1));
+}
 
 void GStreamerTest::_testSourceFactoryUdpRtpJitterBuffer()
 {
@@ -683,8 +1087,16 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegRejectsMalformedMessage()
     QCOMPARE(peer->closeCode(), QWebSocketProtocol::CloseCodeProtocolError);
 }
 
+void GStreamerTest::_testSourceFactoryWebSocketJpegWssTrusted_data()
+{
+    QTest::addColumn<bool>("nativeMode");
+    QTest::newRow("stock") << false;
+    QTest::newRow("native") << true;
+}
+
 void GStreamerTest::_testSourceFactoryWebSocketJpegWssTrusted()
 {
+    QFETCH(bool, nativeMode);
     if (!QSslSocket::supportsSsl()) {
         QSKIP("TLS backend unavailable");
     }
@@ -711,6 +1123,9 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegWssTrusted()
     QSignalSpy connectionSpy(&server, &QWebSocketServer::newConnection);
 
     GStreamer::SourceFactory::Config config;
+    if (nativeMode) {
+        config.webSocketOptions = nativeVideoOptions();
+    }
     GstElement* source =
         GStreamer::SourceFactory::create(QStringLiteral("wss://127.0.0.1:%1/video").arg(server.serverPort()), config);
     GstElement* pipeline = gst_pipeline_new("websocket-jpeg-trusted-wss-test");
@@ -728,8 +1143,14 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegWssTrusted()
     QVERIFY_SIGNAL_WAIT(connectionSpy, TestTimeout::mediumMs());
 }
 
+void GStreamerTest::_testSourceFactoryWebSocketJpegWssRejectsUntrusted_data()
+{
+    _testSourceFactoryWebSocketJpegWssTrusted_data();
+}
+
 void GStreamerTest::_testSourceFactoryWebSocketJpegWssRejectsUntrusted()
 {
+    QFETCH(bool, nativeMode);
     if (!QSslSocket::supportsSsl()) {
         QSKIP("TLS backend unavailable");
     }
@@ -752,6 +1173,9 @@ void GStreamerTest::_testSourceFactoryWebSocketJpegWssRejectsUntrusted()
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
 
     GStreamer::SourceFactory::Config config;
+    if (nativeMode) {
+        config.webSocketOptions = nativeVideoOptions();
+    }
     GstElement* source =
         GStreamer::SourceFactory::create(QStringLiteral("wss://127.0.0.1:%1/video").arg(server.serverPort()), config);
     GstElement* pipeline = gst_pipeline_new("websocket-jpeg-untrusted-wss-test");
@@ -904,6 +1328,22 @@ void GStreamerTest::_testSourceFactoryRejectsUnsafeWebSocketJpegUrl()
     QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("ws://video.example.test:0/video"), config));
     QVERIFY(
         !GStreamer::SourceFactory::create(QStringLiteral("wss://operator:secret@video.example.test/video"), config));
+
+    ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Invalid WebSocket session options")));
+    const QString localUrl = QStringLiteral("ws://127.0.0.1/video");
+    auto options = nativeVideoOptions();
+    config.webSocketOptions = options;
+    options->cookie.append("\r\nX-Injected: value");
+    QVERIFY(!GStreamer::SourceFactory::create(localUrl, config));
+    options = nativeVideoOptions();
+    config.webSocketOptions = options;
+    options->origin.append("\r\nX-Injected: value");
+    QVERIFY(!GStreamer::SourceFactory::create(localUrl, config));
+    options = nativeVideoOptions();
+    config.webSocketOptions = options;
+    options->frameContexts.reset();
+    QVERIFY(!GStreamer::SourceFactory::create(localUrl, config));
 }
 
 void GStreamerTest::_testSourceFactoryRejectsBadUri()

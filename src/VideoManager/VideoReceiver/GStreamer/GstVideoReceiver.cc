@@ -10,23 +10,22 @@
 
 #include "GstVideoReceiver.h"
 
-#include "HwBuffers/common/HwBuffers.h"
-
-#include "GStreamerHelpers.h"
-#include "GstSourceFactory.h"
-#include "QGCLoggingCategory.h"
-#include "QGCNetworkHelper.h"
-#include "QGCQVideoSinkController.h"
+#include <algorithm>
+#include <gst/gst.h>
+#include <gst/video/video.h>
 
 #include <QtCore/QDateTime>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QUrl>
 #include <QtQuick/QQuickItem>
 
-#include <algorithm>
-
-#include <gst/gst.h>
-#include <gst/video/video.h>
+#include "GStreamerHelpers.h"
+#include "GstSourceFactory.h"
+#include "HwBuffers/common/HwBuffers.h"
+#include "QGCLoggingCategory.h"
+#include "QGCNetworkHelper.h"
+#include "QGCQVideoSinkController.h"
+#include "QGCWebSocketVideoSource.h"
 
 QGC_LOGGING_CATEGORY(GstVideoReceiverLog, "Video.GStreamer.GstVideoReceiver")
 
@@ -125,6 +124,16 @@ void GstVideoReceiver::_clearPipelineAliases()
     _tee = nullptr;
     _source = nullptr;
     _teeProbeId = 0;
+}
+
+void GstVideoReceiver::setWebSocketOptions(std::shared_ptr<const QGCWebSocketVideoOptions> options)
+{
+    if (_needDispatch()) {
+        auto snapshot = options ? std::make_shared<const QGCWebSocketVideoOptions>(*options) : nullptr;
+        _worker->dispatch([this, snapshot]() { setWebSocketOptions(snapshot); });
+        return;
+    }
+    _webSocketOptions = std::move(options);
 }
 
 void GstVideoReceiver::start(uint32_t timeout)
@@ -256,6 +265,7 @@ void GstVideoReceiver::start(uint32_t timeout)
                 : GStreamer::SourceFactory::JitterBuffer::Buffered);
         sourceConfig.latencyMs = _rtpJitterLatencyMs;
         sourceConfig.timeoutS = timeout;
+        sourceConfig.webSocketOptions = _webSocketOptions;
         // do-retransmission needs ≥40 ms latency headroom over the default 20 ms rtx-delay;
         // forcibly disable for sub-frame latency configurations to avoid retransmit storms.
         sourceConfig.doRetransmission = (_rtpJitterLatencyMs >= 40) && (sourceConfig.jitterBuffer != GStreamer::SourceFactory::JitterBuffer::None);

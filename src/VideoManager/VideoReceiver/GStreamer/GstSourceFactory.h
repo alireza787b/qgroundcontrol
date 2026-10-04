@@ -1,8 +1,12 @@
 #pragma once
 
-#include <QtCore/QString>
 #include <cstdint>
 #include <gst/gstelement.h>
+#include <memory>
+
+#include <QtCore/QString>
+
+struct QGCWebSocketVideoOptions;
 
 namespace GStreamer::SourceFactory {
 
@@ -25,6 +29,7 @@ struct Config
     bool doRetransmission = true;
     /// Blocking network I/O timeout for source elements that expose one, in seconds.
     uint32_t timeoutS = 8;
+    std::shared_ptr<const QGCWebSocketVideoOptions> webSocketOptions;
 };
 
 /// Build a source bin that exposes parsed encoded video for `uri`.

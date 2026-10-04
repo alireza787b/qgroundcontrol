@@ -11,6 +11,8 @@ Item {
     clip:   true
 
     property bool useSmallFont: true
+    property var toolInsets: null
+    readonly property var externalTrackingController: externalVideoLoader.item && externalVideoLoader.item.trackingController !== undefined ? externalVideoLoader.item.trackingController : null
 
     property double _ar:                (cameraLoader.visible && cameraLoader.status === Loader.Ready)
                                             ? cameraLoader.item.implicitWidth / cameraLoader.item.implicitHeight
@@ -23,7 +25,7 @@ Item {
     property var    _camera:            _isCamera ? _dynamicCameras.cameras.get(_curCameraIndex) : null
     property bool   _hasZoom:           _camera && _camera.hasZoom
     property int    _fitMode:           QGroundControl.settingsManager.videoSettings.videoFit.rawValue
-    property bool   _showStreamLoader:  QGroundControl.videoManager.decoding
+    property bool   _showStreamLoader:  QGroundControl.videoManager.decoding || QGroundControl.videoManager.externalVideoActive
     property bool   _showUvcLoader:     QGroundControl.videoManager.isUvc
 
     property bool   _isMode_FIT_WIDTH:  _fitMode === 0
@@ -104,7 +106,7 @@ Item {
         Loader {
             id:                 videoStreamLoader
             anchors.fill:       videoContentArea
-            visible:            _showStreamLoader
+            visible:            _showStreamLoader && !QGroundControl.videoManager.externalVideoActive
             sourceComponent:    videoOutputComponent
 
             property bool videoDisabled: QGroundControl.settingsManager.videoSettings.videoSource.rawValue === QGroundControl.settingsManager.videoSettings.disabledVideoSource
@@ -112,6 +114,16 @@ Item {
         Component {
             id: videoOutputComponent
             FlightDisplayViewVideoOutput {
+            }
+        }
+        Loader {
+            id: externalVideoLoader
+            anchors.fill: parent
+            active: QGroundControl.videoManager.externalVideoActive
+            source: QGroundControl.videoManager.externalVideoSource
+            onLoaded: {
+                if (item && item.compactView !== undefined) item.compactView = Qt.binding(() => root.useSmallFont)
+                if (item && item.toolInsets !== undefined) item.toolInsets = Qt.binding(() => root.toolInsets)
             }
         }
         //-- UVC Video (USB Camera or Video Device)
@@ -208,7 +220,7 @@ Item {
         //-- Zoom
         PinchArea {
             id:             pinchZoom
-            enabled:        _hasZoom
+            enabled:        _hasZoom && !QGroundControl.videoManager.externalVideoActive
             anchors.fill:   parent
             onPinchStarted: pinchZoom.zoom = 0
             onPinchUpdated: {

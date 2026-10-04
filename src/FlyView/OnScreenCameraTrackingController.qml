@@ -6,6 +6,32 @@ Item {
     required property var  camera
     required property real videoWidth
     required property real videoHeight
+    property var externalController: null
+    property var _gestureController: null
+    property bool _externalGesture: false
+    property bool _externalAccepted: false
+    property var _gestureCamera: null
+
+    onExternalControllerChanged: cancelGesture()
+    onCameraChanged: cancelGesture()
+
+    function beginGesture(inputItem, mouseX, mouseY) {
+        cancelGesture(false)
+        _externalGesture = !!externalController
+        _gestureCamera = _externalGesture ? null : camera
+        _gestureController = externalController
+        _externalAccepted = _gestureController ? _gestureController.beginGesture(inputItem, mouseX, mouseY) : false
+        if (!_externalAccepted) _gestureController = null
+    }
+
+    Connections {
+        target: rootItem._gestureController
+        function onGestureInvalidated() {
+            rootItem._dragging = false
+            rootItem._externalAccepted = false
+            rootItem._gestureController = null
+        }
+    }
 
     // Drag origin in parent coordinates
     property real _dragStartX: 0
@@ -18,8 +44,36 @@ Item {
     readonly property bool _canTrackPoint: _trackingEnabled && camera.supportsTrackingPoint
     readonly property bool _canTrackRect: _trackingEnabled && camera.supportsTrackingRect
 
+    function cancelGesture(disarmSelection = true) {
+        const controller = _gestureController
+        if (controller) {
+            if (!disarmSelection && typeof controller.cancelPointerGesture === "function") controller.cancelPointerGesture()
+            else controller.cancelGesture()
+        }
+        _gestureController = null
+        _externalGesture = false
+        _externalAccepted = false
+        _gestureCamera = null
+        _dragging = false
+        _dragStartX = 0
+        _dragStartY = 0
+    }
+
+    function cancelSelection() {
+        const controller = _gestureController
+        cancelGesture()
+        // An in-flight action can outlive the pointer that submitted it.
+        if (externalController && externalController !== controller) externalController.cancelGesture()
+    }
+
     function mouseClicked(mouseX, mouseY) {
-        if (!_canTrackPoint) {
+        if (_externalGesture) {
+            if (_externalAccepted && _gestureController) _gestureController.finishGesture(mouseX, mouseY, false)
+            _externalAccepted = false
+            _gestureController = null
+            return
+        }
+        if (!_canTrackPoint || !_gestureCamera || camera !== _gestureCamera) {
             return
         }
         if (videoWidth <= 0 || videoHeight <= 0) {
@@ -35,7 +89,7 @@ Item {
     }
 
     function mouseDragStart(mouseX, mouseY) {
-        if (!_canTrackRect) {
+        if (_externalGesture ? !_externalAccepted : (!_canTrackRect || !_gestureCamera || camera !== _gestureCamera)) {
             return
         }
         _dragStartX = mouseX
@@ -56,7 +110,14 @@ Item {
     function mouseDragEnd(mouseX, mouseY) {
         _dragging = false
 
-        if (!_canTrackRect) {
+        if (_externalGesture) {
+            if (_externalAccepted && _gestureController) _gestureController.finishGesture(mouseX, mouseY, true)
+            _externalAccepted = false
+            _gestureController = null
+            return
+        }
+
+        if (!_canTrackRect || !_gestureCamera || camera !== _gestureCamera) {
             return
         }
         if (videoWidth <= 0 || videoHeight <= 0) {

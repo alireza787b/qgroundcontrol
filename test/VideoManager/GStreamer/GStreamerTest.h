@@ -97,7 +97,15 @@ private slots:
     void _testSourceFactoryWebSocketJpegDelivery();
     void _testSourceFactoryWebSocketJpegRejectsMalformedMessage();
     void _testSourceFactoryWebSocketJpegWssTrusted();
+    void _testSourceFactoryWebSocketJpegWssTrusted_data();
     void _testSourceFactoryWebSocketJpegWssRejectsUntrusted();
+    void _testSourceFactoryWebSocketJpegWssRejectsUntrusted_data();
+    void _testWebSocketFrameContextEvictionAndEpochs();
+    void _testWebSocketNativeFramesSurviveDrops();
+    void _testWebSocketNativeRejectsAmbiguousFrames_data();
+    void _testWebSocketNativeRejectsAmbiguousFrames();
+    void _testWebSocketNativeSessionIsolation();
+    void _testWebSocketNativeRedirectRejected();
     void _testSourceFactoryWebSocketJpegFailedHandshake();
     void _testSourceFactoryWebSocketJpegRemoteDisconnect();
     void _testSourceFactoryWebSocketJpegImmediateStop();

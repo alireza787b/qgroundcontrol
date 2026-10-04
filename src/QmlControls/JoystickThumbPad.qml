@@ -14,6 +14,7 @@ Item {
     property bool   yAxisReCenter:          false               ///< true: snaps back to center on release, false: stays at current position on release
     property real   xPositionDelta:         0                   ///< Amount to move the control on x axis
     property real   yPositionDelta:         0                   ///< Amount to move the control on y axis
+    property bool   fixedCenter:           false               ///< Keep this pad in place, independent of aircraft joystick layout
     property bool   touchActive:            false               ///< true: thumb is currently down on the pad
 
     property real   _centerXY:              width / 2
@@ -33,6 +34,14 @@ Item {
     onStickPositionYChanged:            calculateYAxis()
     onYAxisPositiveRangeOnlyChanged:    calculateYAxis()
     onYAxisReCenterChanged:             yAxisReCentered()
+    onWidthChanged:                     { if (fixedCenter) Qt.callLater(resizeFixedCenter) }
+    onHeightChanged:                    { if (fixedCenter) Qt.callLater(resizeFixedCenter) }
+    onVisibleChanged:                   { if (fixedCenter && visible) Qt.callLater(resizeFixedCenter) }
+    Component.onCompleted:             { if (fixedCenter) Qt.callLater(resizeFixedCenter) }
+
+    function resizeFixedCenter() {
+        if (fixedCenter && !touchActive) reCenter()
+    }
 
     function yAxisReCentered() {
         if( yAxisReCenter ) {
@@ -97,14 +106,25 @@ Item {
 
         // Re-Center sticks as needed
         stickPositionX = _centerXY
+        if (fixedCenter) xAxis = 0
         if (yAxisReCenter) {
             stickPositionY = _centerXY
+            if (fixedCenter) yAxis = yAxisPositiveRangeOnly ? 0.5 : 0
         }
     }
 
     function thumbDown(touchPoints) {
         // Position the control around the initial thumb position
         _centerXY = _joyRoot.width / 2  // make sure to know the correct center of the item
+
+        if (fixedCenter) {
+            xPositionDelta = 0
+            yPositionDelta = 0
+            _processTouchPoints = true
+            stickPositionX = Math.max(0, Math.min(touchPoints[0].x, width))
+            stickPositionY = Math.max(0, Math.min(touchPoints[0].y, height))
+            return
+        }
 
         var limitOffset = uiRealX >= _joyRoot.width / 2 ? true : false // as the joystick become small the UI too so we limit the maxOffset for reCentering joystick to prevent misclicks
         var maxDelta = _joyRoot.x > uiTotalWidth / 2  ? uiTotalWidth - uiRealX - _joyRoot.x - _centerXY : uiRealX

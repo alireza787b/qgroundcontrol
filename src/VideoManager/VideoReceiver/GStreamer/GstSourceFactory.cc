@@ -558,7 +558,8 @@ GstElement* buildHttpMjpegSource(const QUrl& sourceUrl, const Config& config)
     return sourceBin;
 }
 
-GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
+GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl,
+                                     const std::shared_ptr<const QGCWebSocketVideoOptions>& options)
 {
     if (!sourceUrl.isValid() || sourceUrl.isRelative() || sourceUrl.host().isEmpty() || (sourceUrl.port() == 0)) {
         qCWarning(GstSourceFactoryLog) << "Invalid WebSocket JPEG URL";
@@ -566,6 +567,12 @@ GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
     }
     if (!sourceUrl.userInfo().isEmpty()) {
         qCWarning(GstSourceFactoryLog) << "WebSocket JPEG credentials in URLs are not supported";
+        return nullptr;
+    }
+    if (options &&
+        ((options->requireFrameMetadata && !options->frameContexts) || options->cookie.contains('\r') ||
+         options->cookie.contains('\n') || options->origin.contains('\r') || options->origin.contains('\n'))) {
+        qCWarning(GstSourceFactoryLog) << "Invalid WebSocket session options";
         return nullptr;
     }
 
@@ -585,8 +592,9 @@ GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
             qCWarning(GstSourceFactoryLog) << "Failed to create WebSocket JPEG caps";
             break;
         }
-        g_object_set(appsrc, "caps", caps, "is-live", TRUE, "do-timestamp", TRUE, "format", GST_FORMAT_TIME, "block",
-                     FALSE, "max-buffers", static_cast<guint64>(2), "max-bytes",
+        const gboolean autoTimestamp = !(options && options->requireFrameMetadata);
+        g_object_set(appsrc, "caps", caps, "is-live", TRUE, "do-timestamp", autoTimestamp, "format", GST_FORMAT_TIME,
+                     "block", FALSE, "max-buffers", static_cast<guint64>(2), "max-bytes",
                      static_cast<guint64>(QGCWebSocketVideoSource::kMaximumJpegBytes * 2), "leaky-type",
                      GST_APP_LEAKY_TYPE_DOWNSTREAM, "emit-signals", FALSE, nullptr);
         gst_clear_caps(&caps);
@@ -616,7 +624,7 @@ GstElement* buildWebSocketJpegSource(const QUrl& sourceUrl)
         QUrl cleanUrl(sourceUrl);
         cleanUrl.setUserInfo(QString());
         cleanUrl.setFragment(QString());
-        auto* context = new QGCWebSocketVideoSource(cleanUrl, binAppsrc);
+        auto* context = new QGCWebSocketVideoSource(cleanUrl, binAppsrc, options);
         g_object_set_data_full(G_OBJECT(bin), kWebSocketSourceContextKey, context,
                                [](gpointer data) { delete static_cast<QGCWebSocketVideoSource*>(data); });
 
@@ -748,7 +756,7 @@ GstElement* create(const QString& uri, const Config& config)
         return buildHttpMjpegSource(sourceUrl, config);
     }
     if (isWebSocketJpeg) {
-        return buildWebSocketJpegSource(sourceUrl);
+        return buildWebSocketJpegSource(sourceUrl, config.webSocketOptions);
     }
 
     // Owning locals until gst_bin_add*, then nulled (non-owning alias used downstream) so the

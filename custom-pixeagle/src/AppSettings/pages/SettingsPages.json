@@ -1,0 +1,13 @@
+{
+    "version": 1,
+    "fileType": "SettingsPages",
+    "pages": [
+        {
+            "name": "PixEagle",
+            "qml": "PixEagleSettings.qml",
+            "url": "qrc:/qml/PixEagle/PixEagleSettings.qml",
+            "icon": "qrc:/InstrumentValueIcons/target.svg",
+            "insertAfter": "Comm Links"
+        }
+    ]
+}

@@ -2,10 +2,13 @@
 
 #ifdef QGC_GST_STREAMING
 
-#include "VideoManager.h"
-
 #include <QtCore/QRegularExpression>
 #include <QtQuick/QQuickWindow>
+#include <QtTest/QSignalSpy>
+
+#include "SettingsManager.h"
+#include "VideoManager.h"
+#include "VideoSettings.h"
 
 void VideoManagerInitTest::init()
 {
@@ -28,9 +31,7 @@ void VideoManagerInitTest::_testQmlReadyBeforeBackendReady()
     videoManager._mainWindow = &mainWindow;
 
     int createReceiversCount = 0;
-    videoManager._createVideoReceiversForTest = [&createReceiversCount]() {
-        ++createReceiversCount;
-    };
+    videoManager._createVideoReceiversForTest = [&createReceiversCount]() { ++createReceiversCount; };
 
     videoManager._initState = VideoManager::InitState::Pending;
 
@@ -42,7 +43,8 @@ void VideoManagerInitTest::_testQmlReadyBeforeBackendReady()
     QCOMPARE(videoManager._initState, VideoManager::InitState::Running);
     QCOMPARE(createReceiversCount, 1);
 
-    expectLogMessage("Video.VideoManager", QtWarningMsg, QRegularExpression(QStringLiteral("_onBackendInitComplete: unexpected state")));
+    expectLogMessage("Video.VideoManager", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("_onBackendInitComplete: unexpected state")));
     videoManager._onBackendInitComplete(true);
     verifyExpectedLogMessage();
     QCOMPARE(createReceiversCount, 1);
@@ -55,9 +57,7 @@ void VideoManagerInitTest::_testBackendReadyBeforeQmlReady()
     videoManager._mainWindow = &mainWindow;
 
     int createReceiversCount = 0;
-    videoManager._createVideoReceiversForTest = [&createReceiversCount]() {
-        ++createReceiversCount;
-    };
+    videoManager._createVideoReceiversForTest = [&createReceiversCount]() { ++createReceiversCount; };
 
     videoManager._initState = VideoManager::InitState::Pending;
 
@@ -69,7 +69,8 @@ void VideoManagerInitTest::_testBackendReadyBeforeQmlReady()
     QCOMPARE(videoManager._initState, VideoManager::InitState::Running);
     QCOMPARE(createReceiversCount, 1);
 
-    expectLogMessage("Video.VideoManager", QtWarningMsg, QRegularExpression(QStringLiteral("_initAfterQmlIsReady: unexpected state")));
+    expectLogMessage("Video.VideoManager", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("_initAfterQmlIsReady: unexpected state")));
     videoManager._initAfterQmlIsReady();
     verifyExpectedLogMessage();
     QCOMPARE(createReceiversCount, 1);
@@ -82,31 +83,91 @@ void VideoManagerInitTest::_testBackendInitFailure()
     videoManager._mainWindow = &mainWindow;
 
     int createReceiversCount = 0;
-    videoManager._createVideoReceiversForTest = [&createReceiversCount]() {
-        ++createReceiversCount;
-    };
+    videoManager._createVideoReceiversForTest = [&createReceiversCount]() { ++createReceiversCount; };
 
     videoManager._initState = VideoManager::InitState::Pending;
 
-    expectLogMessage("Video.VideoManager", QtCriticalMsg, QRegularExpression(QStringLiteral("video initialization failed")));
+    expectLogMessage("Video.VideoManager", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("video initialization failed")));
     videoManager._onBackendInitComplete(false);
     verifyExpectedLogMessage();
     QCOMPARE(videoManager._initState, VideoManager::InitState::Failed);
     QCOMPARE(createReceiversCount, 0);
 
-    expectLogMessage("Video.VideoManager", QtWarningMsg, QRegularExpression(QStringLiteral("QML ready but video init failed")));
+    expectLogMessage("Video.VideoManager", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("QML ready but video init failed")));
     videoManager._initAfterQmlIsReady();
     verifyExpectedLogMessage();
     QCOMPARE(videoManager._initState, VideoManager::InitState::Failed);
     QCOMPARE(createReceiversCount, 0);
 }
 
+void VideoManagerInitTest::_testExternalVideoLeavesConfiguredSourceIntact()
+{
+    VideoManager manager;
+    auto* settings = SettingsManager::instance()->videoSettings();
+    settings->streamEnabled()->setRawValue(true);
+    settings->videoSource()->setRawValue(VideoSettings::videoSourceRTSP);
+    settings->rtspUrl()->setRawValue(QStringLiteral("rtsp://camera.example/stock"));
+    QSignalSpy configuredSourceChanged(settings->videoSource(), &Fact::rawValueChanged);
+    QSignalSpy configuredUrlChanged(settings->rtspUrl(), &Fact::rawValueChanged);
+    QSignalSpy requestedStart(&manager, &VideoManager::externalVideoStartRequested);
+    QSignalSpy requestedStop(&manager, &VideoManager::externalVideoStopRequested);
+    manager.setExternalVideoSource(QUrl(QStringLiteral("qrc:/custom/Video.qml")));
+    QVERIFY(manager.externalVideoActive());
+    QVERIFY(manager.hasVideo());
+    QVERIFY(!manager.autoStreamConfigured());
+    QVERIFY(!manager.decoding());
+    manager.setExternalVideoState(true, QSize(480, 640));
+    QVERIFY(manager.decoding());
+    QCOMPARE(manager.aspectRatio(), 0.75);
+    manager.setfullScreen(true);
+    QVERIFY(manager.fullScreen());
+    manager.stopVideo();
+    QVERIFY(!requestedStop.isEmpty());
+    manager.startVideo();
+    QVERIFY(!requestedStart.isEmpty());
+    settings->streamEnabled()->setRawValue(false);
+    manager._videoSourceChanged();
+    QVERIFY(!manager.hasVideo());
+    manager.setExternalVideoSource({});
+    QVERIFY(!manager.externalVideoActive());
+    QVERIFY(!manager.fullScreen());
+    QVERIFY(!manager.decoding());
+    QVERIFY(!manager.streaming());
+    QVERIFY(configuredSourceChanged.isEmpty());
+    QVERIFY(configuredUrlChanged.isEmpty());
+    QCOMPARE(settings->videoSource()->rawValue().toString(), VideoSettings::videoSourceRTSP);
+    QCOMPARE(settings->rtspUrl()->rawValue().toString(), QStringLiteral("rtsp://camera.example/stock"));
+}
+
 #else
 
-void VideoManagerInitTest::init() { UnitTest::init(); QSKIP("GStreamer not enabled"); }
-void VideoManagerInitTest::_testQmlReadyBeforeBackendReady() { QSKIP("GStreamer not enabled"); }
-void VideoManagerInitTest::_testBackendReadyBeforeQmlReady() { QSKIP("GStreamer not enabled"); }
-void VideoManagerInitTest::_testBackendInitFailure() { QSKIP("GStreamer not enabled"); }
+void VideoManagerInitTest::init()
+{
+    UnitTest::init();
+    QSKIP("GStreamer not enabled");
+}
+
+void VideoManagerInitTest::_testQmlReadyBeforeBackendReady()
+{
+    QSKIP("GStreamer not enabled");
+}
+
+void VideoManagerInitTest::_testBackendReadyBeforeQmlReady()
+{
+    QSKIP("GStreamer not enabled");
+}
+
+void VideoManagerInitTest::_testBackendInitFailure()
+{
+    QSKIP("GStreamer not enabled");
+}
+
+void VideoManagerInitTest::_testExternalVideoLeavesConfiguredSourceIntact()
+{
+    QSKIP("GStreamer not enabled");
+}
 
 #endif
 
