@@ -74,8 +74,10 @@ The older Linux prototype package does not include the new restart change.
 PixEagle main and release artifacts are not updated. Tested changes are being
 committed in reviewable groups on both integration branches; remaining source
 edits are uncommitted and nothing is published. Backend commits `e083f71` and
-`a1724a8` record sustained-link qualification and release boundaries; QGC commit
-`2f4599db8` records deployment and qualification documentation. The renewed
+`a1724a8` record sustained-link qualification and release boundaries. QGC
+commits `9d9e5f275`, `04ba98b5b`, `dd917e5ef`, `6ca249720`, and `2f4599db8`
+record the native overlay, validation harness, qualification evidence, package
+identity, and deployment/publication documentation. The renewed
 focused gate passed 142 backend tests, four QGC client suites and the Linux
 package-identity test. Real-flight qualification
 remains later scope. The optional [recorded-video SIH handoff](OPERATOR-RECORDED-SIH.md)

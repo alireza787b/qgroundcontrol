@@ -124,10 +124,13 @@ acceptance limitations above remain open.
 ## Commit and regression checkpoint — October 4
 
 Backend commit `e083f71` records the sustained shared-link qualification;
-`a1724a8` records project-use and release boundaries. QGC commit `2f4599db8`
-records deployment profiles, publication status and qualification documents.
-These commits stay on their integration branches; neither main nor public
-artifacts are updated. The remaining source edits need separate reviewed commits.
+`a1724a8` records project-use and release boundaries. QGC commits `9d9e5f275`
+(native overlay/video path), `04ba98b5b` (SIH validation harness),
+`dd917e5ef` (qualification evidence), `6ca249720` (package identity), and
+`2f4599db8` (deployment/publication status) record the tested integration
+groups. These commits stay on their integration branches; neither main nor
+public artifacts are updated. Remaining source edits need separate reviewed
+commits.
 
 The renewed backend restart/defaults/replay/engine/altitude/fixed-wing boundary
 gate passed **142 tests**; the production shared-link fixture passed separately.
