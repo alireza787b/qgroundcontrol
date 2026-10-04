@@ -84,7 +84,7 @@ GimbalTracker:
   UDP_HOST: 192.168.0.108
   UDP_PORT: 9003
   LISTEN_PORT: 9004
-  MOUNT_TYPE: HORIZONTAL              # change to VERTICAL for the bench mount
+  MOUNT_TYPE: VERTICAL                # user's characterized bench/robot installation
   COORDINATE_SYSTEM: GIMBAL_BODY
   DISABLE_ESTIMATOR: true
 
@@ -192,17 +192,23 @@ to verify it; it never guesses across multiple vehicles.
 
 ## Qualification status and next hardware gate
 
+The operator accepted the vertical camera-final-v28 workflow on 2026-10-04.
+Its log records 796 successful Vector publications; physical failure/load and
+onboard evidence remain separate gates. See the
+[remaining checkpoint plan](NEXT-CHECKPOINTS-2026-10-04.md) for the Pi profile,
+publication sequence and platform qualification.
+
 The normal local/video, QGC integration, camera-control, gimbal SIH, and
 recorded-video follower checkpoints have automated evidence. Network/load
 fixtures cover the shared relay and reconnect behavior but do not qualify a
 radio, Raspberry Pi scheduler, real camera, or motor response. Windows/Android
 release packaging and the Pi/router/PX4 ground checkpoint remain open.
 
-No camera or SSH action is required for the current software work. The next
-operator action is needed when the Pi and camera are available: capture the
-actual board inventory, install the selected profile, verify the dual-interface
-routes, and run the short camera-only and command-blocked SIH handoff. Real
-hardware following remains gated on those results.
+The camera is connected for the accepted bench workflow. A coordinated physical
+failure check is next; Pi commissioning later needs board/SSH access to capture
+the actual inventory, install the selected profile, verify dual-interface routes
+and run command-blocked ground checks. Real hardware following remains gated
+on separate qualification and approval.
 
 The public/release boundary is recorded in
 [Publication status](PUBLICATION-STATUS.md). This customized QGC build is a
