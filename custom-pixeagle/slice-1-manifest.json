@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "date": "2026-09-21",
+  "slice": 1,
+  "status": "local-linux-connection-gate-complete",
+  "evidence_root": "/home/alireza/.cache/pixeagle-qgc-baseline/slice-1-2026-09-21",
+  "repositories": {
+    "qgc": {
+      "path": "/home/alireza/qgroundcontrol-pixeagle",
+      "branch": "feature/pixeagle-native-integration",
+      "base_commit": "2e6190bafc4f4796e29ae24cbd1d27f73b96d07d",
+      "state": "local uncommitted changes preserved in source archive",
+      "source_sha256": {
+        "custom-pixeagle/BASELINE.md": "6c275af24ec8276742eefb1ebd7fa862c4798187637c8299d6d275fd862a19b7",
+        "custom-pixeagle/CMakeLists.txt": "2720d1912caa122a65752fabd0215e09fc246ac3cf91ff559d86d348c591bc3f",
+        "custom-pixeagle/README.md": "4b41493a03f988f825c0588269637cac8dda26b742065cf4aa0ad4213d7ef552",
+        "custom-pixeagle/SLICE-1.md": "59e5e9063d1a130771260532d23e06a4c07e14b8081010dd2bc6516c2bf6e158",
+        "custom-pixeagle/baseline-manifest.json": "513fe0cf4d3d9ac068da85104bc5342a43c28f6227167eaeef6ec79c0815dc40",
+        "custom-pixeagle/cmake/BaselineDependencies.cmake": "c63c4c80bf0956ea613967e04f809bbf1f79094ec5d6284b36dddca9d3e036a9",
+        "custom-pixeagle/cmake/CustomOverrides.cmake": "e1f1076d8db0b6728d0b9decb08712eeedc7319ffbcaf590b7701255eaa0b576",
+        "custom-pixeagle/reviews/README.md": "8d0f83d3231be9998a2e283e16814a33eb2fb24b16b4bfef8cb50b766d845103",
+        "custom-pixeagle/reviews/slice-0-disposition.md": "ef1eb8b92adfc565269c31ce1845f22bee2bbace98b8d9fdba286d274d9e964f",
+        "custom-pixeagle/reviews/slice-0-operator-raw.md": "792086d2c08bdf5f90706d21eef78de444c5bbec3c16562a3a94ba039e66b2f2",
+        "custom-pixeagle/reviews/slice-1-disposition.md": "a9e7d8df7163f70e7cfdfb037ddf84757798ad3df53a8af213d6bcf7c39e9ce3",
+        "custom-pixeagle/reviews/slice-1-operator-a-raw.md": "2e354d8d13c40fea1c14ef824c1bf356807cd827d2285adbdcb8ae913ba754da",
+        "custom-pixeagle/reviews/slice-1-operator-b-raw.md": "c5b53417dd1e61d6a8659c2e7be4a2b85aed537c49e17481b8f8b3ec0b89851d",
+        "custom-pixeagle/reviews/slice-1-operator-final-raw.md": "1d9b8d706189cf7daf490ca41046268384ecb9db8d5b5114bd2b45a6e3e2da25",
+        "custom-pixeagle/reviews/slice-1-operator-followup-raw.md": "9e30dc2e46e5859771c296c4c1b20d65b9a34c087a6197b8ca2ba5d2dccdbcbc",
+        "custom-pixeagle/src/AppSettings/pages/SettingsPages.json": "5a1f19cdcfd48d85e0789b9f303f90a9715423846681dc19e5f8bd55e2e2ef02",
+        "custom-pixeagle/src/PixEagleClient.cc": "3c8c0283fec953b7380d1e9b12cfd7d27c2e2afc01fa62298fa452ecd817f6b9",
+        "custom-pixeagle/src/PixEagleClient.h": "bb1adbbe6d9fd8ff48eaf3161eb172cf65b5c26c139feeda7ee481c424cd1088",
+        "custom-pixeagle/src/PixEagleManager.cc": "6a0ccea0cc68cb63f231310c5c23be995eca0174ea9019432916dff9f0dce2d9",
+        "custom-pixeagle/src/PixEagleManager.h": "966b4e31e4f100ed349782aebe64237a0c8243b686c0c9e132cfafa661680a33",
+        "custom-pixeagle/src/PixEaglePlugin.cc": "5c9ff93cc5e237128362d9b037cfc72201785c4efb448cffb2003c6dfdb5f1cf",
+        "custom-pixeagle/src/PixEaglePlugin.h": "1d71bf13f28b3b02062c15fd743743e8ae56829c4afdd6bafd476013166191b4",
+        "custom-pixeagle/src/PixEagleSettings.qml": "e26d5f765903e0aa524a008a82a3949bdf912a7ec1d5fdaa669cc708d5f0679e",
+        "custom-pixeagle/src/Settings/PixEagle.SettingsGroup.json": "ede709265bd7b04ef01406518454eaa7a3e6e95e8f05f844f703c470a183d647",
+        "custom-pixeagle/src/Settings/PixEagleSettings.cc": "ec3ac0d1ad602301b46510720e69ac5cb154af8ca76d9ac3a8eadab4df91a666",
+        "custom-pixeagle/src/Settings/PixEagleSettings.h": "ccfd1f96450a3c1008f463a8c0be9c2e63854c7830a06d0398cea1d985de22e7",
+        "custom-pixeagle/validation/Dockerfile": "9f2975aa1bb7e287fc983703381abe70e77d65dea6aaa2547b2e5c595ed4e7a3",
+        "custom-pixeagle/validation/container-packages.tsv": "b4a06ce0fd4496459811d76cbd162aa02f892bef2df8fdd9d84cdd88b578c5b7",
+        "custom-pixeagle/validation/mock_vehicle.py": "1bbd48f898dd06802ccdd529c8041b5b74b73fb73c9a59ac59b2ba9c0d6b1233",
+        "custom-pixeagle/validation/run-connection-smoke.sh": "d7a0e050589a59126c4bd838ded730ca386b776b69ed06a52424784d505bcc18",
+        "custom-pixeagle/validation/run-container.sh": "f2759475d16a6af836d87e1c3a27c564c1b048ef40065cacf3a2aaefeab6ba6e",
+        "test/PixEagle/CMakeLists.txt": "067536adbc30dc8485e59b6f50ab4cfb5f2fd25aa6b43bcf5e9b666743654b76",
+        "test/PixEagle/PixEagleClientTest.cc": "c9e8920aaf327f87b3506cf8e85f312cc800be6a105f534a4f8a2704dac04a62",
+        "test/PixEagle/PixEagleClientTest.h": "fa7da0cdecf01a9db0931422b51b4cb95bd3a131b31231e2a0c8e144ccc58cd9",
+        "test/PixEagle/PixEagleManagerTest.cc": "0638864e8a6c6679c4fc5acd9afadbe39265f3f8c2b25246d2a71b48a00d85e4",
+        "test/PixEagle/PixEagleManagerTest.h": "65c7f5ee02a64c18e90bf2b5a494e4e32000b59ef4aff926ea23555a15aecb2b",
+        "test/PixEagle/PixEagleTestServer.h": "31fecbea582b1b33388b8e55951d9fd1dd81b9e022379d284351821554568685"
+      }
+    },
+    "pixeagle": {
+      "path": "/home/alireza/PixEagle-qgc-integration",
+      "branch": "feature/qgc-native-integration",
+      "base_commit": "989d9662173b364de03b307f4208e9d0ca96451f",
+      "state": "local uncommitted changes preserved in source archive",
+      "source_sha256": {
+        "configs/config_default.yaml": "9123eda7b4e35fcd8dc7ceafa8e5177bcef2f006e1ffac12951728c5b591aeee",
+        "configs/config_schema.yaml": "7869a28b9a420ddcd10a141ab2bc1dd3719aaf1d88de8ddeed547440d3a4fff1",
+        "docs/agent-context/generated/pixeagle-openapi-tool-candidates.yaml": "4204e78f3668e7ec396b70bc1fd52ba65e5e7fec17873f52cfd1d0f396234ff8",
+        "docs/apis/api-security-policy.md": "a8fe43184c51ac35e6959e066737c6d139bb470922863f590c466f369039e51c",
+        "docs/apis/native-integration-context.md": "24caae6aa6c890f571a3afdc4fa48d2e940a8ddabb3f7870903ba9c1f777b195",
+        "docs/apis/route-inventory.md": "c1c67ef276ad7d036651ff57b392924576b063b8e465880389f04f56ee535a92",
+        "docs/core-app/03-api/README.md": "05bdc156fd11505b605f42274fb0a2498f85819f6caf3bcc59dc2b0a7cf09cf8",
+        "docs/reporting/agent-ops/codex-modernization/checkpoints/2026-09-21-qgc-native-baseline.md": "b7d60a59ac6e5eab50e64217a958ced52938fb22754b5ef7ad33e8144d48bc0d",
+        "docs/reporting/agent-ops/codex-modernization/checkpoints/2026-09-21-qgc-native-context.md": "3f63c3bcc6bbd9b7cac338ddb6a1e49bc2f5ef5fe200ff7cafc5315f16e2b5c0",
+        "docs/reporting/agent-ops/codex-modernization/issue-register.md": "6ff7ca7ce004fd4da13e0bab3df36de1a9999915d5b74529c99e5d4f73ec48a3",
+        "docs/reporting/agent-ops/codex-modernization/journal/2026-09-21-qgc-native-baseline.md": "073f381fbddb3da2972744a602a7a460280c5ca5e7d161d4f19e44fc825ffb88",
+        "docs/reporting/agent-ops/codex-modernization/journal/2026-09-21-qgc-native-context.md": "ae7d41ab125ec99ea209b30cf7761333ceb013c50b09abb20063361ff43fd8c1",
+        "scripts/generate_schema.py": "c90b238b65fef8dac198dcf4453dd8ad1a864b5dd0f7fdd8003c936ce135ac10",
+        "src/classes/aircraft_identity.py": "d3a27ecc2fe67c02f7bfacd3ee2741985dc1ebe0d38a649b0a200d9e84cafd71",
+        "src/classes/api_security_policy.py": "9ff24b736459f30712b30d81a7250d04be8338c7c15bb156769ed30e21187987",
+        "src/classes/api_v1_contracts.py": "722198a709810d83310d0dbd85a9132ea9fede015b1d5e91a91844736dff44eb",
+        "src/classes/api_v1_integration.py": "5fff7529180f7f8e1c57b2f65fbc4a0d5e1273a674d5e884fd11aa9debb44ce4",
+        "src/classes/api_v1_paths.py": "d6865de2d5a1b9f18df95e5d20ccd45da160c3bad71117ea4b24b8b9ff745b03",
+        "src/classes/app_controller.py": "a773443e72c3b500fd6d84f17b7ee8768ed0330be1fa8cf8902d8831817575b9",
+        "src/classes/fastapi_api_v1_routes.py": "231b7181ebb0e51422d7f6a0a59c41c8cde1f9073175ac4fc951aadfcd1f8121",
+        "src/classes/fastapi_handler.py": "0e5e8530328c05bd40eaade9fd053015bc9e8a7a8498cb8df19d6bd5107b4e72",
+        "src/classes/mavlink_data_manager.py": "1dd299e67ec967aa022e4d1a9b8eb303b9f4d1fcd7f5792463258cb1bc1f43c1",
+        "src/classes/px4_interface_manager.py": "0245d3d21dc9cc59fad4af81d2d64949dd3fdc92ea3ef75f8aeace2d836dde39",
+        "tests/test_api_route_inventory.py": "c5e0c90c33e4fa2c5ee774053401f96d81b3e07f9c354521a9b3d9887858b701",
+        "tests/test_api_tool_candidates.py": "b7ed7a26ad81ba010933b9b5ec91312c06de33ed1d49a571c798a940b9abc4e8",
+        "tests/unit/core_app/test_api_v1_integration.py": "40512952e3fdbba3114e37ab16c1bf0399104c87a0404c7e1c773b990c71223a",
+        "tests/unit/drone_interface/test_mavlink_data_manager.py": "b7f5629fdb75cbbbcc087ee526cdd8a462bc36bbcb732716322fd007a0c1ba2e",
+        "tools/generate_api_tool_candidates.py": "b77e075ecd10433a12e615897c67c6dbd32fc1af85f80260a2c757847c5bd3f3",
+        "tools/native_integration_fixture.py": "82adaaf268647129f0618e54dc24a672311584d88b418f219255cc049ab78516"
+      }
+    }
+  },
+  "results": {
+    "custom_debug_build": "passed",
+    "custom_release_build_and_interactive_connection": "passed",
+    "ctest_standard": {
+      "passed": 406,
+      "failed": 0,
+      "include": "Unit|Integration",
+      "exclude": "Flaky|Network",
+      "workers": 4
+    },
+    "stock_ui_targets": 3,
+    "jpeg_cases": 13,
+    "native_client_qt_passes_including_fixture": 67,
+    "native_manager_qt_passes_including_fixture": 4,
+    "final_copy_regression_ctest": {
+      "passed": 5,
+      "failed": 0
+    },
+    "backend_tests": 660,
+    "backend_native_tests": 43,
+    "schema_sections": 43,
+    "schema_parameters": 606,
+    "operator_reviews": "simulated; original and follow-up raw feedback preserved"
+  },
+  "limits": [
+    "Existing slice-0 lint and CI blockers remain",
+    "Linux mock-backed validation, no SITL/hardware/deployment",
+    "No authenticated integration video or target/following controls yet",
+    "Windows and Android not qualified"
+  ],
+  "artifacts": {
+    "slice-1-sources.tar.gz": "e5ffef72b13a856711b7f3cc0f89e9aa097ccabad63e29ecced234f10bcfbed2",
+    "custom-tests.xml": "f8585e7258d5517639ef3262cf0fad8a137fbb969e7bfd08d771291ce87c8e9c",
+    "custom-ctest-details.log": "31d64df86edc1096971ed1e70906a89a8d6ba3f120140968debd82bce294799a",
+    "copy-regression.xml": "9a1facc2bbf1629e2874d7ec593849ae10c75f9644e6e72f52fa6de5a8888095",
+    "jpeg-regression.log": "accecf88711c665d11ffd4facb5d7e18f4506a58e05f3619c908e851eb131fc4",
+    "ui-log-settings-check.json": "ba96612d21a211d9553741fff32cbe7bd4c6f5b919d5632a005e03889bd274e5",
+    "debug_binary": {
+      "path": "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl",
+      "sha256": "cce335a17e40ac49a2f44dff4f36f535f0c61ad94635e4311f5d36bd398a38f5"
+    },
+    "release_binary": {
+      "path": "/home/alireza/qgroundcontrol-pixeagle/build/pixeagle-custom-release/Release/PixEagle-QGroundControl",
+      "sha256": "205a656dcb1a98cec1f12c41bc56b5fc013ebf37e6b20993ab4c7cd9af21d8d9"
+    },
+    "backend_contracts-regression.xml": {
+      "path": "/home/alireza/PixEagle-qgc-integration/reports/qgc-slice1/contracts-regression.xml",
+      "sha256": "6634355cc8c29dba254b1efac976a9352e6118dc9fd8463018080b78bcda0c73"
+    },
+    "backend_schema.log": {
+      "path": "/home/alireza/PixEagle-qgc-integration/reports/qgc-slice1/schema.log",
+      "sha256": "b29903effd2648d139f58510c05c049b0fa6e61c588542985aa6c4ce84b90769"
+    }
+  }
+}
