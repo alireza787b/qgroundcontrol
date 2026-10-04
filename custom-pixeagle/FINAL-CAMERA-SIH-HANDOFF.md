@@ -4,6 +4,8 @@ This fresh profile uses the real Topotek camera at `192.168.0.108` and an
 isolated simulated PX4 multicopter. Keep real flight controllers disconnected.
 The camera image is independent of the simulated aircraft pose; this checkpoint
 qualifies operation and command delivery, not visual closed-loop convergence.
+The tested QGC binary is `build/pixeagle-custom-debug/Debug/PixEagle-QGroundControl`
+(SHA-256 `befdaf95130768541a7789da612a170af5e0d813de2c6ce67d89461cac84eaa9`).
 
 ## Configuration
 
