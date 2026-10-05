@@ -34,7 +34,7 @@ QJsonObject configState(const QJsonObject& context)
 struct ConfigHarness
 {
     ConfigHarness()
-        : client(nullptr, true)
+        : client(nullptr, false)
     {
         advertiseTargets(server.context, true);
         auto caps = server.context.value("capabilities").toArray();

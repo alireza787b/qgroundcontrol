@@ -46,7 +46,10 @@ QString tierLabel(const QString& tier)
 
 bool PixEagleClient::configAvailable() const
 {
-    return _readOnlyReady() && _context.value("capabilities").toArray().contains("config.operations.v1") &&
+    // Backend configuration is an authenticated PixEagle operation. It must
+    // remain available while a regular QGC client is waiting for PX4, because
+    // restart and pending-setting recovery do not dispatch aircraft commands.
+    return _sessionReady() && _context.value("capabilities").toArray().contains("config.operations.v1") &&
            _context.value("permissions").toObject().value("scopes").toArray().contains("config:read");
 }
 
@@ -464,7 +467,7 @@ void PixEagleClient::_recoverBackendRestart()
         emit configChanged();
         return;
     }
-    if (_authenticated && _readOnlyReady() && _context.value("runtime_id").toString() != _restartRuntime) {
+    if (_authenticated && _sessionReady() && _context.value("runtime_id").toString() != _restartRuntime) {
         if (configFresh()) {
             _restartAge.invalidate();
             _restartRecoveryTimer.stop();
