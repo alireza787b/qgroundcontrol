@@ -28,6 +28,17 @@ verification runs on the native Windows runner. Android runs Gradle lint and
 packages the configured PixEagle application ID
 `io.github.alireza787b.pixeagle.qgroundcontrol`.
 
+The 2026-10-05 qualification runs were dispatched from
+`feature/pixeagle-native-integration-upstream-2026-10-05`:
+
+- Run `37280978250` passed Linux and Android. Android forwards
+  `QGC_CUSTOM_DIR` to Qt's per-ABI sub-builds.
+- Run `37295499089` passed Windows after fetching QGC version tags before CPack.
+
+The Windows installer and Linux AppImage are unsigned test artifacts. The
+Android APK uses a temporary CI debug keystore. None is a store or production
+release artifact.
+
 If the workflow fails, retain the run URL, commit SHA, selected inputs, runner
 image, artifact checksums, and logs in the release checkpoint. A successful CI
 build proves compilation and packaging on that runner; it does not replace
