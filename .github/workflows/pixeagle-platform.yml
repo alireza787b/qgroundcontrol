@@ -228,15 +228,22 @@ jobs:
       - name: Prepare AppImage artifact
         id: appimage
         run: |
-          appimage_source="$(find "${RUNNER_TEMP}/build" -maxdepth 2 -type f -name '*.AppImage' -print -quit)"
-          if [[ -z "$appimage_source" ]]; then
+          appimage_path="${RUNNER_TEMP}/build/PixEagle-QGroundControl-x86_64.AppImage"
+          if [[ ! -s "$appimage_path" ]]; then
             echo "::error::No PixEagle AppImage was produced"
             exit 1
           fi
-          appimage_path="${RUNNER_TEMP}/build/PixEagle-QGroundControl-x86_64.AppImage"
-          cp "$appimage_source" "$appimage_path"
+          chmod +x "$appimage_path"
           (cd "$(dirname "$appimage_path")" && sha256sum "$(basename "$appimage_path")" > "$(basename "$appimage_path").sha256")
           echo "path=$appimage_path" >> "$GITHUB_OUTPUT"
+
+      - name: Verify packaged AppImage
+        uses: ./.github/actions/verify-executable
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: '1'
+        with:
+          binary-path: ${{ steps.appimage.outputs.path }}
+          type: appimage
 
       - name: Upload Linux artifact
         uses: actions/upload-artifact@v7
