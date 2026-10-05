@@ -113,7 +113,13 @@ set_target_properties(${CMAKE_PROJECT_NAME}
 # endif()
 
 # Forward Python3_EXECUTABLE so per-ABI sub-configures use the same interpreter (jinja2 lives in workspace .venv, not hostedtoolcache python).
-list(APPEND QT_ANDROID_MULTI_ABI_FORWARD_VARS QGC_STABLE_BUILD QT_HOST_PATH Python3_EXECUTABLE)
+list(
+    APPEND QT_ANDROID_MULTI_ABI_FORWARD_VARS
+           QGC_CUSTOM_DIR
+           QGC_STABLE_BUILD
+           QT_HOST_PATH
+           Python3_EXECUTABLE
+)
 
 # ----------------------------------------------------------------------------
 # Android OpenSSL Libraries
