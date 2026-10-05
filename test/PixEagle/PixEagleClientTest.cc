@@ -67,8 +67,8 @@ void PixEagleClientTest::_endpointPolicy_data()
     QTest::newRow("ipv4-loopback") << QStringLiteral("http://127.0.0.1:5077") << true;
     QTest::newRow("ipv6-loopback") << QStringLiteral("http://[::1]:5077") << true;
     QTest::newRow("localhost") << QStringLiteral("http://localhost:5077") << true;
-    QTest::newRow("remote-http") << QStringLiteral("http://192.0.2.1:5077") << false;
-    QTest::newRow("lookalike-localhost") << QStringLiteral("http://localhost.example:5077") << false;
+    QTest::newRow("remote-http-bench") << QStringLiteral("http://192.0.2.1:5077") << true;
+    QTest::newRow("remote-hostname") << QStringLiteral("http://companion.example:5077") << true;
     QTest::newRow("userinfo") << QStringLiteral("https://pilot:password@companion.example") << false;
     QTest::newRow("query-secret") << QStringLiteral("https://companion.example/?token=secret") << false;
     QTest::newRow("fragment") << QStringLiteral("https://companion.example/#secret") << false;

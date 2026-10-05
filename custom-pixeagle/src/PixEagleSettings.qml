@@ -47,7 +47,6 @@ Item {
             return;
         }
         destination.signInAtRemembered(address.text, username.text, password.text);
-        password.clear();
     }
 
     on_ClientChanged: {
@@ -159,7 +158,6 @@ Item {
                         onEditingFinished: {
                             if (root._client && !root._client.busy && !root._client.authenticated) {
                                 root._client.endpoint = text;
-                                text = root._client.endpoint;
                             }
                         }
                     }
@@ -603,7 +601,7 @@ Item {
 
                 QGCLabel {
                     Layout.fillWidth: true
-                    text: qsTr("For a backend on this computer, the usual address is http://127.0.0.1:5077. Remote connections require HTTPS. Use the final backend URL without /api/v1; keep any configured reverse-proxy prefix.")
+                    text: qsTr("The usual local address is http://127.0.0.1:5077. For a bench or private network, an HTTP address such as http://192.168.0.226:5077 is supported; use HTTPS for an untrusted network. Enter the final backend URL without /api/v1 and keep any configured reverse-proxy prefix.")
                     wrapMode: Text.WordWrap
                 }
 
@@ -692,6 +690,10 @@ Item {
 
         function onEndpointChanged() {
             address.text = root._client ? root._client.endpoint : "";
+        }
+
+        function onChanged() {
+            if (root._client && root._client.authenticated) password.clear();
         }
     }
 

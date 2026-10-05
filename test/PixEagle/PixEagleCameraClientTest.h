@@ -8,6 +8,7 @@ class PixEagleCameraClientTest : public UnitTest
 
 private slots:
     void _stalePollCannotReplacePostStopState();
+    void _contextConflictRefreshesWithoutOperatorError();
     void _automaticStopPreservesFailure();
     void _manualInputExpiry();
     void _manualLatestInputAndLongHold();
