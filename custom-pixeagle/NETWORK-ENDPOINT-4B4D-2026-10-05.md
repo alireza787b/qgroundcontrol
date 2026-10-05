@@ -1,7 +1,7 @@
 # Network endpoint and camera-control recovery checkpoint
 
 This checkpoint records the final repair applied after the Raspberry Pi bench
-session. It is based on QGC commit `9837c21d1` on
+session. It is based on the QGC commit that contains this checkpoint on
 `feature/pixeagle-native-integration-upstream-2026-10-05`.
 
 ## Operator-visible fixes
@@ -18,6 +18,11 @@ session. It is based on QGC commit `9837c21d1` on
   backend endpoint and uses port 3040 by default. An explicit dashboard URL is
   still available for a proxy or different port; it is not duplicated in the
   backend settings.
+- After authentication, video and target tracking are available in a
+  companion-only session when the backend advertises the unbound tracking
+  capability. A verified aircraft association is still required before QGC
+  can start following or dispatch any PixEagle aircraft command. This keeps
+  camera/video bench tests useful without weakening aircraft-command safety.
 - A camera command rejected because its source, target or camera generation
   changed is treated as synchronization. QGC retires the old gesture, refreshes
   the authoritative camera guard and shows a short refresh state. It does not
@@ -28,7 +33,8 @@ session. It is based on QGC commit `9837c21d1` on
 
 The local Release/Debug source build links successfully with the configured Qt
 6.11.1 toolchain and the host EGL library. The eight PixEagle QGC tests pass,
-including the new typed camera-context conflict regression. The exact focused
+including the media-without-aircraft and typed camera-context conflict
+regressions. The exact focused
 commands were:
 
 ```text

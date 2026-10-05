@@ -639,7 +639,7 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
         _pollTimer.start();
     }
     emit changed();
-    if (_readOnlyReady()) {
+    if (_sessionReady()) {
         _refreshRuntimeStatus();
         refreshTargetState();
         refreshFollowing();
@@ -877,7 +877,7 @@ QString PixEagleClient::diagnostics() const
 bool PixEagleClient::mediaAvailable() const
 {
     const auto video = _context.value("video").toObject();
-    return _readOnlyReady() && _context.value("capabilities").toArray().contains("video.frame_provenance.v1") &&
+    return _sessionReady() && _context.value("capabilities").toArray().contains("video.frame_provenance.v1") &&
            _context.value("permissions").toObject().value("scopes").toArray().contains("media:read") &&
            video.value("provenance_version").toString() == "1" && video.value("ws_path").toString() == "/ws/video_feed";
 }
@@ -920,6 +920,11 @@ QString PixEagleClient::mediaOrigin() const
 bool PixEagleClient::_readOnlyReady() const
 {
     return _enabled && _authenticated && !_context.isEmpty() && (_companionOnly || associationVerified());
+}
+
+bool PixEagleClient::_sessionReady() const
+{
+    return _enabled && _authenticated && !_context.isEmpty();
 }
 
 void PixEagleClient::_refreshRuntimeStatus()
@@ -1579,7 +1584,7 @@ bool PixEagleClient::_postFollowingAction(const QString& action, QJsonObject bod
 bool PixEagleClient::_targetReadReady() const
 {
     const auto scopes = _context.value("permissions").toObject().value("scopes").toArray();
-    return _readOnlyReady() && _context.value("capabilities").toArray().contains("target.operations.v1") &&
+    return _sessionReady() && _context.value("capabilities").toArray().contains("target.operations.v1") &&
            scopes.contains("status:read") && scopes.contains("telemetry:read");
 }
 
@@ -1628,14 +1633,20 @@ bool PixEagleClient::_mutationDestinationReady() const
     if (!targetStateFresh() || targetMutationPending()) {
         return false;
     }
-    if (_companionOnly) {
-        const auto command = _context.value("command").toObject().value("connected");
-        const auto telemetry = _context.value("telemetry").toObject().value("connected");
-        return command.isBool() && telemetry.isBool() &&
-               ((!command.toBool() && !telemetry.toBool()) ||
-                _context.value("capabilities").toArray().contains("target.unbound_tracking.v1"));
+    if (associationVerified()) {
+        return true;
     }
-    return associationVerified();
+    const auto command = _context.value("command").toObject().value("connected");
+    const auto telemetry = _context.value("telemetry").toObject().value("connected");
+    if (!command.isBool() || !telemetry.isBool()) {
+        return false;
+    }
+    if (_companionOnly) {
+        return (!command.toBool() && !telemetry.toBool()) ||
+               _context.value("capabilities").toArray().contains("target.unbound_tracking.v1");
+    }
+    return !command.toBool() && !telemetry.toBool() &&
+           _context.value("capabilities").toArray().contains("target.unbound_tracking.v1");
 }
 
 void PixEagleClient::_clearTargetState()
@@ -1771,7 +1782,7 @@ bool PixEagleClient::_acceptTargetState(const QJsonObject& data)
             return false;
         }
     }
-    if (!_companionOnly &&
+    if (associationVerified() &&
         (guard.value("aircraft_uid").toString() != _aircraftUid || guard.value("system_id").toInt(-1) != _systemId ||
          guard.value("component_id") != telemetry.value("component_id"))) {
         return false;
@@ -1784,7 +1795,7 @@ bool PixEagleClient::_acceptTargetState(const QJsonObject& data)
 
 bool PixEagleClient::_modelReadReady() const
 {
-    return _readOnlyReady() && _context.value("capabilities").toArray().contains("models.operations.v1") &&
+    return _sessionReady() && _context.value("capabilities").toArray().contains("models.operations.v1") &&
            _context.value("permissions").toObject().value("scopes").toArray().contains("models:read");
 }
 
@@ -2013,7 +2024,10 @@ bool PixEagleClient::_submitAction(const QString& action, QJsonObject body, cons
     QJsonObject guard = capturedGuard;
     guard.remove("_client_generation");
     guard.remove("_client_context");
-    QJsonObject nativeContext{{"guard", guard}, {"binding_mode", _companionOnly ? "companion_only" : "vehicle"}};
+    // A regular QGC client may be signed in before PX4 is connected. In that state
+    // target actions are explicitly unbound tracking; aircraft following remains
+    // association-gated by the backend.
+    QJsonObject nativeContext{{"guard", guard}, {"binding_mode", associationVerified() ? "vehicle" : "companion_only"}};
     if (body.contains("frame")) {
         nativeContext.insert("frame", body.take("frame"));
     }

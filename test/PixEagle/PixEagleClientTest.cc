@@ -1112,6 +1112,25 @@ void PixEagleClientTest::_companionVideoWithoutAircraft()
     QVERIFY(second.mediaAvailable());
 }
 
+void PixEagleClientTest::_mediaWithoutAircraftAssociation()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseMedia(server.context);
+    server.context.insert("command", QJsonObject{{"connected", false}, {"connection_generation", "0"}});
+    server.context.insert("telemetry", QJsonObject{{"connected", false}, {"connection_generation", "0"}});
+    server.context.insert("association", QJsonObject{{"verified", false}});
+    server.context.insert("readiness", QJsonObject{{"connection_ready", false}, {"following_allowed", false}});
+
+    PixEagleClient client;
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
+    QVERIFY(!client.associationVerified());
+    QVERIFY(!client.canStartFollowing());
+    QCOMPARE(client.mediaUrl().toString(), server.endpoint("/ws/video_feed").replace("http:", "ws:"));
+}
+
 void PixEagleClientTest::_companionTracksWithAircraftButCannotFollow()
 {
     CompanionServer server;
@@ -1185,8 +1204,8 @@ void PixEagleClientTest::_mediaRequiresAssociationAndPermissions()
     PixEagleClient client;
     configure(client, server);
     QVERIFY(signIn(client));
-    QVERIFY(!client.mediaAvailable());
-    QVERIFY(client.mediaCookie().isEmpty());
+    QVERIFY(client.mediaAvailable());
+    QVERIFY(!client.mediaCookie().isEmpty());
     QVERIFY(verify(client));
     QVERIFY(client.mediaAvailable());
     auto permissions = server.context.value("permissions").toObject();
@@ -1207,7 +1226,7 @@ void PixEagleClientTest::_mediaRequiresAssociationAndPermissions()
     server.context.insert("runtime_id", "replacement-runtime");
     client.refresh();
     QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), TestTimeout::mediumMs());
-    QVERIFY(!client.mediaAvailable());
+    QVERIFY(client.mediaAvailable());
     QVERIFY(!client.associationVerified());
 }
 

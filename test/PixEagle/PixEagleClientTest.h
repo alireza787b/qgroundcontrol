@@ -40,6 +40,7 @@ private slots:
     void _credentialsStayOutOfSettings();
     void _rememberSignInPreferenceIsPerEndpoint();
     void _companionVideoWithoutAircraft();
+    void _mediaWithoutAircraftAssociation();
     void _companionTracksWithAircraftButCannotFollow();
     void _companionCanChooseFollowerWithoutStarting();
     void _mediaRequiresAssociationAndPermissions();
