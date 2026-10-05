@@ -70,6 +70,10 @@ jobs:
           build-type: ${{ inputs.build_type }}
           cache-variant: pixeagle
 
+      - name: Fetch QGC version tags
+        shell: bash
+        run: git fetch --force --tags https://github.com/mavlink/qgroundcontrol.git
+
       - name: Configure
         uses: ./.github/actions/cmake-configure
         with:
