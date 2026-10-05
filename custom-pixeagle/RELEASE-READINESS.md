@@ -5,7 +5,9 @@
 The isolated branch `feature/pixeagle-native-integration-upstream-2026-10-05`
 is based on upstream QGroundControl commit
 `ece1cda9642c1591fd6f97b2349671d50fa14df0`, merged through `2ca8f2902`,
-with the custom video-inset merge repair at `1f9efbe27`. The original
+with the custom video-inset merge repair at `1f9efbe27`. The current branch
+also contains Android multi-ABI overlay forwarding at `fff177410` and the
+Windows version-tag packaging repair at `f719302e3`. The original
 `feature/pixeagle-native-integration` worktree remains unchanged and dirty
 edits were not staged. No QGC push or PR was created.
 
@@ -24,8 +26,14 @@ not suppressed as a product result.
 The Release executable and DEB were built from the same commit. Their SHA-256
 values are recorded in the generated artifact manifest. The package uses the
 existing isolated `libxcb-cursor0` extraction only for dependency discovery;
-the host package was not installed. Windows and Android remain CI-only until a
-write-enabled GitHub Actions run is available.
+the host package was not installed. Windows and Android were built by the
+qualified GitHub Actions runs recorded below; platform installation,
+upgrade/removal and operator acceptance remain open.
+
+The PixEagle platform workflow completed successfully in two runs: Linux and
+Android in `37280978250`, and Windows in `37295499089`. The artifacts are
+retained in the private Desktop qualification bundle and are not published as
+a GitHub Release or store package.
 
 The latest-upstream Linux build also hardens the GPU context registry for a
 zero-cache-path configuration and accepts an explicit private runtime-library
@@ -124,7 +132,9 @@ The final package was then generated reproducibly with the pinned library kept
 as a private CPack dependency-search path and an explicit `libxcb-cursor0`
 package dependency; no system package was installed. The current artifact is
 `build/pixeagle-custom-release/pixeagle-qgroundcontrol_5.2.0-38.ge10e53f3f_amd64.deb`.
-Windows and Android artifacts have not been built.
+The hosted Windows and Android artifacts are recorded in the platform-CI
+checkpoint above; they use unsigned/test signing and still require platform
+installation and operator checks.
 
 Preserve unrelated local edits and the separate clean PixEagle `main` checkout.
 Keep generic QGC fixes (for example native package parameterization) distinct
