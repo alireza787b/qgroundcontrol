@@ -110,7 +110,6 @@ Item {
             id:         videoControl
             pipView:    _pipView
             toolInsets: customOverlay.totalToolInsets
-            toolInsets: customOverlay.totalToolInsets
         }
 
         PipView {
