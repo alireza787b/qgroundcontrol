@@ -302,7 +302,7 @@ QString PixEagleVideoController::ownerText() const
 
 QString PixEagleVideoController::statusText() const
 {
-    if (!_client || (!_client->companionOnly() && !_client->associationVerified()) || !_client->authenticated()) {
+    if (!_client || !_client->authenticated()) {
         return _client ? _client->statusText() : tr("Connect a vehicle to QGC.");
     }
     if (!_client->mediaAvailable()) {

@@ -14,7 +14,6 @@ Item {
     readonly property var _client: QGroundControl.corePlugin.pixeagle.activeClient
     readonly property var trackingController: _controller ? _controller.targets : null
     readonly property bool _connectionReady: !!_client && _client.authenticated
-                                             && (_client.companionOnly || _client.associationVerified)
     readonly property bool _needsVerification: !!_client && _client.authenticated
                                                && !_client.companionOnly && !_client.associationVerified
     readonly property bool _compact: compactView

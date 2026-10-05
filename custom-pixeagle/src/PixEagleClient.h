@@ -276,6 +276,7 @@ private:
     void _clearContext();
     void _refreshRuntimeStatus();
     bool _readOnlyReady() const;
+    bool _sessionReady() const;
     bool _targetReadReady() const;
     bool _modelReadReady() const;
     bool _mutationDestinationReady() const;
