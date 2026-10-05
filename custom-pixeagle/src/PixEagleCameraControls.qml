@@ -302,6 +302,7 @@ PixEagleMovablePanel {
             visible: text.length > 0
             text: root._notice || (root.client ? root.client.cameraError : "")
                   || (root.client && root.client.cameraManualState === "preparing" ? qsTr("Taking manual control…") : "")
+                  || (root.client && root.client.cameraManualState === "refreshing" ? qsTr("Refreshing camera controls…") : "")
                   || (!root._ready && !root._gestureActive
                       ? qsTr("Camera unavailable") : "")
             color: root._notice.length > 0 || (root.client && root.client.cameraError.length > 0)
@@ -327,6 +328,7 @@ PixEagleMovablePanel {
                     root.endGesture(true)
             }
             if (root._gestureActive && root.client && root.client.cameraError.length > 0) root.endGesture(true)
+            if (root._gestureActive && root.client && root.client.cameraManualState === "refreshing") root.endGesture(true)
             if (root._oneShot && root.client && !root.client.cameraActionPending && root.client.cameraError.length === 0) {
                 root._oneShot = false
                 root._gestureActive = false

@@ -198,6 +198,9 @@ void PixEagleClient::refreshCamera()
                     age.elapsed() < CAMERA_TIMEOUT_MS && _acceptCameraStatus(QJsonDocument::fromJson(bytes).object())) {
                     _cameraAge = age;
                     _cameraExpiryTimer.start(CAMERA_FRESH_MS - static_cast<int>(age.elapsed()));
+                    if (_cameraManualState == QStringLiteral("refreshing")) {
+                        _cameraManualState.clear();
+                    }
                 } else {
                     _cameraAge.invalidate();
                     _cameraExpiryTimer.stop();
@@ -412,6 +415,32 @@ bool PixEagleClient::_postCameraAction(QJsonObject body, bool stop)
                                        data.value("action_type") == "gimbal_control" &&
                                        data.value("idempotency_key") == id && data.value("executed").toBool();
             const bool cancelled = envelopeValid && result.value("reason") == "camera_control_interrupted";
+            const QString errorCode = data.value("code").toString();
+            const QString errorDetail = data.value("detail").toString();
+            const bool staleContext = !stop && status == 409 && bytes.size() <= CAMERA_MAX_BYTES &&
+                                      (errorCode == QStringLiteral("camera_context_conflict") ||
+                                       errorDetail.startsWith(QStringLiteral("Camera, source or target changed.")) ||
+                                       errorDetail.startsWith(QStringLiteral("Camera owner changed.")));
+            if (staleContext) {
+                // A Stop or source transition can retire a context between the status poll and
+                // the next input. The backend rejects that input before transmission; discard
+                // the gesture and refresh the authoritative guard instead of alarming the pilot.
+                qCDebug(PixEagleCameraLog) << "Camera context retired; refreshing before accepting input";
+                _cameraError.clear();
+                _cameraRenewTimer.stop();
+                _cameraGestureId.clear();
+                _cameraBeginAccepted = false;
+                _cameraManualState = QStringLiteral("refreshing");
+                _cameraInputAge.invalidate();
+                _cameraCapturedGuard = {};
+                _cameraCapturedContext.clear();
+                ++_cameraCommandGeneration;
+                _cameraAge.invalidate();
+                _cameraExpiryTimer.stop();
+                emit cameraChanged();
+                refreshCamera();
+                return;
+            }
             if (!cancelled && (!envelopeValid || data.value("status") != "success" ||
                                (manual && (manualResult.value("gesture_id") != gesture ||
                                            manualResult.value("sequence") != sequence)))) {

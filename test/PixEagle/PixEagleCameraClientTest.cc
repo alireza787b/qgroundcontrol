@@ -364,6 +364,24 @@ void PixEagleCameraClientTest::_stalePollCannotReplacePostStopState()
     QCOMPARE(cameraOperationCount(test.server, "stop"), 1);
 }
 
+void PixEagleCameraClientTest::_contextConflictRefreshesWithoutOperatorError()
+{
+    CameraHarness test;
+    QVERIFY(test.start());
+    test.server.overrides.insert(CONTROL_PATH, {409,
+                                                {{"code", "camera_context_conflict"},
+                                                 {"detail", "Camera, source or target changed. Refresh camera state."}},
+                                                {}});
+
+    const auto context = test.client.captureCameraContext();
+    QVERIFY(test.client.cameraStep("pan", 1, context));
+    QTRY_VERIFY_WITH_TIMEOUT(!test.client.cameraActionPending(), TestTimeout::mediumMs());
+    QVERIFY(test.client.cameraError().isEmpty());
+    QTRY_VERIFY_WITH_TIMEOUT(test.client.cameraFresh(), TestTimeout::mediumMs());
+    QTRY_VERIFY_WITH_TIMEOUT(test.client.cameraManualState().isEmpty(), TestTimeout::mediumMs());
+    QCOMPARE(cameraOperationCount(test.server, "pan"), 1);
+}
+
 void PixEagleCameraClientTest::_automaticStopPreservesFailure()
 {
     CameraHarness test;

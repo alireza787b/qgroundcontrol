@@ -8,7 +8,6 @@
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
 #include <QtCore/QUuid>
-#include <QtNetwork/QHostAddress>
 #include <QtNetwork/QNetworkAccessManager>
 #include <QtNetwork/QNetworkCookie>
 #include <QtNetwork/QNetworkCookieJar>
@@ -100,11 +99,8 @@ PixEagleClient::~PixEagleClient()
 bool PixEagleClient::validateEndpoint(const QString& text, QUrl* result)
 {
     QUrl url(text.trimmed(), QUrl::StrictMode);
-    const QHostAddress address(url.host());
-    const bool loopback = address.isLoopback() || url.host().compare("localhost", Qt::CaseInsensitive) == 0;
     if (!url.isValid() || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment() ||
-        (url.scheme() != "https" && !(url.scheme() == "http" && loopback)) || url.port() == 0 ||
-        url.path().contains('\\')) {
+        (url.scheme() != "https" && url.scheme() != "http") || url.port() == 0 || url.path().contains('\\')) {
         return false;
     }
     const QStringList segments = url.path().split('/');
@@ -126,7 +122,7 @@ void PixEagleClient::setEndpoint(const QString& text)
 {
     QUrl url;
     if (!validateEndpoint(text.trimmed().isEmpty() ? defaultEndpoint() : text, &url)) {
-        _error = tr("Enter an HTTPS address, or HTTP on localhost, without credentials, query or fragment.");
+        _error = tr("Enter an HTTP or HTTPS address without credentials, query or fragment.");
         emit changed();
         return;
     }
@@ -441,7 +437,7 @@ void PixEagleClient::signInAt(const QString& endpoint, const QString& username, 
     }
     const QString destination = endpoint.trimmed().isEmpty() ? defaultEndpoint() : endpoint;
     if (!validateEndpoint(destination)) {
-        _error = tr("Enter an HTTPS address, or HTTP on localhost, without credentials, query or fragment.");
+        _error = tr("Enter an HTTP or HTTPS address without credentials, query or fragment.");
         emit changed();
         return;
     }
