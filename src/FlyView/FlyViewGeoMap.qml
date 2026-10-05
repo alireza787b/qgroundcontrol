@@ -13,6 +13,7 @@ import QtPositioning
 
 import QGroundControl
 import QGroundControl.Controls
+import QGroundControl.FlightMap
 import QGroundControl.GeoMap
 
 /// Fly-view 2D/3D map: the GeoMap-engine counterpart of FlyViewMap.
@@ -44,7 +45,7 @@ GeoMap {
 
     function _updateActiveVehicleHomeTerrainBias() {
         if (root.surfaceModel && root._activeVehicle && root._activeVehicle.homePosition.isValid && !isNaN(root._activeVehicle.homePosition.altitude)) {
-            root._activeVehicleHomeTerrainBias = root.surfaceModel.terrainHeightAt(root._activeVehicle.homePosition) - root._activeVehicle.homePosition.altitude
+            root._activeVehicleHomeTerrainBias = root.surfaceModel.terrainDataHeightAt(root._activeVehicle.homePosition) - root._activeVehicle.homePosition.altitude
         } else {
             root._activeVehicleHomeTerrainBias = 0
         }
@@ -94,10 +95,23 @@ GeoMap {
         return QtPositioning.coordinate(coord.latitude, coord.longitude)
     }
 
+    property var _missionItemSelectionPanel: null
+
+    function _confirmSetWaypoint(sequenceNumber) {
+        globals.guidedControllerFlyView.confirmAction(globals.guidedControllerFlyView.actionSetWaypoint,
+                                                      Math.max(sequenceNumber, 1))
+    }
+
+    function _closeMissionItemSelectionPanel() {
+        if (_missionItemSelectionPanel) {
+            _missionItemSelectionPanel.close()
+        }
+    }
+
     Connections {
         target: root.surfaceModel
 
-        function onTerrainHeightsChanged() {
+        function onTerrainDataChanged() {
             root._updateActiveVehicleHomeTerrainBias()
         }
     }
@@ -154,8 +168,42 @@ GeoMap {
         homeTerrainBias: root._activeVehicleHomeTerrainBias
         // Same action as PlanMapItems in the QtLocation fly view: clicking a
         // marker adjusts the vehicle's current mission item (after confirm)
-        onItemClicked: (item) => globals.guidedControllerFlyView.confirmAction(
-            globals.guidedControllerFlyView.actionSetWaypoint, Math.max(item.sequenceNumber, 1))
+        onItemClicked: (item) => root._confirmSetWaypoint(item.sequenceNumber)
+        onGroupClicked: (items, marker) => {
+            root._closeMissionItemSelectionPanel()
+            const topLeft = marker.mapToItem(globals.parent, 0, 0)
+            root._missionItemSelectionPanel = missionItemSelectionPanelComponent.createObject(mainWindow, {
+                clickRect: Qt.rect(topLeft.x, topLeft.y, marker.width, marker.height),
+                groupItems: items
+            })
+            if (root._missionItemSelectionPanel) {
+                root._missionItemSelectionPanel.open()
+            }
+        }
+        onGroupsInvalidated: root._closeMissionItemSelectionPanel()
+    }
+
+    // The picker lists the old mission's items: close it when the mission is replaced
+    Connections {
+        target: root._missionController
+
+        function onVisualItemsReset() { root._closeMissionItemSelectionPanel() }
+    }
+
+    Component {
+        id: missionItemSelectionPanelComponent
+
+        MissionItemSelectionPanel {
+            id: missionItemSelectionPanel
+
+            onItemSelected: (sequenceNumber) => root._confirmSetWaypoint(sequenceNumber)
+            onClosed: {
+                if (root._missionItemSelectionPanel === missionItemSelectionPanel) {
+                    root._missionItemSelectionPanel = null
+                }
+                destroy()
+            }
+        }
     }
 
     GeoMapMissionDirectionArrows {
@@ -163,6 +211,19 @@ GeoMap {
         surfaceModel: root.surfaceModel
         missionController: root._missionController
         homeTerrainBias: root._activeVehicleHomeTerrainBias
+    }
+
+    // Allow custom builds to add map items (QGCCorePlugin::customGeoMapItems)
+    Repeater {
+        model: QGroundControl.corePlugin.customGeoMapItems
+
+        Loader {
+            Component.onCompleted: setSource(object.url, {
+                customMapObject: object,
+                scene: root.scene,
+                surfaceModel: root.surfaceModel
+            })
+        }
     }
 
     GeoMapGeoFenceVisuals {
@@ -232,16 +293,18 @@ GeoMap {
         }
     }
 
-    // GoTo Location forward flight circle visuals (FlyViewMap parity, outline
-    // only: no drag-to-edit radius on the GeoMap engine yet)
-    GeoMapCircle {
+    // GoTo Location forward flight circle visuals
+    GeoMapCircleVisuals {
         id: fwdFlightGotoMapCircle
+        objectName: "flyViewGeoFwdFlightGotoCircle"
         scene: root.scene
         surfaceModel: root.surfaceModel
-        center: _fwdFlightGotoCircleModel.center
-        radiusMeters: _fwdFlightGotoCircleModel.radius.rawValue
+        mapCircle: _fwdFlightGotoCircleModel
+        radiusLabelVisible: true
+        // Only the radius is editable, not the position
+        centerDragHandleVisible: false
         // Loiter happens at the goto altitude (carried in the center coordinate)
-        altitudeMode: (center && !isNaN(center.altitude)) ? GeoMapItem.Absolute : GeoMapItem.ClampToGround
+        altitudeMode: !isNaN(_fwdFlightGotoCircleModel.center.altitude) ? GeoMapItem.Absolute : GeoMapItem.ClampToGround
         // PX4 ignores the commanded loiter radius (flies NAV_LOITER_RAD), so the circle size is unknown
         visible: gotoLocationItem.visible && root._activeVehicle &&
                  !root._activeVehicle.px4Firmware &&
@@ -308,6 +371,7 @@ GeoMap {
     // GoTo Location visuals
     GeoMapMissionLabel {
         id: gotoLocationItem
+        objectName: "flyViewGeoGotoLocation"
         scene: root.scene
         surfaceModel: root.surfaceModel
         visible: false
@@ -366,17 +430,17 @@ GeoMap {
         }
     }
 
-    // Orbit editing visuals (outline only: no drag-to-edit radius on the
-    // GeoMap engine yet, the confirm slider still sets the altitude)
-    GeoMapCircle {
+    // Orbit editing visuals
+    GeoMapCircleVisuals {
         id: orbitMapCircle
+        objectName: "flyViewGeoOrbitCircle"
         scene: root.scene
         surfaceModel: root.surfaceModel
-        center: _orbitCircleModel.center
-        radiusMeters: _orbitCircleModel.radius.rawValue
-        altitudeMode: (center && !isNaN(center.altitude)) ? GeoMapItem.Absolute : GeoMapItem.ClampToGround
+        mapCircle: _orbitCircleModel
+        altitudeMode: !isNaN(_orbitCircleModel.center.altitude) ? GeoMapItem.Absolute : GeoMapItem.ClampToGround
         visible: false
 
+        property alias center: _orbitCircleModel.center
         property alias clockwiseRotation: _orbitCircleModel.clockwiseRotation
         readonly property real defaultRadius: 30
 
@@ -416,7 +480,7 @@ GeoMap {
 
         QGCMapCircle {
             id: _orbitCircleModel
-            interactive: false
+            interactive: true
             radius.rawValue: 30
             showRotation: true
             clockwiseRotation: true

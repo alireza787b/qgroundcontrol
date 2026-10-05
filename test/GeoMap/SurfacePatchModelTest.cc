@@ -1,9 +1,10 @@
 #include "SurfacePatchModelTest.h"
 
-#include <QtCore/QPointF>
-#include <QtTest/QSignalSpy>
-
 #include <cmath>
+
+#include <QtCore/QPointF>
+#include <QtCore/QtNumeric>
+#include <QtTest/QSignalSpy>
 
 #include "GeoMapCamera.h"
 #include "GeoScene.h"
@@ -329,6 +330,7 @@ void SurfacePatchModelTest::_terrainHeightAt()
     // No scene/camera: no field, well-defined zero
     SurfacePatchModel model;
     QCOMPARE(model.terrainHeightAt(kCenter), 0.0);
+    QCOMPARE(model.terrainDataHeightAt(kCenter), 0.0);
 
     GeoMapCamera camera;
     GeoScene scene;
@@ -346,6 +348,142 @@ void SurfacePatchModelTest::_terrainHeightAt()
     QVERIFY(model.heightField()->insertTile(key, grid));
     QCOMPARE(model.terrainHeightAt(kCenter), 100.0);
     QCOMPARE_GE(heightsSpy.count(), 1);
+
+    // Heights follow the drawn mesh, not the raw field: a higher east
+    // neighbor lifts the easternmost patch's interior via the edge blend
+    QCOMPARE_GT(model.rowCount(), 0);
+    int edgeRow = 0;
+    TileMath::TileKey edgeKey;
+    for (int row = 0; row < model.rowCount(); row++) {
+        const QModelIndex idx = model.index(row);
+        const TileMath::TileKey rowKey{model.data(idx, SurfacePatchModel::TileXRole).toInt(),
+                                       model.data(idx, SurfacePatchModel::TileYRole).toInt(),
+                                       model.data(idx, SurfacePatchModel::ZoomRole).toInt()};
+        if ((row == 0) || ((TileMath::tileMinCorner(rowKey).x() + TileMath::tileSpanAtZoom(rowKey.zoom)) >
+                           (TileMath::tileMinCorner(edgeKey).x() + TileMath::tileSpanAtZoom(edgeKey.zoom)))) {
+            edgeRow = row;
+            edgeKey = rowKey;
+        }
+    }
+    const int gridSize = model.gridSize();
+    const int vertexRow = gridSize / 2;
+    const int vertexCol = gridSize - 1;
+    const double span = TileMath::tileSpanAtZoom(edgeKey.zoom);
+    const double cell = span / gridSize;
+    const QPointF minCorner = TileMath::tileMinCorner(edgeKey);
+    const QGeoCoordinate vertex =
+        TileMath::worldToGeo(QPointF(minCorner.x() + (vertexCol * cell), (minCorner.y() + span) - (vertexRow * cell)));
+
+    double heightAtSignal = qQNaN();
+    connect(&model, &SurfacePatchModel::terrainHeightsChanged, this,
+            [&]() { heightAtSignal = model.terrainHeightAt(vertex); });
+    QVERIFY(model.heightField()->insertTile(TileMath::TileKey{0, 0, 0}, uniformGrid(100.0f)));
+    QVERIFY(model.heightField()->insertTile(TileMath::TileKey{edgeKey.x + 1, edgeKey.y, edgeKey.zoom},
+                                            uniformGrid(110.0f)));
+
+    const auto heights = model.data(model.index(edgeRow), SurfacePatchModel::HeightsRole).value<QList<float>>();
+    const double meshHeight = heights.at((vertexRow * (gridSize + 1)) + vertexCol);
+    QCOMPARE_GT(meshHeight, model.heightField()->heightAt(TileMath::geoToWorld(vertex)));
+    QCOMPARE_LT(std::abs(model.terrainHeightAt(vertex) - meshHeight), 1e-3);
+    QCOMPARE_LT(std::abs(heightAtSignal - meshHeight), 1e-3);
+
+    // The data estimate ignores what is drawn, so camera and datum math cannot depend on the patch set
+    QCOMPARE(model.terrainDataHeightAt(vertex), model.heightField()->heightAt(TileMath::geoToWorld(vertex)));
+    QCOMPARE(model.terrainDataHeightAt(QGeoCoordinate()), 0.0);
+
+    // Beyond the resident patches nothing is drawn: the field answers
+    const QGeoCoordinate farAway(-40.0, -120.0);
+    QCOMPARE(model.terrainHeightAt(farAway), model.heightField()->heightAt(TileMath::geoToWorld(farAway)));
+}
+
+// Consumers of terrainDataHeightAt re-query on terrainDataChanged, so it must
+// not fire for patch churn, which changes only the drawn mesh
+void SurfacePatchModelTest::_terrainDataChangedOnlyOnFieldChanges()
+{
+    GeoMapCamera camera;
+    GeoScene scene;
+    SurfacePatchModel model;
+    setupCamera(camera);
+    QSignalSpy dataSpy(&model, &SurfacePatchModel::terrainDataChanged);
+
+    // A new field replaces every answer
+    attach(model, scene, camera);
+    QCOMPARE_GT(dataSpy.count(), 0);
+
+    // The event loop never spins, so the flat source's tiles stay queued and
+    // the pan below only churns patches
+    dataSpy.clear();
+    QSignalSpy heightsSpy(&model, &SurfacePatchModel::terrainHeightsChanged);
+    camera.setCenter(QGeoCoordinate(47.42, 8.58));
+    model.drainUpdates();
+    QCOMPARE_GT(heightsSpy.count(), 0);
+    QCOMPARE(dataSpy.count(), 0);
+
+    QVERIFY(model.heightField()->insertTile(TileMath::TileKey{0, 0, 0}, uniformGrid(100.0f)));
+    QCOMPARE_GT(dataSpy.count(), 0);
+}
+
+void SurfacePatchModelTest::_segmentBelowTerrain_data()
+{
+    QTest::addColumn<double>("fromAltitude");
+    QTest::addColumn<double>("toAltitude");
+    QTest::addColumn<double>("ignoreStartMeters");
+    QTest::addColumn<double>("ignoreEndMeters");
+    QTest::addColumn<double>("legMeters");
+    QTest::addColumn<int>("hillZoom");  // 300 m tile on the leg, 0 = none
+    QTest::addColumn<double>("hillOffsetMeters");  // hill position past the leg midpoint
+    QTest::addColumn<bool>("belowTerrain");
+
+    // Ground is 100 m everywhere
+    QTest::addRow("level above ground") << 150.0 << 150.0 << 0.0 << 0.0 << 2000.0 << 0 << 0.0 << false;
+    QTest::addRow("touching the ground is clear") << 100.0 << 100.0 << 0.0 << 0.0 << 2000.0 << 0 << 0.0 << false;
+    QTest::addRow("ends below ground") << 150.0 << 99.9 << 0.0 << 0.0 << 2000.0 << 0 << 0.0 << true;
+    QTest::addRow("starts below ground") << 99.9 << 150.0 << 0.0 << 0.0 << 2000.0 << 0 << 0.0 << true;
+    QTest::addRow("takeoff start ignored") << 99.9 << 150.0 << 10.0 << 0.0 << 2000.0 << 0 << 0.0 << false;
+    QTest::addRow("land end ignored") << 150.0 << 99.9 << 0.0 << 10.0 << 2000.0 << 0 << 0.0 << false;
+    QTest::addRow("ignore at the other end") << 150.0 << 99.9 << 10.0 << 0.0 << 2000.0 << 0 << 0.0 << true;
+    QTest::addRow("hill mid-leg") << 200.0 << 200.0 << 0.0 << 0.0 << 2000.0 << 17 << 0.0 << true;
+    QTest::addRow("clears the hill") << 400.0 << 400.0 << 0.0 << 0.0 << 2000.0 << 17 << 0.0 << false;
+    QTest::addRow("no altitude") << qQNaN() << 50.0 << 0.0 << 0.0 << 2000.0 << 0 << 0.0 << false;
+    // ~50 m ridge between 250 m samples: a mission path piece must keep 30 m spacing (PR 15248 review)
+    QTest::addRow("narrow ridge on a 50 km leg") << 200.0 << 200.0 << 0.0 << 0.0 << 50000.0 << 19 << 125.0 << true;
+}
+
+void SurfacePatchModelTest::_segmentBelowTerrain()
+{
+    QFETCH(double, fromAltitude);
+    QFETCH(double, toAltitude);
+    QFETCH(double, ignoreStartMeters);
+    QFETCH(double, ignoreEndMeters);
+    QFETCH(double, legMeters);
+    QFETCH(int, hillZoom);
+    QFETCH(double, hillOffsetMeters);
+    QFETCH(bool, belowTerrain);
+
+    QGeoCoordinate from = kCenter.atDistanceAndAzimuth(legMeters / 2.0, 270);
+    QGeoCoordinate to = kCenter.atDistanceAndAzimuth(legMeters / 2.0, 90);
+    from.setAltitude(fromAltitude);
+    to.setAltitude(toAltitude);
+
+    // No field without a camera: nothing to collide with
+    SurfacePatchModel model;
+    QVERIFY(!model.segmentBelowTerrain(from, to, ignoreStartMeters, ignoreEndMeters));
+
+    // The event loop never spins: the flat source's zero tiles stay queued
+    GeoMapCamera camera;
+    GeoScene scene;
+    setupCamera(camera);
+    attach(model, scene, camera);
+    QVERIFY(model.heightField()->insertTile(TileMath::TileKey{0, 0, 0}, uniformGrid(100.0f)));
+    if (hillZoom > 0) {
+        // On the sampled mercator chord, not the geodesic
+        const QPointF fromWorld = TileMath::geoToWorld(from);
+        const QPointF toWorld = TileMath::geoToWorld(to);
+        const QPointF hillWorld = fromWorld + ((toWorld - fromWorld) * (0.5 + (hillOffsetMeters / legMeters)));
+        QVERIFY(model.heightField()->insertTile(TileMath::tileForWorld(hillWorld, hillZoom), uniformGrid(300.0f)));
+    }
+
+    QCOMPARE(model.segmentBelowTerrain(from, to, ignoreStartMeters, ignoreEndMeters), belowTerrain);
 }
 
 // The surface-pick tests below never spin the event loop after attach: the

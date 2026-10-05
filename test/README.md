@@ -24,6 +24,7 @@
   - [QML Test Split](#qml-test-split)
   - [JUnit XML Output](#junit-xml-output)
 - [MultiSignalSpy](#multisignalspy)
+- [Manual Test Plans](#manual-test-plans)
 - [Code Coverage](#code-coverage)
 - [Sanitizers](#sanitizers)
 - [Debugging Test Failures](#debugging-test-failures)
@@ -326,8 +327,9 @@ ctest --output-junit results.xml
 
 ## Portable utility tests
 
-Windows x64 and macOS CI enable `QGC_BUILD_PORTABLE_TESTS` alongside the normal application
-build. The six `Portable.*` CTest entries use small Qt Test executables, with the same test
+Windows x64 and the macOS Release CI leg enable `QGC_BUILD_PORTABLE_TESTS` alongside the normal
+application build (the macOS Debug leg runs the Unit and Integration suites instead, same as
+Linux). The six `Portable.*` CTest entries use small Qt Test executables, with the same test
 bodies and production utility libraries as the Linux application tests. They require no
 QGCApplication, vehicles, or QML engine. The portable command-line parser target enables
 its own test hooks; the packaged application keeps its normal build configuration.
@@ -366,6 +368,21 @@ int value = spy.argument<int>("valueChanged");
 
 // Multiple-signal API (each signal emitted exactly once)
 QVERIFY(spy.emittedOnce("signal1", "signal2"));
+```
+
+## Manual Test Plans
+
+`plans/` holds `.plan` files for manually checking 2D/3D mission display. There is one for each
+MockLink home location and PX4/ArduPilot vehicle type. Each plan mixes altitude frames
+(relative, AMSL, calculated above terrain, and terrain frame on ArduPilot) and item types over
+~3 km legs, so the paths cross terrain. The plans exercise the UI and aren't meant to be flown.
+Start a MockLink with the matching home location, then load the plan in Plan View and upload it.
+
+`PlanMasterControllerTest::_testManualTestPlansLoad` loads every plan, so they stay loadable as the
+plan format changes. Regenerate them after changing the generator:
+
+```bash
+test/plans/generate_test_plans.py
 ```
 
 ## Code Coverage

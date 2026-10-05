@@ -2,6 +2,7 @@
 
 #include <QtCore/QPointF>
 #include <QtCore/QTimer>
+#include <QtCore/QVariantMap>
 #include <QtPositioning/QGeoCoordinate>
 #include <QtQml/QJSValue>
 #include <QtQmlIntegration/QtQmlIntegration>
@@ -92,6 +93,7 @@ public:
     Q_PROPERTY(QString qgcVersion       READ qgcVersion         CONSTANT)
     Q_PROPERTY(QString qgcAppDate       READ qgcAppDate         CONSTANT)
     Q_PROPERTY(bool    qgcDailyBuild    READ qgcDailyBuild      CONSTANT)
+    Q_PROPERTY(QString newStableVersion READ newStableVersion NOTIFY newStableVersionChanged)
 
     Q_PROPERTY(qreal zOrderTopMost              READ zOrderTopMost              CONSTANT) ///< z order for top most items, toolbar, main window sub view
     Q_PROPERTY(qreal zOrderWidgets              READ zOrderWidgets              CONSTANT) ///< z order value to widgets, for example: zoom controls, hud widgetss
@@ -112,14 +114,8 @@ public:
     Q_INVOKABLE void    saveBoolGlobalSetting   (const QString& key, bool value);
     Q_INVOKABLE bool    loadBoolGlobalSetting   (const QString& key, bool defaultValue);
 
-
-
-    Q_INVOKABLE void    startPX4MockLink            (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, int videoStreamType = 0);
-    Q_INVOKABLE void    startGenericMockLink        (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, int videoStreamType = 0);
-    Q_INVOKABLE void    startAPMArduCopterMockLink  (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, bool apmStartFreshParams = false, int videoStreamType = 0);
-    Q_INVOKABLE void    startAPMArduPlaneMockLink   (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, bool apmStartFreshParams = false, int videoStreamType = 0);
-    Q_INVOKABLE void    startAPMArduSubMockLink     (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, bool apmStartFreshParams = false, int videoStreamType = 0);
-    Q_INVOKABLE void    startAPMArduRoverMockLink   (bool sendStatusText, bool enableCamera, bool enableGimbal, bool enableProximity = false, bool apmStartFreshParams = false, int videoStreamType = 0);
+    /// Starts a MockLink whose MockConfiguration properties are set from the map (e.g. { name: "PX4", firmware: 12 })
+    Q_INVOKABLE void startMockLink(const QVariantMap& properties);
     Q_INVOKABLE void    stopOneMockLink             (void);
 
     Q_INVOKABLE bool linesIntersect(QPointF xLine1, QPointF yLine1, QPointF xLine2, QPointF yLine2);
@@ -188,6 +184,14 @@ public:
 
     static double flightMapZoom() { return _zoom; }
 
+#ifdef QGC_UNITTEST_BUILD
+    static void setFlightMapViewForTest(const QGeoCoordinate& position, double zoom)
+    {
+        _coord = position;
+        _zoom = zoom;
+    }
+#endif
+
     qreal zOrderTopMost             () { return 1000; }
     qreal zOrderWidgets             () { return 100; }
     qreal zOrderMapItems            () { return 50; }
@@ -212,6 +216,7 @@ public:
 
     static QString qgcVersion();
     static QString qgcAppDate();
+    static QString newStableVersion();
 #ifdef QGC_DAILY_BUILD
     static bool qgcDailyBuild() { return true; }
 #else
@@ -223,6 +228,7 @@ signals:
     void mavlinkSystemIDChanged         (int id);
     void flightMapPositionChanged       (QGeoCoordinate flightMapPosition);
     void flightMapZoomChanged           (double flightMapZoom);
+    void newStableVersionChanged();
     void showMessageDialogRequested     (QObject* owner, QString title, QString text, int buttons, QJSValue acceptFunction, QJSValue closeFunction);
 
 private:

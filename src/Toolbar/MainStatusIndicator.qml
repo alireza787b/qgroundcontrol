@@ -9,13 +9,12 @@ RowLayout {
     spacing:    ScreenTools.defaultFontPixelWidth
 
     property var    _activeVehicle:     QGroundControl.multiVehicleManager.activeVehicle
+    property var    _guidedController:  globals.guidedControllerFlyView
     property bool   _armed:             _activeVehicle ? _activeVehicle.armed : false
     property real   _margins:           ScreenTools.defaultFontPixelWidth
     property real   _spacing:           ScreenTools.defaultFontPixelWidth / 2
-    property bool   _allowForceArm:      false
     property bool   _healthAndArmingChecksSupported: _activeVehicle ? _activeVehicle.healthAndArmingCheckReport.supported : false
-    property bool   _vehicleFlies:      _activeVehicle ? _activeVehicle.airShip || _activeVehicle.fixedWing || _activeVehicle.vtol || _activeVehicle.multiRotor : false
-    property var    _vehicleInAir:      _activeVehicle ? _activeVehicle.flying || _activeVehicle.landing : false
+    property var    _vehicleInAir:      _activeVehicle ? _activeVehicle.airborne || _activeVehicle.landing : false
     property bool   _vtolInFWDFlight:   _activeVehicle ? _activeVehicle.vtolInFwdFlight : false
 
     function dropMainStatusIndicator() {
@@ -28,7 +27,7 @@ RowLayout {
     QGCLabel {
         id:                 mainStatusLabel
         Layout.fillHeight:  true
-        Layout.preferredWidth: contentWidth + (vehicleMessagesIcon.visible ? vehicleMessagesIcon.width + control.spacing : 0)
+        Layout.preferredWidth: contentWidth + (criticalMessageBadge.visible ? criticalMessageBadge.width / 2 : 0)
         verticalAlignment:  Text.AlignVCenter
         text:               mainStatusText()
         color:              qgcPal.text
@@ -62,7 +61,7 @@ RowLayout {
                         }
                     }
 
-                    if (_activeVehicle.flying) {
+                    if (_activeVehicle.underway) {
                         return mainStatusLabel._flyingText
                     } else if (_activeVehicle.landing) {
                         return mainStatusLabel._landingText
@@ -107,28 +106,25 @@ RowLayout {
             }
         }
 
-        QGCColoredImage {
-            id:                     vehicleMessagesIcon
-            anchors.verticalCenter: parent.verticalCenter
-            anchors.right:          parent.right
-            width:                  ScreenTools.defaultFontPixelWidth * 2
-            height:                 width
-            source:                 "/res/VehicleMessages.png"
-            color:                  getIconColor()
-            sourceSize.width:       width
-            fillMode:               Image.PreserveAspectFit
-            visible:                _activeVehicle && _activeVehicle.messageCount > 0
+        Rectangle {
+            id:                 criticalMessageBadge
+            anchors.top:        parent.top
+            anchors.topMargin:  ScreenTools.defaultFontPixelHeight * 0.25
+            anchors.right:      parent.right
+            width:              ScreenTools.defaultFontPixelHeight
+            height:             width
+            radius:             width / 2
+            color:              qgcPal.colorRed
+            visible:            _criticalMessageCount > 0
 
-            function getIconColor() {
-                let iconColor = qgcPal.text
-                if (_activeVehicle) {
-                    if (_activeVehicle.messageTypeWarning) {
-                        iconColor = qgcPal.colorOrange
-                    } else if (_activeVehicle.messageTypeError) {
-                        iconColor = qgcPal.colorRed
-                    }
-                }
-                return iconColor
+            property int _criticalMessageCount: _activeVehicle ? _activeVehicle.criticalMessageCount : 0
+
+            QGCLabel {
+                anchors.centerIn:   parent
+                text:               criticalMessageBadge._criticalMessageCount > 9 ? "!" : criticalMessageBadge._criticalMessageCount.toString()
+                color:              qgcPal.buttonHighlightText
+                font.pointSize:     ScreenTools.smallFontPointSize
+                font.bold:          true
             }
         }
 
@@ -170,11 +166,9 @@ RowLayout {
         id: overallStatusIndicatorPage
 
         ToolIndicatorPage {
-            showExpand:                         true
-            waitForParameters:                  false
-            expandedComponentWaitForParameters: true
-            contentComponent:                   mainStatusContentComponent
-            expandedComponent:                  mainStatusExpandedComponent
+            waitForParameters:  false
+            fillWindow:         true
+            contentComponent:   mainStatusContentComponent
 
             Component.onCompleted:   mainWindow.suppressCriticalVehicleMessages = true
             Component.onDestruction: mainWindow.suppressCriticalVehicleMessages = false
@@ -192,23 +186,41 @@ RowLayout {
 
             RowLayout {
                 spacing: ScreenTools.defaultFontPixelWidth
-                visible: parametersReady
+                // Stop controls must stay reachable without parameters
+                visible: parametersReady || _guidedController.showEmergencyStop || _guidedController.showDisarm
 
                 QGCDelayButton {
-                    enabled:    _armed || !_healthAndArmingChecksSupported || _activeVehicle.healthAndArmingCheckReport.canArm
-                    text:       _armed ? qsTr("Disarm") : (control._allowForceArm ? qsTr("Force Arm") : qsTr("Arm"))
+                    objectName: "mainStatusArmButton"
+                    enabled:    _armed || _guidedController.showArm
+                    text:       _armed ? qsTr("Disarm") : qsTr("Arm")
+                    visible:    _armed ? _guidedController.showDisarm : parametersReady
 
                     onActivated: {
-                        if (_armed) {
-                            _activeVehicle.armed = false
-                        } else {
-                            if (_allowForceArm) {
-                                _allowForceArm = false
-                                _activeVehicle.forceArm()
-                            } else {
-                                _activeVehicle.armed = true
-                            }
-                        }
+                        _activeVehicle.armed = !_armed
+                        mainWindow.closeIndicatorDrawer()
+                    }
+                }
+
+                QGCButton {
+                    objectName:         "mainStatusEmergencyStopButton"
+                    text:               qsTr("Emergency Stop")
+                    backgroundColor:    qgcPal.colorRed
+                    textColor:          qgcPal.buttonHighlightText
+                    fontWeight:         Font.Bold
+                    visible:            _guidedController.showEmergencyStop
+
+                    onClicked: {
+                        _guidedController.confirmAction(_guidedController.actionEmergencyStop)
+                        mainWindow.closeIndicatorDrawer()
+                    }
+                }
+
+                QGCDelayButton {
+                    text:       qsTr("Force Arm")
+                    visible:    parametersReady && _guidedController.showForceArm
+
+                    onActivated: {
+                        _activeVehicle.forceArm()
                         mainWindow.closeIndicatorDrawer()
                     }
                 }
@@ -218,7 +230,7 @@ RowLayout {
                     Layout.alignment:   Qt.AlignTop
                     label:              qsTr("Primary Link")
                     alternateText:      _primaryLinkName
-                    visible:            _activeVehicle && _activeVehicle.vehicleLinkManager.linkNames.length > 1
+                    visible:            parametersReady && _activeVehicle && _activeVehicle.vehicleLinkManager.linkNames.length > 1
 
                     property var    _rgLinkNames:       _activeVehicle ? _activeVehicle.vehicleLinkManager.linkNames : [ ]
                     property var    _rgLinkStatus:      _activeVehicle ? _activeVehicle.vehicleLinkManager.linkStatuses : [ ]
@@ -246,12 +258,13 @@ RowLayout {
             }
 
             SettingsGroupLayout {
-                //Layout.fillWidth:   true
+                Layout.fillWidth:   true
                 heading:            qsTr("Vehicle Messages")
 
                 VehicleMessageList {
-                    id: vehicleMessageList
-                    visible: !noMessages
+                    id:                 vehicleMessageList
+                    Layout.fillWidth:   true
+                    visible:            !noMessages
                 }
 
                 QGCLabel {
@@ -261,7 +274,7 @@ RowLayout {
             }
 
             SettingsGroupLayout {
-                //Layout.fillWidth:   true
+                Layout.fillWidth:   true
                 heading:            qsTr("Sensor Status")
                 visible:            parametersReady && !_healthAndArmingChecksSupported
 
@@ -284,7 +297,7 @@ RowLayout {
             }
 
             SettingsGroupLayout {
-                //Layout.fillWidth:   true
+                Layout.fillWidth:   true
                 heading:            qsTr("Overall Status")
                 visible:            parametersReady && _healthAndArmingChecksSupported && _activeVehicle.healthAndArmingCheckReport.problemsForCurrentMode.count > 0
 
@@ -298,15 +311,23 @@ RowLayout {
             Component {
                 id: listdelegate
 
-                Column {
-                    Row {
-                        spacing: ScreenTools.defaultFontPixelHeight
+                ColumnLayout {
+                    Layout.fillWidth:   true
+                    spacing:            0
+
+                    RowLayout {
+                        Layout.fillWidth:   true
+                        spacing:            ScreenTools.defaultFontPixelHeight
 
                         QGCLabel {
-                            id:           message
-                            text:         object.message
-                            textFormat:   TextEdit.RichText
-                            color:        object.severity == 'error' ? qgcPal.colorRed : object.severity == 'warning' ? qgcPal.colorOrange : qgcPal.text
+                            id:                     message
+                            Layout.fillWidth:       true
+                            // Rounded up: the layout's whole-pixel width would otherwise wrap a short message
+                            Layout.maximumWidth:    Math.ceil(implicitWidth)
+                            text:                   object.message
+                            textFormat:             TextEdit.RichText
+                            wrapMode:               Text.WordWrap
+                            color:                  object.severity == 'error' ? qgcPal.colorRed : object.severity == 'warning' ? qgcPal.colorOrange : qgcPal.text
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
@@ -318,9 +339,9 @@ RowLayout {
 
                         QGCColoredImage {
                             id:                     arrowDownIndicator
-                            anchors.verticalCenter: parent.verticalCenter
-                            height:                 1.5 * ScreenTools.defaultFontPixelWidth
-                            width:                  height
+                            Layout.alignment:       Qt.AlignVCenter
+                            Layout.preferredHeight: 1.5 * ScreenTools.defaultFontPixelWidth
+                            Layout.preferredWidth:  Layout.preferredHeight
                             source:                 "/qmlimages/arrow-down.png"
                             color:                  qgcPal.text
                             visible:                object.description != ""
@@ -333,8 +354,10 @@ RowLayout {
 
                     QGCLabel {
                         id:                 description
+                        Layout.fillWidth:   true
                         text:               object.description
                         textFormat:         TextEdit.RichText
+                        wrapMode:           Text.WordWrap
                         clip:               true
                         visible:            object.expanded
 
@@ -370,66 +393,6 @@ RowLayout {
                                 fact:           description.fact
                                 destroyOnClose: true
                             }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    Component {
-        id: mainStatusExpandedComponent
-
-        ColumnLayout {
-            Layout.preferredWidth:  ScreenTools.defaultFontPixelWidth * 60
-            spacing:                margins / 2
-
-            property real margins: ScreenTools.defaultFontPixelHeight
-
-            Loader {
-                Layout.fillWidth:   true
-                source:             _activeVehicle.expandedToolbarIndicatorSource("MainStatus")
-            }
-
-            SettingsGroupLayout {
-                Layout.fillWidth:   true
-                heading:            qsTr("Force Arm")
-                headingDescription: qsTr("Force arming bypasses pre-arm checks. Use with caution.")
-                visible:            _activeVehicle && !_armed
-
-                QGCCheckBoxSlider {
-                    Layout.fillWidth:   true
-                    text:               qsTr("Allow Force Arm")
-                    checked:            false
-                    onClicked:          _allowForceArm = true
-                }
-            }
-
-            SettingsGroupLayout {
-                Layout.fillWidth:   true
-                visible:            QGroundControl.corePlugin.showAdvancedUI
-
-                GridLayout {
-                    columns:            2
-                    rowSpacing:         ScreenTools.defaultFontPixelHeight / 2
-                    columnSpacing:      ScreenTools.defaultFontPixelWidth *2
-                    Layout.fillWidth:   true
-
-                    QGCLabel { Layout.fillWidth: true; text: qsTr("Vehicle Parameters") }
-                    QGCButton {
-                        text: qsTr("Configure")
-                        onClicked: {
-                            mainWindow.showVehicleConfigParametersPage()
-                            mainWindow.closeIndicatorDrawer()
-                        }
-                    }
-
-                    QGCLabel { Layout.fillWidth: true; text: qsTr("Vehicle Configuration") }
-                    QGCButton {
-                        text: qsTr("Configure")
-                        onClicked: {
-                            mainWindow.showVehicleConfig()
-                            mainWindow.closeIndicatorDrawer()
                         }
                     }
                 }

@@ -13,6 +13,7 @@
 #include <QtCore/QElapsedTimer>
 #include <QtCore/QHash>
 #include <QtCore/QList>
+#include <QtCore/QPointF>
 #include <QtCore/QSet>
 #include <QtCore/QString>
 #include <QtCore/QStringList>
@@ -102,13 +103,27 @@ public:
     /// whenever the surface model is rebuilt.
     HeightField* heightField() const { return _heightField; }
 
-    /// Best-estimate terrain height (true meters) at a coordinate: real data
-    /// where loaded, coarser estimate or 0 elsewhere (see HeightField). Emits
-    /// terrainHeightsChanged as estimates improve.
+    /// Terrain height (true meters) at a coordinate as rendered: the patch mesh
+    /// where a patch draws, else the field's estimate (real data, coarser
+    /// estimate, or 0; see HeightField). Emits terrainHeightsChanged when
+    /// either changes.
     Q_INVOKABLE double terrainHeightAt(const QGeoCoordinate& coordinate) const;
 
+    /// The field's estimate alone (see HeightField), independent of the drawn
+    /// detail level: for the camera pivot and altitude datums, where following
+    /// the mesh would couple them to patch churn. Emits terrainDataChanged when
+    /// it changes.
+    Q_INVOKABLE double terrainDataHeightAt(const QGeoCoordinate& coordinate) const;
+
+    /// True when the straight segment from -> to (altitude linear along it, in
+    /// the field's frame) passes strictly below the field's estimate anywhere
+    /// outside the first ignoreStartMeters and last ignoreEndMeters. False when
+    /// either end has no altitude.
+    Q_INVOKABLE bool segmentBelowTerrain(const QGeoCoordinate& from, const QGeoCoordinate& to, double ignoreStartMeters,
+                                         double ignoreEndMeters) const;
+
     /// Coordinate of the rendered surface under screenPos: marches the camera's
-    /// pick ray to its first crossing of z = heightAt(x, y) * zScale, so the pick
+    /// pick ray to its first crossing of z = terrain height(x, y) * zScale, so the pick
     /// lands on the visible front surface and ridges occlude the ground behind
     /// them. zScale is the height-to-scene-z factor (verticalScale * terrainScale,
     /// never negative); 0 reduces to a flat z=0 plane pick. The march is capped at
@@ -178,6 +193,8 @@ signals:
     void capturingChanged();
     /// terrainHeightAt answers changed somewhere: consumers re-query
     void terrainHeightsChanged();
+    /// terrainDataHeightAt / segmentBelowTerrain answers changed somewhere (not on patch churn)
+    void terrainDataChanged();
 
 private slots:
     void _patchAdded(const TileMath::TileKey& key);
@@ -191,6 +208,7 @@ private slots:
 
 private:
     void _rebuildSurfaceModel();
+    double _surfaceHeightAt(const QPointF& world) const;
     void _resetImagery();
     void _requestTileImage(const TileMath::TileKey& key);
     void _retryFailedImages();
@@ -208,6 +226,8 @@ private:
     static constexpr int kMaxRetiredImages = 128;         ///< tiles kept after patch removal (fallback source)
     static constexpr int kMaxAncestorFallbackLevels = 8;  ///< how far up the quadtree fallback looks
     static constexpr int kImageRetryMs = 3000;            ///< pacing for re-requesting failed tile images
+    static constexpr double kSegmentSampleSpacingMeters = 30.0;
+    static constexpr int kMaxSegmentSamples = 2000;       ///< full spacing up to GeoMapMissionPath's 50 km pieces
 
     GeoScene* _scene = nullptr;
     HeightSource* _heightSource = nullptr;

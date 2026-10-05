@@ -23,6 +23,11 @@ public:
 private slots:
     void _testPX4Indicators();
     void _testAPMCopterIndicators();
+    void _testEmergencyStopReplacesDisarmInFlight_data();
+    void _testEmergencyStopReplacesDisarmInFlight();
+    void _testArmRequiresEnforcedChecklist();
+    void _testDisarmReachableWithoutParameters();
+    void _testIndicatorDrawerClosesOnVehicleDisconnect();
 
 private:
     /// Shared implementation: connect a MockLink via \a factory and cycle

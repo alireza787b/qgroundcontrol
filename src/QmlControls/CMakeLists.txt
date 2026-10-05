@@ -15,6 +15,8 @@ target_sources(${CMAKE_PROJECT_NAME}
         HorizontalFactValueGrid.h
         InstrumentValueData.cc
         InstrumentValueData.h
+        MapMarkerGrouping.cc
+        MapMarkerGrouping.h
         MapPositionTracker.cc
         MapPositionTracker.h
         MavlinkAction.cc
@@ -168,7 +170,6 @@ qt_add_qml_module(QGroundControlControlsModule
         QGCTabButton.qml
         QGCTextField.qml
         QGCToolBarButton.qml
-        QGCToolInsets.qml
         QGCVectorImage.qml
         RCChannelMonitor.qml
         RCToParamDialog.qml
@@ -210,8 +211,8 @@ qt_add_resources(QGroundControlControlsModule qmlcontrols_resources
     FILES
         "${CMAKE_SOURCE_DIR}/resources/ArrowRight.svg"
         "${CMAKE_SOURCE_DIR}/resources/buttonRight.svg"
-        "${CMAKE_SOURCE_DIR}/resources/chevron-down.svg"
-        "${CMAKE_SOURCE_DIR}/resources/chevron-up.svg"
+        "${CMAKE_SOURCE_DIR}/resources/chevron-double-down.svg"
+        "${CMAKE_SOURCE_DIR}/resources/chevron-double-up.svg"
         "${CMAKE_SOURCE_DIR}/resources/clockwise-arrow.svg"
         "${CMAKE_SOURCE_DIR}/resources/counter-clockwise-arrow.svg"
         "${CMAKE_SOURCE_DIR}/resources/JoystickBezelLight.png"

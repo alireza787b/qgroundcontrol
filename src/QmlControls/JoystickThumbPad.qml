@@ -225,7 +225,7 @@ Item {
         sourceSize.height:          height
         mipmap:                     true
         fillMode:                   Image.PreserveAspectFit
-        source:                     "/res/chevron-up.svg"
+        source:                     "/res/chevron-double-up.svg"
         anchors.top:                parent.top
         anchors.topMargin:          ScreenTools.defaultFontPixelWidth
         anchors.horizontalCenter:   parent.horizontalCenter
@@ -239,7 +239,7 @@ Item {
         sourceSize.height:          height
         mipmap:                     true
         fillMode:                   Image.PreserveAspectFit
-        source:                     "/res/chevron-down.svg"
+        source:                     "/res/chevron-double-down.svg"
         anchors.bottom:             parent.bottom
         anchors.bottomMargin:       ScreenTools.defaultFontPixelWidth
         anchors.horizontalCenter:   parent.horizontalCenter

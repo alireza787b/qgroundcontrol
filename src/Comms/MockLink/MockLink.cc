@@ -415,7 +415,9 @@ void MockLink::run1HzTasks()
     _sendBatteryStatus();
     _sendNamedValueFloats();
     _sendSysStatus();
-    _sendADSBVehicles();
+    if (_enableADSB) {
+        _sendADSBVehicles();
+    }
     if (_vehicleType != MAV_TYPE_SUBMARINE) {
         _sendRemoteIDArmStatus();
     }
@@ -1104,6 +1106,9 @@ void MockLink::respondWithMavlinkMessage(const mavlink_message_t &msg)
         const int cBuffer = mavlink_msg_to_send_buffer(buffer, &msg);
         const QByteArray bytes(reinterpret_cast<char*>(buffer), cBuffer);
         emit bytesReceived(this, bytes);
+        if (_duplicateResponses) {
+            emit bytesReceived(this, bytes);
+        }
     }
 }
 

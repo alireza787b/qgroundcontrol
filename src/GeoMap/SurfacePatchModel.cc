@@ -1,5 +1,11 @@
 #include "SurfacePatchModel.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+#include <optional>
+#include <utility>
+
 #include <QtCore/QByteArray>
 #include <QtCore/QDateTime>
 #include <QtCore/QDebug>
@@ -8,11 +14,6 @@
 #include <QtCore/QTimer>
 #include <QtCore/QtMath>
 #include <QtGui/QPainter>
-
-#include <algorithm>
-#include <cmath>
-#include <limits>
-#include <utility>
 
 #ifdef Q_OS_ANDROID
 #include <android/log.h>
@@ -297,9 +298,11 @@ void SurfacePatchModel::_rebuildSurfaceModel()
         qCDebug(GeoMapSurfacePatchModelLog) << "rebuilding surface model, height source:"
                                             << (_debugHills ? "debug hills" : (_terrain ? "terrain" : "flat"));
         _heightField = new HeightField(this);
+        connect(_heightField, &HeightField::regionChanged, this, &SurfacePatchModel::terrainDataChanged);
         _heightSource->setHeightField(_heightField);
-        connect(_heightField, &HeightField::regionChanged, this, &SurfacePatchModel::terrainHeightsChanged);
         _surfaceModel = new SurfaceModel(camera, _heightSource, _heightField, this);
+        // Via the surface model, so patches are re-meshed before consumers re-query
+        connect(_surfaceModel, &SurfaceModel::surfaceHeightsChanged, this, &SurfacePatchModel::terrainHeightsChanged);
         connect(_surfaceModel, &SurfaceModel::patchAdded, this, &SurfacePatchModel::_patchAdded);
         connect(_surfaceModel, &SurfaceModel::patchMeshChanged, this, &SurfacePatchModel::_patchReady);
         connect(_surfaceModel, &SurfaceModel::patchEdgeDeltasChanged, this,
@@ -314,6 +317,7 @@ void SurfacePatchModel::_rebuildSurfaceModel()
     emit statsChanged();
     // Field replacement invalidates every previous height answer
     emit terrainHeightsChanged();
+    emit terrainDataChanged();
 }
 
 double SurfacePatchModel::terrainHeightAt(const QGeoCoordinate& coordinate) const
@@ -322,7 +326,51 @@ double SurfacePatchModel::terrainHeightAt(const QGeoCoordinate& coordinate) cons
     if (!_heightField || !coordinate.isValid()) {
         return 0.0;
     }
+    return _surfaceHeightAt(TileMath::geoToWorld(coordinate));
+}
+
+double SurfacePatchModel::terrainDataHeightAt(const QGeoCoordinate& coordinate) const
+{
+    if (!_heightField || !coordinate.isValid()) {
+        return 0.0;
+    }
     return _heightField->heightAt(TileMath::geoToWorld(coordinate));
+}
+
+bool SurfacePatchModel::segmentBelowTerrain(const QGeoCoordinate& from, const QGeoCoordinate& to,
+                                            double ignoreStartMeters, double ignoreEndMeters) const
+{
+    if (!_heightField || !from.isValid() || !to.isValid() || std::isnan(from.altitude()) || std::isnan(to.altitude())) {
+        return false;
+    }
+    const double distance = from.distanceTo(to);
+    const int steps =
+        std::clamp(static_cast<int>(std::ceil(distance / kSegmentSampleSpacingMeters)), 1, kMaxSegmentSamples);
+    // Linear in mercator, as the mission path draws the segment
+    const QPointF fromWorld = TileMath::geoToWorld(from);
+    const QPointF toWorld = TileMath::geoToWorld(to);
+    for (int i = 0; i <= steps; i++) {
+        const double fraction = static_cast<double>(i) / steps;
+        const double along = distance * fraction;
+        if ((along < ignoreStartMeters) || (along > (distance - ignoreEndMeters))) {
+            continue;
+        }
+        const double altitude = from.altitude() + ((to.altitude() - from.altitude()) * fraction);
+        if (_heightField->heightAt(fromWorld + ((toWorld - fromWorld) * fraction)) > altitude) {
+            return true;
+        }
+    }
+    return false;
+}
+
+double SurfacePatchModel::_surfaceHeightAt(const QPointF& world) const
+{
+    if (_surfaceModel) {
+        if (const std::optional<double> rendered = _surfaceModel->renderedHeightAt(world)) {
+            return *rendered;
+        }
+    }
+    return _heightField->heightAt(world);
 }
 
 QGeoCoordinate SurfacePatchModel::surfaceCoordinateAtScreenPoint(const GeoMapCamera* camera, const QPointF& screenPos,
@@ -341,7 +389,7 @@ QGeoCoordinate SurfacePatchModel::surfaceCoordinateAtScreenPoint(const GeoMapCam
     // Signed height of the ray above the rendered surface at parameter t
     const auto surfaceOffset = [&](double t) {
         const QPointF ground(ray.originX + (t * ray.dirX), ray.originY + (t * ray.dirY));
-        return (ray.originZ + (t * ray.dirZ)) - (_heightField->heightAt(ground) * zScale);
+        return (ray.originZ + (t * ray.dirZ)) - (_surfaceHeightAt(ground) * zScale);
     };
 
     // Earth terrain bounds (Terrarium tiles encode bathymetry, so the floor is

@@ -390,8 +390,7 @@ uv run --project tools --group scripts --group test pytest -q tools/tests .githu
   timing and progress remain enabled in every run. Warnings are
   advisory, but error diagnostics, missing tools, invalid databases,
   timeouts and compiler-driver failures fail analysis.
-- C++ CodeQL is built and uploaded only by Linux (`/language:c-cpp`).
-  `codeql.yml` handles Actions, Java/Kotlin and Python.
+- C++ is not scanned by CodeQL. `codeql.yml` handles Actions, Java/Kotlin and Python.
 - `test-phase` shares Linux/custom unit and integration execution. Call it only after
   a successful build. Failures preserve JUnit, logs and durations and do not suppress
   the other suite. There are no blanket until-pass retries; empty test selections fail.
@@ -399,10 +398,11 @@ uv run --project tools --group scripts --group test pytest -q tools/tests .githu
   custom-plugin unit/integration suites, excluding stock-UI integration tests. Master
   pushes, merge-queue runs, and manual dispatches also build Release without test hooks
   and verify its AppImage. Debug and Release retain separate compiler caches.
-- Windows x64 and macOS run six standalone portable utility executables in their existing
-  platform build jobs (`QGC_BUILD_PORTABLE_TESTS=ON`). They share test bodies with the full
-  Linux harness and do not enable test hooks in the packaged application. There is no
-  separate Extended Tests workflow. Manual Linux coverage jobs reuse their existing
+- Windows x64 and the macOS Release leg run six standalone portable utility executables in their
+  existing platform build jobs (`QGC_BUILD_PORTABLE_TESTS=ON`). They share test bodies with the full
+  Linux harness and do not enable test hooks in the packaged application. The macOS Debug leg
+  runs the Unit and Integration suites; only the Release leg packages and uploads the DMG.
+  There is no separate Extended Tests workflow. Manual Linux coverage jobs reuse their existing
   binary for `Network|Flaky` tests, after the
   ordinary coverage report. Those tests have separate reports and still fail the job. iOS simulator builds run `--simple-boot-test` and require
   QGC's success marker. Simulator cold boots have a 600-second deadline and at most two
@@ -446,8 +446,8 @@ Local equivalents are `just test-python` and `just lint` after installing `dev`.
 ### Configuration and documentation checks
 
 CI Scripts validates build schema relationships and release decisions using locked Node tooling.
-Schema-only edits run validation. CodeQL C++ extraction stays in the Linux release build;
-the standalone workflow scans Actions, Java/Kotlin, and Python, including deployment and tests.
+Schema-only edits run validation. CodeQL does not scan C++; the standalone workflow
+scans Actions, Java/Kotlin, and Python, including deployment and tests.
 Runner image candidates are smoke-tested by AMI ID before production promotion, with weekly
 rebuilds and bounded retention; see [runner-images/README.md](runner-images/README.md).
 
