@@ -10,6 +10,7 @@ on:
         default: all
         options:
           - all
+          - linux
           - windows
           - android
       build_type:
@@ -149,6 +150,105 @@ jobs:
         uses: actions/attest-build-provenance@v2
         with:
           subject-path: ${{ steps.installer.outputs.path }}
+
+  linux:
+    name: PixEagle Linux ${{ inputs.build_type }}
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build Setup
+        id: setup
+        uses: ./.github/actions/build-setup
+        with:
+          qt-host: linux
+          qt-arch: linux_gcc_64
+          aqt-source: ${{ env.AQT_SOURCE }}
+          build-type: ${{ inputs.build_type }}
+          cache-variant: pixeagle
+
+      - name: Install dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Configure
+        uses: ./.github/actions/cmake-configure
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          preset: ${{ inputs.build_type == 'Debug' && 'Linux-debug' || 'Linux' }}
+          extra-args: >-
+            -DQGC_CUSTOM_DIR=${{ env.CUSTOM_DIR }}
+            -DQGC_ENABLE_GST_VIDEOSTREAMING=ON
+            -DQGC_BUILD_PORTABLE_TESTS=ON
+
+      - name: Build
+        id: build
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+
+      - name: Verify executable
+        if: inputs.build_type == 'Release'
+        uses: ./.github/actions/verify-executable
+        with:
+          binary-path: ${{ runner.temp }}/build/Release/PixEagle-QGroundControl
+          build-dir: ${{ runner.temp }}/build
+
+      - name: Create AppImage
+        uses: ./.github/actions/cmake-install
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+
+      - name: Prepare AppImage artifact
+        id: appimage
+        run: |
+          appimage_source="$(find "${RUNNER_TEMP}/build" -maxdepth 2 -type f -name '*.AppImage' -print -quit)"
+          if [[ -z "$appimage_source" ]]; then
+            echo "::error::No PixEagle AppImage was produced"
+            exit 1
+          fi
+          appimage_path="${RUNNER_TEMP}/build/PixEagle-QGroundControl-x86_64.AppImage"
+          cp "$appimage_source" "$appimage_path"
+          (cd "$(dirname "$appimage_path")" && sha256sum "$(basename "$appimage_path")" > "$(basename "$appimage_path").sha256")
+          echo "path=$appimage_path" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixeagle-qgroundcontrol-linux-${{ inputs.build_type }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ steps.appimage.outputs.path }}
+            ${{ steps.appimage.outputs.path }}.sha256
+
+      - name: Attest Linux AppImage
+        if: inputs.build_type == 'Release'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.appimage.outputs.path }}
 
   android:
     name: PixEagle Android ${{ inputs.build_type }}

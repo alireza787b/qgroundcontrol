@@ -108,20 +108,25 @@ RegistrationHandle registerCacheReset(ResetCallback callback)
     if (callback == nullptr) {
         return kInvalidHandle;
     }
-    QMutexLocker lock(&s_mutex);
-    const int count = s_cacheResetCount.load(std::memory_order_relaxed);
-    for (int i = 0; i < count; ++i) {
-        if (s_cacheResets[i] == callback)
-            return static_cast<RegistrationHandle>(i);
-    }
-    if (count >= kMaxCacheResets) {
-        qCWarning(GstContextBridgeRegistryLog) << "cache-reset registry full (kMaxCacheResets=" << kMaxCacheResets
-                                               << "); callback will not run on GPU device-loss";
+    if constexpr (kMaxCacheResets == 0) {
+        qCWarning(GstContextBridgeRegistryLog) << "cache-reset registry has no compiled cache paths";
         return kInvalidHandle;
+    } else {
+        QMutexLocker lock(&s_mutex);
+        const int count = s_cacheResetCount.load(std::memory_order_relaxed);
+        for (int i = 0; i < count; ++i) {
+            if (s_cacheResets[i] == callback)
+                return static_cast<RegistrationHandle>(i);
+        }
+        if (count >= kMaxCacheResets) {
+            qCWarning(GstContextBridgeRegistryLog) << "cache-reset registry full (kMaxCacheResets=" << kMaxCacheResets
+                                                   << "); callback will not run on GPU device-loss";
+            return kInvalidHandle;
+        }
+        s_cacheResets[count] = callback;
+        s_cacheResetCount.store(count + 1, std::memory_order_release);
+        return static_cast<RegistrationHandle>(count);
     }
-    s_cacheResets[count] = callback;
-    s_cacheResetCount.store(count + 1, std::memory_order_release);
-    return static_cast<RegistrationHandle>(count);
 }
 
 // First GST_BUS_DROP wins; bridges must differ on context-type so no bridge shadows another.
