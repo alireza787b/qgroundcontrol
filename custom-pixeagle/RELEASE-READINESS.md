@@ -30,10 +30,12 @@ the host package was not installed. Windows and Android were built by the
 qualified GitHub Actions runs recorded below; platform installation,
 upgrade/removal and operator acceptance remain open.
 
-The PixEagle platform workflow completed successfully in two runs: Linux and
-Android in `37280978250`, and Windows in `37295499089`. The artifacts are
-retained in the private Desktop qualification bundle and are not published as
-a GitHub Release or store package.
+The canonical all-platform PixEagle workflow completed successfully in run
+`37299422335` from exact HEAD `2b9c2408364bc33bd7d21487922bcf47e79e505f`.
+Linux, Windows and Android artifacts from that run are retained in the private
+Desktop qualification bundle and are not published as a GitHub Release or
+store package. Earlier repair runs `37280978250` (Linux/Android) and
+`37295499089` (Windows) remain recorded below as diagnostic provenance.
 
 The latest-upstream Linux build also hardens the GPU context registry for a
 zero-cache-path configuration and accepts an explicit private runtime-library
