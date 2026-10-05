@@ -28,8 +28,14 @@ verification runs on the native Windows runner. Android runs Gradle lint and
 packages the configured PixEagle application ID
 `io.github.alireza787b.pixeagle.qgroundcontrol`.
 
-The 2026-10-05 qualification runs were dispatched from
-`feature/pixeagle-native-integration-upstream-2026-10-05`:
+The canonical 2026-10-05 qualification run was dispatched from
+`feature/pixeagle-native-integration-upstream-2026-10-05` at commit
+`2b9c2408364bc33bd7d21487922bcf47e79e505f` (upstream base
+`ece1cda9642c1591fd6f97b2349671d50fa14df0`). Run `37299422335` passed
+Linux, Windows and Android together. Its artifacts are a private qualification
+bundle, not a public release.
+
+Earlier repair runs remain useful provenance:
 
 - Run `37280978250` passed Linux and Android. Android forwards
   `QGC_CUSTOM_DIR` to Qt's per-ABI sub-builds.
