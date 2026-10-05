@@ -44,7 +44,11 @@ set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "${PROJECT_HOMEPAGE_URL}")
 # Advanced DEB Options
 # ----------------------------------------------------------------------------
 set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "${CPACK_PACKAGING_INSTALL_PREFIX}/lib")
+set(_qgc_deb_shlib_private_dirs "${CPACK_PACKAGING_INSTALL_PREFIX}/lib")
+if(QGC_PRIVATE_RUNTIME_LIBRARY_DIRS)
+    list(APPEND _qgc_deb_shlib_private_dirs ${QGC_PRIVATE_RUNTIME_LIBRARY_DIRS})
+endif()
+set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS_PRIVATE_DIRS "${_qgc_deb_shlib_private_dirs}")
 # set(CPACK_DEBIAN_PACKAGE_DEBUG
 # set(CPACK_DEBIAN_PACKAGE_PREDEPENDS
 # set(CPACK_DEBIAN_PACKAGE_ENHANCES

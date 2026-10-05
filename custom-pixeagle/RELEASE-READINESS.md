@@ -1,5 +1,37 @@
 # Release preparation and remaining qualification
 
+## Latest upstream qualification — 2026-10-05
+
+The isolated branch `feature/pixeagle-native-integration-upstream-2026-10-05`
+is based on upstream QGroundControl commit
+`ece1cda9642c1591fd6f97b2349671d50fa14df0`, merged through `2ca8f2902`,
+with the custom video-inset merge repair at `1f9efbe27`. The original
+`feature/pixeagle-native-integration` worktree remains unchanged and dirty
+edits were not staged. No QGC push or PR was created.
+
+The latest branch configured with Qt 6.11.1, the available Linux GStreamer
+1.24.2, Ninja 1.13.0 and `QGC_CUSTOM_DIR=custom-pixeagle`. Its Debug binary
+reports `PixEagle-QGroundControl v5.2.0-dev-155-g1f9efbe27`.
+
+The eight PixEagle tests and four camera/GStreamer tests passed. The six
+portable tests, GPS settings rerun and multi-config CMake contract passed after
+building the standalone test targets and exposing the locked Ninja executable
+on `PATH`. `BluetoothWorkerTest` remains a host-environment failure: BlueZ
+emits an unexpected invalid-address warning without `CAP_NET_ADMIN`; its
+functional assertions pass. This is retained as a CI/container prerequisite,
+not suppressed as a product result.
+
+The Release executable and DEB were built from the same commit. Their SHA-256
+values are recorded in the generated artifact manifest. The package uses the
+existing isolated `libxcb-cursor0` extraction only for dependency discovery;
+the host package was not installed. Windows and Android remain CI-only until a
+write-enabled GitHub Actions run is available.
+
+The latest-upstream Linux build also hardens the GPU context registry for a
+zero-cache-path configuration and accepts an explicit private runtime-library
+search path for reproducible local DEB dependency discovery. These paths are
+configuration inputs; no host package or runtime state is stored in the source.
+
 Updated 2026-10-04. Tested changes are being committed in separate reviewable
 groups; remaining integration edits are uncommitted and nothing is published. The
 camera-final-v28 physical workflow is now operator accepted; actual camera
