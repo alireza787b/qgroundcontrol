@@ -395,6 +395,7 @@ void PixEagleClient::_resetSession()
     _clearCameraState(cameraStopOwnsNetwork);
     ++_generation;
     _pollTimer.stop();
+    _contextRetryMs = 2000;
     _clearFollowingState();
     if (_reply) {
         _reply->abort();
@@ -600,13 +601,31 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
                               "address.")
                          : tr("Could not connect to PixEagle. Check its address and whether it is running.");
         }
+        const auto networkError = reply->error();
+        const bool transient = status == 500 || status == 502 || status == 503 || status == 504 ||
+                               (status == 0 && (networkError == QNetworkReply::ConnectionRefusedError ||
+                                                networkError == QNetworkReply::RemoteHostClosedError ||
+                                                networkError == QNetworkReply::HostNotFoundError ||
+                                                networkError == QNetworkReply::TimeoutError ||
+                                                networkError == QNetworkReply::TemporaryNetworkFailureError ||
+                                                networkError == QNetworkReply::NetworkSessionFailedError));
+        if (readContext && transient && _authenticated && (_online || _companionOnly) && !backendRestarting()) {
+            // Recover read-only context; never replay discovery or operator mutations.
+            _pollTimer.start(_contextRetryMs);
+            _contextRetryMs = qMin(_contextRetryMs * 2, 15000);
+            _error = tr("Connection interrupted. Retrying PixEagle…");
+        }
         emit changed();
         return;
     }
     if (readContext && _requestTimer.elapsed() > 3000) {
         _clearContext();
+        if (!backendRestarting()) {
+            _pollTimer.start(_contextRetryMs);
+            _contextRetryMs = qMin(_contextRetryMs * 2, 15000);
+        }
         _error = _companionOnly
-                     ? tr("Connection status arrived too late. Retry the connection in PixEagle settings.")
+                     ? tr("Connection status arrived too late. Retrying PixEagle…")
                      : tr("Connection status arrived too late. Check the connection, then verify the vehicle again.");
         emit changed();
         return;
@@ -636,7 +655,8 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
             _pendingVerificationKey.clear();
         }
         _expiryTimer.start(6000 - static_cast<int>(_requestTimer.elapsed()));
-        _pollTimer.start();
+        _contextRetryMs = 2000;
+        _pollTimer.start(2000);
     }
     emit changed();
     if (_sessionReady()) {

@@ -35,6 +35,10 @@ private slots:
     void _cancelPendingRequest();
     void _redirectDoesNotForwardCredentials();
     void _tlsCertificateRejected();
+    void _contextRecoversAfterTransientFailure_data();
+    void _contextRecoversAfterTransientFailure();
+    void _contextPolicyFailureDoesNotRetry();
+    void _contextRetryCancelledBySignOut();
     void _sessionErrors_data();
     void _sessionErrors();
     void _credentialsStayOutOfSettings();

@@ -255,6 +255,15 @@ Item {
                         }
 
                         QGCButton {
+                            enabled: root._client && root._client.canRefreshConnection
+                            visible: root._client && root._client.canRefreshConnection
+                            objectName: "pixeagleRefreshConnection"
+                            text: qsTr("Reconnect")
+
+                            onClicked: root._client.refresh()
+                        }
+
+                        QGCButton {
                             enabled: root._client && (root._client.companionOnly || root._client.associationVerified)
                             objectName: "pixeagleOpenFlyView"
                             text: qsTr("Open Fly View")
