@@ -72,6 +72,7 @@ private:
     void* _sink = nullptr;
     std::shared_ptr<QGCVideoFrameContextStore> _contexts;
     QTimer _retryTimer;
+    QTimer _contextRefreshTimer;
     QString _desiredKey;
     QString _runningKey;
     QString _error;

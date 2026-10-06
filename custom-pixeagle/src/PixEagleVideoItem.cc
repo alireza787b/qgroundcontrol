@@ -459,6 +459,13 @@ void PixEagleVideoItem::_consumeFrame(quint64 streamGeneration)
     }
     auto frame = std::make_shared<Frame>();
     frame->context = validatedContext(*incoming);
+    if (incoming->entry && frame->context.isEmpty()) {
+        // A camera/source restart can rotate stream provenance while the
+        // authenticated QGC context still describes the previous epoch. Let
+        // the controller refresh that authoritative context; keep the frame
+        // rejected for presentation and target selection until it is current.
+        emit frameContextRejected();
+    }
     if (!frame->context.isEmpty()) {
         frame->image = presentationImage(incoming->video);
     }
