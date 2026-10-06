@@ -68,7 +68,9 @@ void PixEagleClient::_initializeCameraState()
 
 bool PixEagleClient::cameraAvailable() const
 {
-    return _readOnlyReady() && _context.value("capabilities").toArray().contains("camera.control.v1") &&
+    // Camera ownership is a companion operation. It does not require a
+    // verified PX4 association; aircraft following remains separately gated.
+    return _sessionReady() && _context.value("capabilities").toArray().contains("camera.control.v1") &&
            _context.value("permissions").toObject().value("scopes").toArray().contains("control:read");
 }
 

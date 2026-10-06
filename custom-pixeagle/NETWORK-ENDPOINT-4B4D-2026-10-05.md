@@ -23,6 +23,9 @@ session. It is based on the QGC commit that contains this checkpoint on
   capability. A verified aircraft association is still required before QGC
   can start following or dispatch any PixEagle aircraft command. This keeps
   camera/video bench tests useful without weakening aircraft-command safety.
+- Camera status and manual camera control use the authenticated companion
+  session as well. They remain independently guarded by camera freshness,
+  ownership, permissions and the camera provider's following state.
 - Backend settings and the supervised **Restart PixEagle** action use the
   authenticated session and administrator capability, not video availability
   or aircraft association. They remain unavailable when the backend does not
