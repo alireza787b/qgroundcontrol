@@ -13,4 +13,6 @@ private slots:
     void _hasCapturedWarning();
     void _hasCapturedCritical();
     void _hasCapturedUncategorized();
+    void _environmentDebugLogging_data();
+    void _environmentDebugLogging();
 };
