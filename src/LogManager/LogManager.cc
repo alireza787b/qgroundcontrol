@@ -151,7 +151,8 @@ void LogManager::applyEnvironmentLogLevel()
     QString rules;
 
     if (level == QStringLiteral("trace") || level == QStringLiteral("debug")) {
-        rules = QStringLiteral("*.debug=true\n");
+        // Qt's dirty-item dump can instantiate deferred QML properties on the render thread.
+        rules = QStringLiteral("*.debug=true\nqt.quick.dirty.debug=false\n");
     } else if (level == QStringLiteral("info")) {
         rules = QStringLiteral("*.debug=false\n*.info=true\n");
     } else if (level == QStringLiteral("warning") || level == QStringLiteral("warn")) {

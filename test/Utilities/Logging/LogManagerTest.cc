@@ -1,9 +1,12 @@
 #include "LogManagerTest.h"
 
+#include <QtCore/QLoggingCategory>
+#include <QtCore/QScopeGuard>
 
+#include "Fixtures/RAIIFixtures.h"
 #include "LogManager.h"
-#include "UnitTestList.h"
 #include "QGCLoggingCategory.h"
+#include "UnitTestList.h"
 
 QGC_LOGGING_CATEGORY(LogManagerTestLog, "Test.Logging.LogManagerTest")
 
@@ -111,6 +114,34 @@ void LogManagerTest::_hasCapturedUncategorized()
 
     LogManager::clearCapturedMessages();
     LogManager::setCaptureEnabled(false);
+}
+
+void LogManagerTest::_environmentDebugLogging_data()
+{
+    QTest::addColumn<QByteArray>("level");
+    QTest::newRow("debug") << QByteArray("debug");
+    QTest::newRow("trace") << QByteArray("trace");
+}
+
+void LogManagerTest::_environmentDebugLogging()
+{
+    QFETCH(QByteArray, level);
+
+    const QByteArray oldLoggingRules = qgetenv("QT_LOGGING_RULES");
+    const auto restoreRules = qScopeGuard([oldLoggingRules]() {
+        QLoggingCategory::setFilterRules(QString::fromUtf8(oldLoggingRules));
+        LogManager::applyEnvironmentLogLevel();
+    });
+    TestFixtures::EnvVarFixture restoreLevel("QGC_LOG_LEVEL");
+    qputenv("QGC_LOG_LEVEL", level);
+
+    LogManager::applyEnvironmentLogLevel();
+
+    const QLoggingCategory dirtyItems("qt.quick.dirty");
+    const QLoggingCategory network("qt.network.ssl");
+    QVERIFY(!dirtyItems.isDebugEnabled());
+    QVERIFY(dirtyItems.isWarningEnabled());
+    QVERIFY(network.isDebugEnabled());
 }
 
 UT_REGISTER_TEST(LogManagerTest, TestLabel::Unit, TestLabel::Utilities)
