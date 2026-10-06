@@ -55,6 +55,7 @@ public:
 signals:
     void videoSinkChanged();
     void presentationChanged();
+    void frameContextRejected();
     void selectionChanged();
     void selectionInvalidated();
 

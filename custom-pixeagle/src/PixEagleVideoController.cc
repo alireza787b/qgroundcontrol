@@ -22,6 +22,7 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
 {
     _retryTimer.setSingleShot(true);
     connect(&_retryTimer, &QTimer::timeout, this, &PixEagleVideoController::_start);
+    _contextRefreshTimer.setSingleShot(true);
     connect(_manager, &PixEagleManager::activeClientChanged, this, &PixEagleVideoController::_bindClient);
     connect(_settings->integrationEnabled(), &Fact::rawValueChanged, this, &PixEagleVideoController::_updateDesired);
     connect(_settings->videoEnabled(), &Fact::rawValueChanged, this, &PixEagleVideoController::_updateDesired);
@@ -131,6 +132,12 @@ void PixEagleVideoController::attachSurface(PixEagleVideoItem* surface)
     _surface = surface;
     _targets->setSurface(surface);
     connect(surface, &PixEagleVideoItem::presentationChanged, this, &PixEagleVideoController::_presentationChanged);
+    connect(surface, &PixEagleVideoItem::frameContextRejected, this, [this]() {
+        if (_client && !_contextRefreshTimer.isActive()) {
+            _client->refresh();
+            _contextRefreshTimer.start(1000);
+        }
+    });
     connect(surface, &QQuickItem::visibleChanged, this, &PixEagleVideoController::_updateDesired);
     connect(surface, &QQuickItem::windowChanged, this, [this](QQuickWindow* window) {
         _stop();

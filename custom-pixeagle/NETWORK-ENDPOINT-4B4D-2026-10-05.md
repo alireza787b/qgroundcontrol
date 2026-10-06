@@ -32,6 +32,11 @@ session. It is based on the QGC commit that contains this checkpoint on
   the authoritative camera guard and shows a short refresh state. It does not
   present a false motor fault or send a redundant stop. Genuine transmission,
   permission and unknown-outcome errors remain visible.
+- If a camera reconnect rotates the stream/source epoch while QGC is already
+  receiving JPEG frames, the video surface requests one rate-limited context
+  refresh. Frames remain rejected for target selection until their provenance
+  matches the refreshed context; the operator no longer remains indefinitely
+  on a stale video session.
 
 ## Verification
 
