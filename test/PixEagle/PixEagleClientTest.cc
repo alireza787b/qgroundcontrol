@@ -119,6 +119,7 @@ void PixEagleClientTest::_nativeFollowingUsesCapturedVehicleAndSurvivesVideoLoss
     QCOMPARE(client.followingState(), QStringLiteral("active"));
 
     client.setVehicleIdentity(7, AIRCRAFT_UID, false);
+    QVERIFY(!client.canRefreshConnection());
     QVERIFY(!client.canStartFollowing());
     QVERIFY(client.canStopFollowing());
     const QString stopContext = client.captureFollowingStop();
@@ -975,6 +976,79 @@ void PixEagleClientTest::_tlsCertificateRejected()
     QVERIFY(encryptedConnections.isEmpty());
     QVERIFY(!client.authenticated());
     QVERIFY(client.statusText().contains("certificate", Qt::CaseInsensitive));
+}
+
+void PixEagleClientTest::_contextRecoversAfterTransientFailure_data()
+{
+    QTest::addColumn<bool>("companionOnly");
+    QTest::newRow("without-aircraft") << true;
+    QTest::newRow("vehicle") << false;
+}
+
+void PixEagleClientTest::_contextRecoversAfterTransientFailure()
+{
+    QFETCH(bool, companionOnly);
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseMedia(server.context);
+    PixEagleClient client(nullptr, companionOnly);
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
+    server.overrides[CONTEXT_PATH] = {503, {}, {}};
+    client.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(client.canRefreshConnection(), TestTimeout::mediumMs());
+    QVERIFY(!client.mediaAvailable());
+    QVERIFY(client.authenticated());
+    QVERIFY(client.statusText().contains("Retrying"));
+    const auto previousRequest = server.lastRequestIndex(CONTEXT_PATH);
+    server.overrides.remove(CONTEXT_PATH);
+    server.context.insert("runtime_id", "runtime-recovered");
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(CONTEXT_PATH) > previousRequest, TestTimeout::mediumMs());
+    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
+    QCOMPARE(client.connectionContext().value("runtime_id").toString(), QStringLiteral("runtime-recovered"));
+    QVERIFY(!client.associationVerified());
+    QVERIFY(!client.canStartFollowing());
+    QCOMPARE(server.lastRequest(LOGIN_PATH).target, LOGIN_PATH);
+    for (const auto& request : server.requests) {
+        if (request.method == "POST") {
+            QCOMPARE(request.target, LOGIN_PATH);
+        }
+    }
+}
+
+void PixEagleClientTest::_contextPolicyFailureDoesNotRetry()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    PixEagleClient client(nullptr, true);
+    configure(client, server);
+    QVERIFY(signIn(client));
+    server.overrides[CONTEXT_PATH] = {403, {}, {}};
+    client.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(client.canRefreshConnection(), TestTimeout::mediumMs());
+    QVERIFY(client.statusText().contains("denied"));
+    QSignalSpy incoming(&server, &QTcpServer::newConnection);
+    QVERIFY_NO_SIGNAL_WAIT(incoming, 2500);
+    server.overrides.remove(CONTEXT_PATH);
+    client.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.connectionContext().isEmpty(), TestTimeout::mediumMs());
+}
+
+void PixEagleClientTest::_contextRetryCancelledBySignOut()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    PixEagleClient client(nullptr, true);
+    configure(client, server);
+    QVERIFY(signIn(client));
+    server.overrides[CONTEXT_PATH] = {503, {}, {}};
+    client.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(client.canRefreshConnection(), TestTimeout::mediumMs());
+    client.signOut();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.authenticated() && !client.busy(), TestTimeout::mediumMs());
+    QSignalSpy incoming(&server, &QTcpServer::newConnection);
+    QVERIFY_NO_SIGNAL_WAIT(incoming, 2500);
 }
 
 void PixEagleClientTest::_sessionErrors_data()

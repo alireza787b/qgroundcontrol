@@ -25,6 +25,7 @@ class PixEagleClient : public QObject
     Q_PROPERTY(bool authenticated READ authenticated NOTIFY changed)
     Q_PROPERTY(bool associationVerified READ associationVerified NOTIFY changed)
     Q_PROPERTY(bool canVerify READ canVerify NOTIFY changed)
+    Q_PROPERTY(bool canRefreshConnection READ canRefreshConnection NOTIFY changed)
     Q_PROPERTY(QString statusText READ statusText NOTIFY changed)
     Q_PROPERTY(QString signedInAs READ signedInAs NOTIFY changed)
     Q_PROPERTY(bool rememberSignIn READ rememberSignIn NOTIFY changed)
@@ -94,6 +95,12 @@ public:
 
     bool associationVerified() const;
     bool canVerify() const;
+
+    bool canRefreshConnection() const
+    {
+        return _enabled && _authenticated && !busy() && (_online || _companionOnly) && _context.isEmpty();
+    }
+
     QString statusText() const;
 
     QString signedInAs() const { return _signedInAs; }
@@ -361,6 +368,7 @@ private:
     qint64 _restartNextSignInMs = 0;
     void _recoverBackendRestart();
     QTimer _pollTimer;
+    int _contextRetryMs = 2000;
     QTimer _expiryTimer;
     QTimer _statusExpiryTimer;
     QTimer _targetExpiryTimer;
