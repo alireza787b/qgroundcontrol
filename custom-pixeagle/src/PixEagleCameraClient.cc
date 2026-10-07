@@ -190,8 +190,7 @@ void PixEagleClient::refreshCamera()
                 }
                 const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -404,8 +403,7 @@ bool PixEagleClient::_postCameraAction(QJsonObject body, bool stop)
             const auto bytes = reply->isOpen() ? reply->read(CAMERA_MAX_BYTES + 1) : QByteArray{};
             const auto data = QJsonDocument::fromJson(bytes).object();
             if (status == 401) {
-                _resetSession();
-                _error = tr("Your session expired. Sign in again.");
+                _sessionExpired();
                 emit changed();
                 return;
             }

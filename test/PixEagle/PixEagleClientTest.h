@@ -41,6 +41,9 @@ private slots:
     void _contextRetryCancelledBySignOut();
     void _sessionErrors_data();
     void _sessionErrors();
+    void _sessionExpiryRecovery_data();
+    void _sessionExpiryRecovery();
+    void _vehicleIdentityPreservesSignIn();
     void _credentialsStayOutOfSettings();
     void _rememberSignInPreferenceIsPerEndpoint();
     void _companionVideoWithoutAircraft();

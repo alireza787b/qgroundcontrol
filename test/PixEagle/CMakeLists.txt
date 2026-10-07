@@ -36,7 +36,7 @@ add_qgc_test(
     Unit
     PixEagle
     TIMEOUT
-    60
+    120
     RESOURCE_LOCK
     Settings
 )

@@ -119,7 +119,7 @@ void PixEagleClientTest::_nativeFollowingUsesCapturedVehicleAndSurvivesVideoLoss
     QCOMPARE(client.followingState(), QStringLiteral("active"));
 
     client.setVehicleIdentity(7, AIRCRAFT_UID, false);
-    QVERIFY(!client.canRefreshConnection());
+    QVERIFY(client.canRefreshConnection());
     QVERIFY(!client.canStartFollowing());
     QVERIFY(client.canStopFollowing());
     const QString stopContext = client.captureFollowingStop();
@@ -1108,6 +1108,93 @@ void PixEagleClientTest::_credentialsStayOutOfSettings()
     QVERIFY_NO_SIGNAL_WAIT(incoming, TestTimeout::shortMs());
 }
 
+void PixEagleClientTest::_sessionExpiryRecovery_data()
+{
+    QTest::addColumn<int>("loginStatus");
+    QTest::addColumn<bool>("signOut");
+    QTest::newRow("reconnect") << 200 << false;
+    QTest::newRow("credentials-rejected") << 401 << false;
+    QTest::newRow("cancelled-by-sign-out") << 200 << true;
+}
+
+void PixEagleClientTest::_sessionExpiryRecovery()
+{
+    QFETCH(int, loginStatus);
+    QFETCH(bool, signOut);
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseMedia(server.context);
+    PixEagleClient client(nullptr, true);
+    configure(client, server);
+    client.setRememberSignIn(false);
+    QCOMPARE(client.signInUsername(), QStringLiteral("admin"));
+    QCOMPARE(client.signInPassword(), QStringLiteral("admin"));
+    QVERIFY(signIn(client));
+    const auto firstLogin = server.lastRequestIndex(LOGIN_PATH);
+    server.overrides[CONTEXT_PATH] = {401, {}, {}};
+    client.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.authenticated() && !client.busy(), TestTimeout::mediumMs());
+    QCOMPARE(client.signInUsername(), QStringLiteral("pilot"));
+    QCOMPARE(client.signInPassword(), QStringLiteral("test-only-password"));
+    server.overrides.remove(CONTEXT_PATH);
+    if (signOut) {
+        client.signOut();
+        QSignalSpy incoming(&server, &QTcpServer::newConnection);
+        QVERIFY_NO_SIGNAL_WAIT(incoming, 2500);
+        QCOMPARE(server.lastRequestIndex(LOGIN_PATH), firstLogin);
+        return;
+    }
+    if (loginStatus != 200) {
+        server.overrides[LOGIN_PATH] = {loginStatus, {}, {}};
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(LOGIN_PATH) > firstLogin, TestTimeout::mediumMs());
+    if (loginStatus == 200) {
+        QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
+        QVERIFY(!client.canStartFollowing());
+    } else {
+        QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), TestTimeout::mediumMs());
+        QVERIFY(!client.authenticated());
+        QSignalSpy incoming(&server, &QTcpServer::newConnection);
+        QVERIFY_NO_SIGNAL_WAIT(incoming, 2500);
+    }
+    for (const auto& request : server.requests) {
+        if (request.method == "POST") {
+            QCOMPARE(request.target, LOGIN_PATH);
+        }
+    }
+}
+
+void PixEagleClientTest::_vehicleIdentityPreservesSignIn()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseMedia(server.context);
+    PixEagleClient client;
+    client.setEndpoint(server.endpoint());
+    client.setEnabled(true);
+    client.setRememberSignIn(false);
+    server.deferredPath = LOGIN_PATH;
+    client.signIn("pilot", "test-only-password");
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(LOGIN_PATH) >= 0, TestTimeout::mediumMs());
+    client.setVehicleIdentity(7, AIRCRAFT_UID, true);
+    QVERIFY(server.respond(server.lastRequestIndex(LOGIN_PATH), server.responseFor(server.lastRequest(LOGIN_PATH))));
+    QTRY_VERIFY_WITH_TIMEOUT(client.authenticated() && client.mediaAvailable(), TestTimeout::mediumMs());
+    client.setAutoVerifySingleVehicle(true);
+    QVERIFY(verify(client));
+    client.setVehicleIdentity(7, AIRCRAFT_UID, false);
+    QVERIFY(client.authenticated());
+    QVERIFY(!client.associationVerified());
+    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
+    client.setVehicleIdentity(7, AIRCRAFT_UID, true);
+    QTRY_VERIFY_WITH_TIMEOUT(client.associationVerified(), TestTimeout::mediumMs());
+    int logins = 0;
+    for (const auto& request : server.requests) {
+        logins += request.target == LOGIN_PATH;
+    }
+    QCOMPARE(logins, 1);
+    QCOMPARE(client.endpoint(), server.endpoint());
+}
+
 void PixEagleClientTest::_rememberSignInPreferenceIsPerEndpoint()
 {
     PixEagleClient client;
@@ -1338,7 +1425,9 @@ void PixEagleClientTest::_runtimeStatusExpiresAndRejectsLateSession()
     server.overrides.insert(STATUS_PATH, {401, {}, {}});
     QVERIFY(signIn(client));
     QTRY_VERIFY_WITH_TIMEOUT(!client.authenticated(), TestTimeout::mediumMs());
-    QVERIFY(client.statusText().contains("session expired"));
+    QVERIFY(client.statusText().contains("Reconnecting"));
+    QVERIFY(client.runtimeStatusText().contains("status unavailable"));
+    QVERIFY(!client.mediaAvailable());
 }
 
 void PixEagleClientTest::_targetReadsRequireVerifiedBinding()

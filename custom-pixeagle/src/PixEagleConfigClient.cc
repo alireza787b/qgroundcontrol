@@ -244,8 +244,7 @@ void PixEagleClient::refreshConfig()
                 }
                 const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -331,8 +330,7 @@ bool PixEagleClient::_postConfigAction(const QString& action, QJsonObject body, 
                 const auto data = QJsonDocument::fromJson(bytes).object();
                 // Reconcile through a new read; an acknowledgement alone is not running-state evidence.
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
