@@ -203,6 +203,7 @@ jobs:
           build-dir: ${{ runner.temp }}/build
           build-type: ${{ inputs.build_type }}
           preset: ${{ inputs.build_type == 'Debug' && 'Linux-debug' || 'Linux' }}
+          testing: ${{ inputs.build_type == 'Debug' }}
           extra-args: >-
             -DQGC_CUSTOM_DIR=${{ env.CUSTOM_DIR }}
             -DQGC_ENABLE_GST_VIDEOSTREAMING=ON
@@ -221,6 +222,13 @@ jobs:
         with:
           binary-path: ${{ runner.temp }}/build/Release/PixEagle-QGroundControl
           build-dir: ${{ runner.temp }}/build
+
+      - name: Run native Unit and Integration tests
+        if: ${{ !cancelled() && inputs.build_type == 'Debug' && steps.build.outcome == 'success' }}
+        uses: ./.github/actions/test-phase
+        with:
+          build-dir: ${{ runner.temp }}/build
+          suite: pixeagle
 
       - name: Create AppImage
         uses: ./.github/actions/cmake-install

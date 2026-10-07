@@ -130,8 +130,12 @@ endif()
 # ----------------------------------------------------------------------------
 # Extract Version String from Git Tags
 # ----------------------------------------------------------------------------
+set(_qgc_git_version_args)
+if(QGC_GIT_TAG_PATTERN)
+    list(APPEND _qgc_git_version_args --match "${QGC_GIT_TAG_PATTERN}")
+endif()
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" describe --always --tags
+    COMMAND "${GIT_EXECUTABLE}" describe --always --tags ${_qgc_git_version_args}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE QGC_APP_VERSION_STR
     OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET
@@ -153,7 +157,7 @@ endif()
 # Extract Clean Version Tag
 # ----------------------------------------------------------------------------
 execute_process(
-    COMMAND "${GIT_EXECUTABLE}" describe --always --tags --abbrev=0
+    COMMAND "${GIT_EXECUTABLE}" describe --always --tags --abbrev=0 ${_qgc_git_version_args}
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     OUTPUT_VARIABLE QGC_APP_VERSION
     OUTPUT_STRIP_TRAILING_WHITESPACE ERROR_QUIET
