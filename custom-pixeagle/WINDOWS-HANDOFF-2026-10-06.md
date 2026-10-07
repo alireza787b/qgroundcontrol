@@ -32,8 +32,38 @@ Use `validation/collect-windows-video-debug.ps1`. It selects the custom
 executable, accepts an explicit path, disables the unsafe Qt dump, and writes
 separate stdout/stderr files plus binary checksum and exit status into a
 unique Desktop diagnostics folder. Install the matching installer first.
-The script has been reviewed on Linux; actual PowerShell execution remains
-part of the Windows operator retest.
+The script also records Windows edition/build, Media Foundation DLL presence
+and startup result, installation hashes and `qt.conf`. Plugin-loader tracing
+is enabled before application startup. QGC's global `info` override is omitted
+because it hid the requested transport debug messages in the first capture.
+The script restores its diagnostic environment overrides when QGC exits.
+Actual Windows PowerShell execution remains part of the operator retest.
+
+## Tablet diagnostics, 7 October
+
+`pixeagle-qgc-diagnostics-20261007-113226` records `No QtMultimedia backends
+found`, repeated `Failed to create QVideoSink "Not available"`, and a Windows
+Media Foundation initialization failure. Without a platform video sink,
+Qt's [QVideoSink implementation](https://github.com/qt/qtmultimedia/blob/v6.11.1/src/multimedia/video/qvideosink.cpp)
+does not deliver submitted frames. This establishes a client-side video
+failure independently of any additional network problem.
+
+The installed executable SHA256 is
+`e220640ba2a02133200620f3f16e12597649255c1d9e3c440739d5b14278f41d`.
+It matches the executable extracted from the `30c6a1528` installer. Extraction
+also confirmed both multimedia plugins, FFmpeg and Visual C++ runtime DLLs,
+and `bin/qt.conf` with `Prefix = ..`. Therefore this archive is not missing
+those packaged components; the actual tablet installation still needs to be
+checked against those files.
+
+Both Windows multimedia plugins import Windows Media Foundation DLLs.
+Missing Media Foundation, damaged dependencies or plugin-loading configuration
+remain candidates; the first capture does not identify which dependency failed.
+Use the updated launcher to obtain Qt's exact plugin-loader refusal and the
+tablet's system information before changing packaging or OS components.
+For a confirmed Windows N installation lacking media features, use
+[Microsoft's Media Feature Pack instructions](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-list-for-windows-n-editions).
+Do not infer an N edition from the current logs alone.
 
 ## Evidence boundary
 
@@ -74,7 +104,10 @@ Android could fall back to a bare commit identifier.
 
 All custom platform jobs now resolve the same upstream `v5.2.0-dev` annotated
 tag, verify its pinned object and ancestry, and include `pixeagle-version.txt`
-in their artifact. This changes version provenance only. A fresh all-platform
-run is required before replacing the Desktop bundle. Android still uses a
+in their artifact. This changes version provenance only. All three jobs in
+run `37563660848` passed at `30c6a1528`, with common version
+`v5.2.0-dev-170-g30c6a1528`. Windows and Linux downloads matched their checksums;
+the Linux AppImage passed its version/boot check. Windows tablet video acceptance
+remains open despite packaging CI success. Android still uses a
 temporary CI signing key; it is a private test artifact, not a signed public
 release or a guaranteed in-place upgrade.
