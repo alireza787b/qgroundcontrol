@@ -63,3 +63,18 @@ connection and backend configuration. Its service was active and enabled.
 A preflight carrying the robot-subnet dashboard Origin returned 200 with
 credentialed CORS through Wi-Fi. Direct robot-subnet delivery and the new
 Windows binary remain operator acceptance checks.
+
+## Cross-platform version provenance
+
+Hosted native build/test run `37518498245` passed at `490653960` and all
+three packaging jobs in `37518492369` succeeded. Downloaded checksums matched;
+the Linux AppImage started and returned its version. That check exposed
+different version metadata: Windows fetched upstream tags, while Linux and
+Android could fall back to a bare commit identifier.
+
+All custom platform jobs now resolve the same upstream `v5.2.0-dev` annotated
+tag, verify its pinned object and ancestry, and include `pixeagle-version.txt`
+in their artifact. This changes version provenance only. A fresh all-platform
+run is required before replacing the Desktop bundle. Android still uses a
+temporary CI signing key; it is a private test artifact, not a signed public
+release or a guaranteed in-place upgrade.

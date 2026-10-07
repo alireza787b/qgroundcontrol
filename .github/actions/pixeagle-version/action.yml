@@ -1,0 +1,29 @@
+name: PixEagle Version
+description: Use the same verified upstream version anchor on every PixEagle platform
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve pinned version anchor
+      shell: bash
+      run: |
+        version_tag=v5.2.0-dev
+        tag_object=c66db8c7c7d6e94e9492304a4b302fc593fa9889
+        git fetch --force --no-tags https://github.com/mavlink/qgroundcontrol.git \
+          "refs/tags/${version_tag}:refs/tags/${version_tag}"
+        if [[ "$(git rev-parse "refs/tags/${version_tag}")" != "$tag_object" ]]; then
+          echo "::error::Upstream version tag differs from the qualified anchor"
+          exit 1
+        fi
+        git merge-base --is-ancestor "${version_tag}^{commit}" HEAD
+        version="$(git describe --tags --always)"
+        if [[ "$version" != "${version_tag}" && "$version" != "${version_tag}-"* ]]; then
+          echo "::error::Unexpected version provenance: $version"
+          exit 1
+        fi
+        {
+          echo "Version: $version"
+          echo "Source: $(git rev-parse HEAD)"
+          echo "Upstream tag: $version_tag ($tag_object)"
+        } > "${RUNNER_TEMP}/pixeagle-version.txt"
+        cat "${RUNNER_TEMP}/pixeagle-version.txt"

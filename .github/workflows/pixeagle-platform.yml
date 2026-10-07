@@ -70,9 +70,8 @@ jobs:
           build-type: ${{ inputs.build_type }}
           cache-variant: pixeagle
 
-      - name: Fetch QGC version tags
-        shell: bash
-        run: git fetch --force --tags https://github.com/mavlink/qgroundcontrol.git
+      - name: Resolve PixEagle version
+        uses: ./.github/actions/pixeagle-version
 
       - name: Configure
         uses: ./.github/actions/cmake-configure
@@ -148,6 +147,7 @@ jobs:
             ${{ steps.installer.outputs.checksum }}
             ${{ runner.temp }}/build/junit-portable-windows.xml
             ${{ runner.temp }}/build/portable-windows-output.txt
+            ${{ runner.temp }}/pixeagle-version.txt
 
       - name: Attest Windows installer
         if: inputs.build_type == 'Release'
@@ -193,6 +193,9 @@ jobs:
 
       - name: Install dependencies
         uses: ./.github/actions/install-dependencies
+
+      - name: Resolve PixEagle version
+        uses: ./.github/actions/pixeagle-version
 
       - name: Configure
         uses: ./.github/actions/cmake-configure
@@ -254,6 +257,7 @@ jobs:
           path: |
             ${{ steps.appimage.outputs.path }}
             ${{ steps.appimage.outputs.path }}.sha256
+            ${{ runner.temp }}/pixeagle-version.txt
 
       - name: Attest Linux AppImage
         if: inputs.build_type == 'Release'
@@ -316,6 +320,9 @@ jobs:
 
       - name: Install host dependencies
         uses: ./.github/actions/install-dependencies
+
+      - name: Resolve PixEagle version
+        uses: ./.github/actions/pixeagle-version
 
       - name: Create temporary debug keystore
         run: |
@@ -388,6 +395,7 @@ jobs:
             ${{ steps.apk.outputs.path }}.sha256
             ${{ runner.temp }}/build/android-artifact-info.txt
             ${{ runner.temp }}/build/android-build.log
+            ${{ runner.temp }}/pixeagle-version.txt
 
       - name: Attest Android APK
         if: inputs.build_type == 'Release'
