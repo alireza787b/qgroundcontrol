@@ -19,6 +19,8 @@ The [current status](STATUS.md) records accepted workflows and remaining gates.
 The [publication status](PUBLICATION-STATUS.md) explains that this customized
 QGC branch is not a public release; the public PixEagle project and its Apache
 2.0 notice remain separate.
+For the private Windows installer, see [Windows setup and video readiness](WINDOWS-SETUP.md),
+including Windows N media features, the required reboot and runtime diagnostics.
 The [shared restart and recorded-video checkpoint](SLICE-4B-RESTART.md) records
 the latest camera-free validation; an optional
 [recorded SIH session](OPERATOR-RECORDED-SIH.md) is prepared. Final camera hardware
@@ -330,8 +332,9 @@ apt-get download libxcb-cursor0=0.1.4-1build1
 dpkg-deb -x libxcb-cursor0_0.1.4-1build1_amd64.deb root
 ```
 
-This supplements the normal Qt/GStreamer runtime prerequisites; other systems
-should install their QGC Linux dependencies. Blank maps in the isolated captures
+This supplements the Linux development dependencies; other Linux systems
+should install their QGC Linux dependencies. Windows installer prerequisites
+are covered in [Windows setup](WINDOWS-SETUP.md). Blank maps in the isolated captures
 are expected because those containers have no network. Map downloads on the host
 also depend on provider/network availability and are separate from local video.
 

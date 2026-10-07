@@ -59,17 +59,28 @@ checked against those files.
 Both Windows multimedia plugins import Windows Media Foundation DLLs.
 Missing Media Foundation, damaged dependencies or plugin-loading configuration
 remain candidates; the first capture does not identify which dependency failed.
-Use the updated launcher to obtain Qt's exact plugin-loader refusal and the
-tablet's system information before changing packaging or OS components.
-For a confirmed Windows N installation lacking media features, use
-[Microsoft's Media Feature Pack instructions](https://support.microsoft.com/en-us/windows/experience/platform-variants/media-feature-pack-list-for-windows-n-editions).
-Do not infer an N edition from the current logs alone.
+The operator subsequently installed Windows media features, Visual C++
+Redistributable and standalone GStreamer after installing the latest QGC.
+Video still failed before reboot and worked after restarting Windows with
+the camera available again. This records operator-confirmed tablet video
+recovery after a combined repair. The exact Windows edition, feature installed
+and post-repair loaded modules are not yet recorded.
+
+Media-feature activation after reboot is the leading explanation given the
+earlier errors. Microsoft requires a restart after installing the Media Feature
+Pack even when no restart prompt appears. Multiple simultaneous changes prevent
+isolating the cause. Do not infer Windows N or a standalone GStreamer requirement
+from this result. The installer already bundles GStreamer and its runtime
+paths. Use [Windows setup](WINDOWS-SETUP.md) for conditional prerequisites,
+official links and further diagnostics if a failure recurs.
 
 ## Evidence boundary
 
 Local checks and hosted runs are recorded below when complete. The next
-operator test is Windows GCS sign-in/video, transient interruption/recovery,
-and supervised backend restart. No aircraft is required for video/tracking.
+operator gates are transient interruption/recovery and supervised backend
+restart on the repaired tablet. Sign-in/video recovery is operator confirmed;
+the combined repair does not establish clean-host dependency sufficiency.
+No aircraft is required for video/tracking.
 
 ## Linux closeout checks
 
@@ -107,7 +118,8 @@ tag, verify its pinned object and ancestry, and include `pixeagle-version.txt`
 in their artifact. This changes version provenance only. All three jobs in
 run `37563660848` passed at `30c6a1528`, with common version
 `v5.2.0-dev-170-g30c6a1528`. Windows and Linux downloads matched their checksums;
-the Linux AppImage passed its version/boot check. Windows tablet video acceptance
-remains open despite packaging CI success. Android still uses a
+the Linux AppImage passed its version/boot check. Windows tablet video recovery
+was subsequently operator confirmed as described above; that evidence remains
+separate from packaging CI. Android still uses a
 temporary CI signing key; it is a private test artifact, not a signed public
 release or a guaranteed in-place upgrade.
