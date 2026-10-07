@@ -142,7 +142,7 @@ void PixEagleManagerTest::_vehicleEndpointDefaultsAndRestores()
     connect(_mockLink, &QObject::destroyed, this, [this]() { _mockLink = nullptr; });
     QTRY_VERIFY_WITH_TIMEOUT(!manager.activeClient()->companionOnly(), TestTimeout::mediumMs());
     auto* client = manager.activeClient();
-    QCOMPARE(client->endpoint(), client->defaultEndpoint());
+    QCOMPARE(client->endpoint(), QStringLiteral("https://other-companion.example"));
     _vehicle = MultiVehicleManager::instance()->activeVehicle();
     QVERIFY(_vehicle);
     QTRY_VERIFY_WITH_TIMEOUT(_mockLink->receivedRequestMessageCount(MAVLINK_MSG_ID_AUTOPILOT_VERSION) > 0,
@@ -150,7 +150,7 @@ void PixEagleManagerTest::_vehicleEndpointDefaultsAndRestores()
     sendAutopilotVersion(_mockLink, _vehicle->id(), _vehicle->defaultComponentId(),
                          PixEagleTest::AIRCRAFT_UID.toULongLong());
     QTRY_COMPARE_WITH_TIMEOUT(client->aircraftUid(), PixEagleTest::AIRCRAFT_UID, TestTimeout::mediumMs());
-    QCOMPARE(client->endpoint(), saved.isEmpty() ? client->defaultEndpoint() : saved);
+    QCOMPARE(client->endpoint(), saved.isEmpty() ? QStringLiteral("https://other-companion.example") : saved);
     QVERIFY(!client->authenticated());
     _disconnectMockLink();
     QSettings().remove(key);
@@ -187,7 +187,7 @@ void PixEagleManagerTest::_rawIdentityConflictAndVehicleRemoval()
     _vehicle = MultiVehicleManager::instance()->activeVehicle();
     QVERIFY(_vehicle);
     QPointer<PixEagleClient> client = manager.activeClient();
-    QVERIFY(!client->authenticated());
+    QTRY_VERIFY_WITH_TIMEOUT(client->authenticated(), TestTimeout::mediumMs());
     QVERIFY(!client->companionOnly());
     QVERIFY(client->aircraftUid().isEmpty());
     client->setEndpoint(server.endpoint("/pixeagle-api"));
@@ -226,7 +226,9 @@ void PixEagleManagerTest::_rawIdentityConflictAndVehicleRemoval()
     _disconnectMockLink();
     QTRY_VERIFY_WITH_TIMEOUT(client.isNull(), TestTimeout::mediumMs());
     QCOMPARE(manager.activeClient(), companion);
-    QCOMPARE(manager.dashboardUrl().toString(), "https://dashboard.example/companion/");
+    QCOMPARE(companion->endpoint(), server.endpoint("/pixeagle-api"));
+    QCOMPARE(companion->signInUsername(), QStringLiteral("pilot"));
+    QCOMPARE(companion->signInPassword(), QStringLiteral("test-only-password"));
     QVERIFY(manager.setDashboardUrlOverride(""));
     QVERIFY(companion->authenticated());
     QVERIFY(manager.vehicleLabels().isEmpty());

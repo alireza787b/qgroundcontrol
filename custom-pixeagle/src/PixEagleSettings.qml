@@ -49,16 +49,19 @@ Item {
         destination.signInAtRemembered(address.text, username.text, password.text);
     }
 
+    function loadSignInFields() {
+        username.text = root._client ? root._client.signInUsername : "admin";
+        password.text = root._client ? root._client.signInPassword : "admin";
+    }
+
     on_ClientChanged: {
-        password.clear();
-        username.clear();
+        loadSignInFields();
         details.checked = false;
         dashboardDetails.checked = false;
         advancedTracking.checked = false;
         root._browserError = "";
         address.text = root._client ? root._client.endpoint : "";
     }
-    on_EnabledChanged: password.clear()
 
     QGCFlickable {
         anchors.fill: parent
@@ -184,6 +187,9 @@ Item {
                             enabled: root._client && !root._client.busy
                             inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                             objectName: "pixeagleUsername"
+                            text: root._client ? root._client.signInUsername : "admin"
+
+                            onTextEdited: root._client.setSignInCredentials(text, password.text)
                         }
 
                         QGCLabel {
@@ -198,6 +204,9 @@ Item {
                             enabled: root._client && !root._client.busy
                             inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoPredictiveText
                             objectName: "pixeaglePassword"
+                            text: root._client ? root._client.signInPassword : "admin"
+
+                            onTextEdited: root._client.setSignInCredentials(username.text, text)
 
                             onAccepted: root.signIn()
                         }
@@ -616,7 +625,7 @@ Item {
 
                 QGCLabel {
                     Layout.fillWidth: true
-                    text: qsTr("With an aircraft connected, select the QGC vehicle and choose Verify vehicle. Without an aircraft, video and permitted tracking work in companion-only mode. Following requires a verified aircraft and a compatible PixEagle follower.")
+                    text: qsTr("A single matching aircraft verifies automatically. For multiple aircraft, select the QGC vehicle and verify its connection. Video and permitted tracking also work without an aircraft. Following requires verified aircraft identity and a compatible follower.")
                     wrapMode: Text.WordWrap
                 }
 
@@ -701,9 +710,7 @@ Item {
             address.text = root._client ? root._client.endpoint : "";
         }
 
-        function onChanged() {
-            if (root._client && root._client.authenticated) password.clear();
-        }
+        function onSignInCredentialsChanged() { root.loadSignInFields(); }
     }
 
     Connections {

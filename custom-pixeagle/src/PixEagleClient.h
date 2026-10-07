@@ -30,6 +30,8 @@ class PixEagleClient : public QObject
     Q_PROPERTY(QString signedInAs READ signedInAs NOTIFY changed)
     Q_PROPERTY(bool rememberSignIn READ rememberSignIn NOTIFY changed)
     Q_PROPERTY(QString credentialStatus READ credentialStatus NOTIFY changed)
+    Q_PROPERTY(QString signInUsername READ signInUsername NOTIFY signInCredentialsChanged)
+    Q_PROPERTY(QString signInPassword READ signInPassword NOTIFY signInCredentialsChanged)
     Q_PROPERTY(QString vehicleLabel READ vehicleLabel NOTIFY changed)
     Q_PROPERTY(QString diagnostics READ diagnostics NOTIFY changed)
     Q_PROPERTY(QString runtimeStatusText READ runtimeStatusText NOTIFY changed)
@@ -96,10 +98,7 @@ public:
     bool associationVerified() const;
     bool canVerify() const;
 
-    bool canRefreshConnection() const
-    {
-        return _enabled && _authenticated && !busy() && (_online || _companionOnly) && _context.isEmpty();
-    }
+    bool canRefreshConnection() const { return _enabled && _authenticated && !busy() && _context.isEmpty(); }
 
     QString statusText() const;
 
@@ -108,6 +107,13 @@ public:
     bool rememberSignIn() const;
 
     QString credentialStatus() const { return _credentialStatus; }
+
+    QString signInUsername() const { return _signInUsername; }
+
+    QString signInPassword() const { return _signInPassword; }
+
+    Q_INVOKABLE void setSignInCredentials(const QString& username, const QString& password);
+    void restoreConnectionFrom(const PixEagleClient& source);
 
     QString vehicleLabel() const;
     QString diagnostics() const;
@@ -247,6 +253,7 @@ public:
     static bool validateEndpoint(const QString& text, QUrl* result = nullptr);
 
 signals:
+    void signInCredentialsChanged();
     void changed();
     void endpointChanged();
     void contextChanged();
@@ -268,6 +275,9 @@ private:
         Confirm
     };
     void _resetSession();
+    void _startSignIn(const QString& username, const QString& password);
+    void _sessionExpired();
+    void _scheduleAuthenticationRecovery();
     QString _credentialKey() const;
     void _loadRememberedSignIn();
     void _saveRememberedSignIn();
@@ -337,6 +347,7 @@ private:
 
     QNetworkAccessManager* _network = nullptr;
     QPointer<QNetworkReply> _reply;
+    Request _requestKind = Request::Context;
     QPointer<QNetworkReply> _statusReply;
     QPointer<QNetworkReply> _targetStateReply;
     QPointer<QNetworkReply> _targetCatalogReply;
@@ -368,6 +379,8 @@ private:
     qint64 _restartNextSignInMs = 0;
     void _recoverBackendRestart();
     QTimer _pollTimer;
+    QTimer _authenticationRetryTimer;
+    int _authenticationRetryMs = 2000;
     int _contextRetryMs = 2000;
     QTimer _expiryTimer;
     QTimer _statusExpiryTimer;
@@ -389,6 +402,10 @@ private:
     QByteArray _csrfToken;
     QString _signedInAs;
     QString _credentialStatus;
+    QString _signInUsername = QStringLiteral("admin");
+    QString _signInPassword = QStringLiteral("admin");
+    QString _recoveryUsername;
+    QString _recoveryPassword;
     QString _pendingCredentialUsername;
     QString _pendingCredentialPassword;
     quint64 _credentialDecisionGeneration = 0;

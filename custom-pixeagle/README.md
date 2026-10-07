@@ -21,6 +21,8 @@ QGC branch is not a public release; the public PixEagle project and its Apache
 2.0 notice remain separate.
 For the private Windows installer, see [Windows setup and video readiness](WINDOWS-SETUP.md),
 including Windows N media features, the required reboot and runtime diagnostics.
+See [connection recovery](CONNECTION-RECOVERY.md) for beginner sign-in defaults,
+field preservation, automatic recovery and the aircraft-identity boundaries.
 The [shared restart and recorded-video checkpoint](SLICE-4B-RESTART.md) records
 the latest camera-free validation; an optional
 [recorded SIH session](OPERATOR-RECORDED-SIH.md) is prepared. Final camera hardware

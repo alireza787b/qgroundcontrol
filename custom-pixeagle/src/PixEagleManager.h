@@ -59,6 +59,7 @@ private:
 
     PixEagleSettings* _settings = nullptr;
     QHash<Vehicle*, PixEagleClient*> _clients;
+    QHash<Vehicle*, QString> _provisionalEndpoints;
     PixEagleClient* _companion = nullptr;
     PixEagleVideoController* _video = nullptr;
 };

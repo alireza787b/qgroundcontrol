@@ -38,7 +38,12 @@ PixEagleManager::PixEagleManager(PixEagleSettings* settings, QObject* parent)
     auto* manager = MultiVehicleManager::instance();
     connect(manager, &MultiVehicleManager::vehicleAdded, this, &PixEagleManager::_addVehicle);
     connect(manager, &MultiVehicleManager::vehicleRemoved, this, [this](Vehicle* vehicle) {
+        _provisionalEndpoints.remove(vehicle);
         if (auto* client = _clients.take(vehicle)) {
+            if (_clients.isEmpty()) {
+                _companion->setEndpoint(client->endpoint());
+                _companion->restoreConnectionFrom(*client);
+            }
             client->setEnabled(false);
             client->deleteLater();
         }
@@ -74,7 +79,12 @@ void PixEagleManager::_addVehicle(Vehicle* vehicle)
     if (!vehicle || _clients.contains(vehicle)) {
         return;
     }
+    auto* source = _clients.isEmpty() ? _companion : nullptr;
     auto* client = new PixEagleClient(this);
+    if (source) {
+        client->setEndpoint(source->endpoint());
+    }
+    _provisionalEndpoints.insert(vehicle, client->endpoint());
     _clients.insert(vehicle, client);
     connect(vehicle, &Vehicle::vehicleUIDChanged, this, [this, vehicle]() { _updateIdentity(vehicle); });
     connect(vehicle->vehicleLinkManager(), &VehicleLinkManager::communicationLostChanged, this,
@@ -93,6 +103,9 @@ void PixEagleManager::_addVehicle(Vehicle* vehicle)
     });
     _updateIdentity(vehicle);
     client->setEnabled(_settings->integrationEnabled()->rawValue().toBool());
+    if (source) {
+        client->restoreConnectionFrom(*source);
+    }
     emit vehiclesChanged();
     emit followingVehiclesChanged();
     emit activeClientChanged();
@@ -107,10 +120,15 @@ void PixEagleManager::_updateIdentity(Vehicle* vehicle)
     const QString uid = vehicle->vehicleUID() ? QString::number(vehicle->vehicleUID()) : QString();
     const bool firstIdentity = client->aircraftUid().isEmpty() && !uid.isEmpty();
     client->setVehicleIdentity(vehicle->id(), uid, !vehicle->vehicleLinkManager()->communicationLost());
-    if (firstIdentity && client->endpoint() == client->defaultEndpoint()) {
-        client->setEndpoint(QSettings().value("PixEagle/Endpoints/" + uid, client->defaultEndpoint()).toString());
-    } else if (firstIdentity && !client->endpoint().isEmpty()) {
-        QSettings().setValue("PixEagle/Endpoints/" + uid, client->endpoint());
+    if (firstIdentity) {
+        const QString saved = QSettings().value("PixEagle/Endpoints/" + uid).toString();
+        const bool inherited = _provisionalEndpoints.take(vehicle) == client->endpoint();
+        if (inherited && !saved.isEmpty() && PixEagleClient::validateEndpoint(saved)) {
+            client->setEndpoint(saved);
+        }
+        if (client->endpoint() != client->defaultEndpoint()) {
+            QSettings().setValue("PixEagle/Endpoints/" + uid, client->endpoint());
+        }
     }
     _updateDuplicates();
     emit vehiclesChanged();

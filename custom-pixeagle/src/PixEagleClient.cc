@@ -37,6 +37,12 @@ PixEagleClient::PixEagleClient(QObject* parent, bool companionOnly)
 {
     _pollTimer.setSingleShot(true);
     _pollTimer.setInterval(2000);
+    _authenticationRetryTimer.setSingleShot(true);
+    connect(&_authenticationRetryTimer, &QTimer::timeout, this, [this]() {
+        if (_enabled && !_authenticated && !busy() && !_recoveryPassword.isEmpty()) {
+            _startSignIn(_recoveryUsername, _recoveryPassword);
+        }
+    });
     _expiryTimer.setSingleShot(true);
     _expiryTimer.setInterval(6000);
     _statusExpiryTimer.setSingleShot(true);
@@ -61,6 +67,7 @@ PixEagleClient::PixEagleClient(QObject* parent, bool companionOnly)
     connect(&_pollTimer, &QTimer::timeout, this, &PixEagleClient::refresh);
     connect(&_expiryTimer, &QTimer::timeout, this, [this]() {
         _clearContext();
+        _autoVerificationAttemptedKey.clear();
         _error = _companionOnly ? tr("Connection status is out of date. Retry the connection in PixEagle settings.")
                                 : tr("Connection status is out of date. Verify the vehicle again.");
         _verificationReason = _error;
@@ -132,8 +139,11 @@ void PixEagleClient::setEndpoint(const QString& text)
     _restartAge.invalidate();
     _restartRecoveryTimer.stop();
     _restartResult.clear();
+    _recoveryUsername.clear();
+    _recoveryPassword.clear();
     _resetSession();
     _endpoint = url;
+    setSignInCredentials(QStringLiteral("admin"), QStringLiteral("admin"));
     _credentialStatus.clear();
     emit endpointChanged();
     emit changed();
@@ -150,6 +160,8 @@ void PixEagleClient::setEnabled(bool enabled)
         _restartAge.invalidate();
         _restartRecoveryTimer.stop();
         _restartResult.clear();
+        _recoveryUsername.clear();
+        _recoveryPassword.clear();
         _resetSession();
     } else {
         _loadRememberedSignIn();
@@ -167,6 +179,40 @@ QString PixEagleClient::_credentialKey() const
     const QByteArray digest =
         QCryptographicHash::hash(_endpoint.toString().toUtf8(), QCryptographicHash::Sha256).toHex();
     return QString::fromLatin1(digest);
+}
+
+void PixEagleClient::setSignInCredentials(const QString& username, const QString& password)
+{
+    if (_signInUsername == username && _signInPassword == password) {
+        return;
+    }
+    _signInUsername = username;
+    _signInPassword = password;
+    emit signInCredentialsChanged();
+}
+
+void PixEagleClient::restoreConnectionFrom(const PixEagleClient& source)
+{
+    if (&source == this || _endpoint != source._endpoint || !_enabled || !source._enabled) {
+        return;
+    }
+    _resetSession();
+    setSignInCredentials(source._signInUsername, source._signInPassword);
+    _recoveryUsername = source._recoveryUsername;
+    _recoveryPassword = source._recoveryPassword;
+    if (source._authenticated) {
+        QUrl cookieUrl = _endpoint;
+        cookieUrl.setPath(cookieUrl.path() + "/api/v1/integration/context");
+        _network->cookieJar()->setCookiesFromUrl(source._network->cookieJar()->cookiesForUrl(cookieUrl), cookieUrl);
+        _authenticated = true;
+        _signedInAs = source._signedInAs;
+        _csrfHeader = source._csrfHeader;
+        _csrfToken = source._csrfToken;
+        refresh();
+    } else {
+        _scheduleAuthenticationRecovery();
+    }
+    emit changed();
 }
 
 void PixEagleClient::_loadRememberedSignIn()
@@ -229,8 +275,9 @@ void PixEagleClient::_saveRememberedSignIn()
                     }
                     return;
                 }
-                QSettings().setValue(QStringLiteral("PixEagle/AutoSignInSuppressed/") + key,
-                                     completed->error() != QKeychain::NoError);
+                if (completed->error() != QKeychain::NoError) {
+                    _deleteRememberedSignIn(key);
+                }
                 _credentialStatus = completed->error() == QKeychain::NoError
                                         ? tr("Sign-in saved in the system password store.")
                                         : tr("System password store unavailable. Sign in again next time.");
@@ -275,21 +322,24 @@ void PixEagleClient::setVehicleIdentity(int systemId, const QString& aircraftUid
         _identityConflict = true;
     }
     if (identityChanged) {
-        _resetSession();
+        _clearFollowingState();
     }
     _systemId = systemId;
     _aircraftUid = aircraftUid;
     _online = online;
     observeAircraftUid(aircraftUid);
     _clearContext();
+    _autoVerificationAttemptedKey.clear();
     // A reply captured for a previous aircraft identity must not establish the new binding.
-    ++_generation;
-    if (_reply) {
-        _reply->abort();
-        _reply = nullptr;
+    if (!_reply || (_requestKind != Request::Login && _requestKind != Request::Logout)) {
+        ++_generation;
+        if (_reply) {
+            _reply->abort();
+            _reply = nullptr;
+        }
     }
-    if (_authenticated && _enabled && online) {
-        _pollTimer.start();
+    if (_authenticated && _enabled && !busy()) {
+        _pollTimer.start(0);
     }
     emit changed();
 }
@@ -389,6 +439,7 @@ void PixEagleClient::_clearContext()
 
 void PixEagleClient::_resetSession()
 {
+    _authenticationRetryTimer.stop();
     _pendingCredentialUsername.clear();
     _pendingCredentialPassword.clear();
     const bool cameraStopOwnsNetwork = _stopCameraBeforeReset();
@@ -427,8 +478,40 @@ void PixEagleClient::signIn(const QString& username, const QString& password)
         emit changed();
         return;
     }
+    _recoveryUsername.clear();
+    _recoveryPassword.clear();
+    _authenticationRetryMs = 2000;
+    _startSignIn(username, password);
+}
+
+void PixEagleClient::_startSignIn(const QString& username, const QString& password)
+{
+    // Recovery arguments can alias members changed by session reset or credential notification.
+    const QString account = username.trimmed();
+    const QString secret = password;
     _resetSession();
-    _request(Request::Login, {{"username", username.trimmed()}, {"password", password}});
+    setSignInCredentials(account, secret);
+    _pendingCredentialUsername = account;
+    _pendingCredentialPassword = secret;
+    _request(Request::Login, {{"username", account}, {"password", secret}});
+}
+
+void PixEagleClient::_scheduleAuthenticationRecovery()
+{
+    if (!_enabled || backendRestarting() || _recoveryUsername.isEmpty() || _recoveryPassword.isEmpty() ||
+        QSettings().value(QStringLiteral("PixEagle/AutoSignInSuppressed/") + _credentialKey(), false).toBool()) {
+        return;
+    }
+    _authenticationRetryTimer.start(_authenticationRetryMs);
+    _authenticationRetryMs = qMin(_authenticationRetryMs * 2, 15000);
+    _error = tr("Reconnecting to PixEagle…");
+}
+
+void PixEagleClient::_sessionExpired()
+{
+    _resetSession();
+    _error = tr("Your session expired. Sign in again.");
+    _scheduleAuthenticationRecovery();
 }
 
 void PixEagleClient::signInAt(const QString& endpoint, const QString& username, const QString& password)
@@ -467,6 +550,9 @@ void PixEagleClient::signOut()
     _restartRecoveryTimer.stop();
     _restartResult.clear();
     ++_credentialDecisionGeneration;
+    _recoveryUsername.clear();
+    _recoveryPassword.clear();
+    _authenticationRetryTimer.stop();
     QSettings().setValue(QStringLiteral("PixEagle/AutoSignInSuppressed/") + _credentialKey(), true);
     if (_authenticated) {
         _pollTimer.stop();
@@ -494,7 +580,7 @@ bool PixEagleClient::canVerify() const
 
 void PixEagleClient::refresh()
 {
-    if (_enabled && _authenticated && !busy() && (_online || _companionOnly)) {
+    if (_enabled && _authenticated && !busy()) {
         _request(Request::Context);
     }
 }
@@ -534,6 +620,7 @@ void PixEagleClient::_request(Request kind, const QJsonObject& body)
         }
     }
     _requestTimer.start();
+    _requestKind = kind;
     QNetworkReply* reply = readContext ? _network->get(request)
                                        : _network->post(request, QJsonDocument(body).toJson(QJsonDocument::Compact));
     _reply = reply;
@@ -579,10 +666,14 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
         _clearContext();
         _pollTimer.stop();
         if (status == 401) {
-            _resetSession();
-            _error = kind == Request::Login
-                         ? tr("Sign-in was not accepted. Check the username and re-enter the password.")
-                         : tr("Your session expired. Sign in again.");
+            if (kind == Request::Login) {
+                _recoveryUsername.clear();
+                _recoveryPassword.clear();
+                _resetSession();
+                _error = tr("Sign-in was not accepted. Check the username and re-enter the password.");
+            } else {
+                _sessionExpired();
+            }
         } else if (status == 403) {
             _error = tr("Access was denied. Check this account's permissions and PixEagle access policy.");
         } else if (status >= 300 && status < 400) {
@@ -609,11 +700,14 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
                                                 networkError == QNetworkReply::TimeoutError ||
                                                 networkError == QNetworkReply::TemporaryNetworkFailureError ||
                                                 networkError == QNetworkReply::NetworkSessionFailedError));
-        if (readContext && transient && _authenticated && (_online || _companionOnly) && !backendRestarting()) {
+        if (readContext && transient && _authenticated && !backendRestarting()) {
+            _autoVerificationAttemptedKey.clear();
             // Recover read-only context; never replay discovery or operator mutations.
             _pollTimer.start(_contextRetryMs);
             _contextRetryMs = qMin(_contextRetryMs * 2, 15000);
             _error = tr("Connection interrupted. Retrying PixEagle…");
+        } else if (kind == Request::Login && transient) {
+            _scheduleAuthenticationRecovery();
         }
         emit changed();
         return;
@@ -640,6 +734,10 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
         _resetSession();
         _error = tr("PixEagle returned an unsupported connection response. Check its version and sign in again.");
     } else if (kind == Request::Login) {
+        _recoveryUsername = _pendingCredentialUsername;
+        _recoveryPassword = _pendingCredentialPassword;
+        _authenticationRetryMs = 2000;
+        QSettings().remove(QStringLiteral("PixEagle/AutoSignInSuppressed/") + _credentialKey());
         _saveRememberedSignIn();
         refresh();
     } else if (kind == Request::Verify) {
@@ -982,8 +1080,7 @@ void PixEagleClient::_refreshRuntimeStatus()
         _statusExpiryTimer.stop();
         const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
         if (status == 401) {
-            _resetSession();
-            _error = tr("Your session expired. Sign in again.");
+            _sessionExpired();
         } else if (reply->error() == QNetworkReply::NoError && status == 200 && age.elapsed() <= 3000 &&
                    key == _contextKey() && _readOnlyReady()) {
             const auto bytes = reply->read(MAX_RESPONSE_BYTES + 1);
@@ -1407,8 +1504,7 @@ void PixEagleClient::refreshFollowing()
                 _followingReply = nullptr;
                 const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -1566,8 +1662,7 @@ bool PixEagleClient::_postFollowingAction(const QString& action, QJsonObject bod
                 const QByteArray bytes = reply->isOpen() ? reply->read(MAX_RESPONSE_BYTES + 1) : QByteArray{};
                 const auto data = QJsonDocument::fromJson(bytes).object();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -1746,8 +1841,7 @@ void PixEagleClient::_readTargetResource(bool catalog)
                 pending = nullptr;
                 const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -1955,8 +2049,7 @@ void PixEagleClient::refreshModels()
                 _modelsReply = nullptr;
                 const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
                 if (status == 401) {
-                    _resetSession();
-                    _error = tr("Your session expired. Sign in again.");
+                    _sessionExpired();
                     emit changed();
                     return;
                 }
@@ -2121,8 +2214,7 @@ void PixEagleClient::_finishTargetAction(QNetworkReply* reply, const QString& ac
                           ? tr("The model change outcome is unknown. Refresh models before trying again.")
                           : tr("The action outcome is unknown. Check the current target before trying again.");
     if (status == 401) {
-        _resetSession();
-        _error = tr("Your session expired. Sign in again.");
+        _sessionExpired();
         outcome = QStringLiteral("rejected");
         message = _error;
         emit changed();
