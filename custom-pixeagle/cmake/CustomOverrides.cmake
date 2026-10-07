@@ -1,4 +1,6 @@
 # Explicit selection through QGC_CUSTOM_DIR keeps the default build stock.
+# Qualification tags must not replace the shared upstream package-version anchor.
+set(QGC_GIT_TAG_PATTERN "v5.2.0-dev*")
 set(QGC_APP_NAME
     "PixEagle-QGroundControl"
     CACHE STRING "App Name" FORCE

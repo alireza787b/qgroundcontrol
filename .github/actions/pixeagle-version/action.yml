@@ -16,7 +16,7 @@ runs:
           exit 1
         fi
         git merge-base --is-ancestor "${version_tag}^{commit}" HEAD
-        version="$(git describe --tags --always)"
+        version="$(git describe --tags --match "${version_tag}*" --always)"
         if [[ "$version" != "${version_tag}" && "$version" != "${version_tag}-"* ]]; then
           echo "::error::Unexpected version provenance: $version"
           exit 1
