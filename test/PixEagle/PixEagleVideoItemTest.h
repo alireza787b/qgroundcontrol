@@ -11,6 +11,8 @@ private slots:
     void _streamAndStoreEpochsDiscardOldFrames();
     void _invalidMetadataBlanks_data();
     void _invalidMetadataBlanks();
+    void _negotiatedDeliverySize_data();
+    void _negotiatedDeliverySize();
     void _freshness_data();
     void _freshness();
     void _freshnessExpiresWithoutChangingIdentity();

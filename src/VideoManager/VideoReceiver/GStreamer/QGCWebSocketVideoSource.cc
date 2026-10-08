@@ -283,6 +283,7 @@ private:
                             {"delivery_token", _deliveryToken}};
         if (capabilities) {
             message.insert("latest_frame_ack", true);
+            message.insert("adaptive_dimensions", true);
         } else {
             message.insert("frame_id", _lastFrameId);
         }
