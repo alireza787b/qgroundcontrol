@@ -988,13 +988,18 @@ void PixEagleTargetControllerTest::_cameraModesAndEngineCatalog()
     QVERIFY(!test.controller.canChangeMode());
     test.controller.setSmartMode(true, test.controller.captureControlContext());
     QVERIFY(test.server.lastRequest("/api/v1/actions/gimbal-control").target.isEmpty());
-    test.controller.selectTargetEngine("local", test.controller.captureControlContext());
+    test.controller.selectTargetEngine("local", test.controller.captureControlContext(), true);
     QTRY_VERIFY_WITH_TIMEOUT(!test.server.lastRequest("/api/v1/actions/tracker-switch").target.isEmpty(),
                              TestTimeout::mediumMs());
     QVERIFY(QJsonDocument::fromJson(test.server.lastRequest("/api/v1/actions/tracker-switch").body)
                 .object()
                 .value("restore_engine_selection")
                 .toBool());
+    QCOMPARE(QJsonDocument::fromJson(test.server.lastRequest("/api/v1/actions/tracker-switch").body)
+                 .object()
+                 .value("persist")
+                 .toBool(),
+             true);
     QCOMPARE(QJsonDocument::fromJson(test.server.lastRequest("/api/v1/actions/tracker-switch").body)
                  .object()
                  .value("tracker_type")
