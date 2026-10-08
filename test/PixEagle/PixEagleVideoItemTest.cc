@@ -6,8 +6,10 @@
 #include <limits>
 
 #include <QtCore/QBuffer>
+#include <QtCore/QFile>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QMutexLocker>
+#include <QtCore/QTextStream>
 #include <QtGui/QPainter>
 #include <QtMultimedia/QVideoFrame>
 #include <QtQuick/QQuickWindow>
@@ -16,6 +18,7 @@
 
 #include "GStreamer.h"
 #include "GstSourceFactory.h"
+#include "PixEagleClient.h"
 #include "PixEagleVideoItem.h"
 #include "QGCVideoFrameContextStore.h"
 #include "QGCWebSocketVideoSource.h"
@@ -144,11 +147,12 @@ public:
         }
     }
 
-    bool start(const QString& url, Surface& surface)
+    bool start(const QString& url, Surface& surface, const QByteArray& cookie = "session=surface-test",
+               const QString& origin = QStringLiteral("https://surface.example.test"))
     {
         auto options = std::make_shared<QGCWebSocketVideoOptions>();
-        options->cookie = "session=surface-test";
-        options->origin = QStringLiteral("https://surface.example.test");
+        options->cookie = cookie;
+        options->origin = origin;
         options->requireFrameMetadata = true;
         options->frameContexts = surface.store;
         GStreamer::SourceFactory::Config config;
@@ -846,3 +850,90 @@ void PixEagleVideoItemTest::_selectionAgeDoesNotFollowNewFrames()
 }
 
 UT_REGISTER_TEST_LIGHTWEIGHT(PixEagleVideoItemTest, TestLabel::Integration)
+
+void PixEagleLiveVideoTest::_authenticatedBackendReachesPresentedFrame()
+{
+    const auto credentialsPath = qEnvironmentVariable("PIXEAGLE_VIDEO_DIAGNOSTIC_CREDENTIALS");
+    if (credentialsPath.isEmpty()) {
+        QSKIP("Set PIXEAGLE_VIDEO_DIAGNOSTIC_CREDENTIALS to opt into a live read-only backend test");
+    }
+    if (!gst_is_initialized()) {
+        GStreamer::prepareEnvironment();
+        QVERIFY(gst_init_check(nullptr, nullptr, nullptr));
+    }
+    QVERIFY(GStreamer::completeInit());
+    QFile credentialsFile(credentialsPath);
+    QVERIFY2(credentialsFile.open(QIODevice::ReadOnly), "Could not read private diagnostic credentials file");
+    const auto credentials = QJsonDocument::fromJson(credentialsFile.readAll()).object();
+    const auto endpoint = credentials.value("endpoint").toString();
+    const auto username = credentials.value("username").toString();
+    const auto password = credentials.value("password").toString();
+    QVERIFY(!endpoint.isEmpty() && !username.isEmpty() && !password.isEmpty());
+
+    PixEagleClient client(nullptr, true);
+    client.setRememberSignIn(false);
+    client.setEnabled(true);
+    Surface surface;
+    int decodedFrames = 0;
+    QSize decodedSize;
+    int decodedHandle = -1;
+    const auto report = [&]() {
+        const auto presented = surface.item.capturePresentedContext();
+        QJsonObject evidence{{"authenticated", client.authenticated()},
+                             {"media_available", client.mediaAvailable()},
+                             {"decoded_frames", decodedFrames},
+                             {"decoded_width", decodedSize.width()},
+                             {"decoded_height", decodedSize.height()},
+                             {"decoded_handle", decodedHandle},
+                             {"presentation_known", surface.item.presentationKnown()},
+                             {"frame_fresh", surface.item.frameFresh()},
+                             {"instance_id", client.instanceId()},
+                             {"runtime_id", client.connectionContext().value("runtime_id")}};
+        for (const auto* field :
+             {"frame_id", "stream_id", "stream_epoch", "source_epoch", "encoded_width", "encoded_height"}) {
+            evidence.insert(QLatin1String(field), QJsonValue::fromVariant(presented.value(QLatin1String(field))));
+        }
+        const auto serialized = QJsonDocument(evidence).toJson(QJsonDocument::Compact);
+        QTextStream(stdout) << "PixEagle live video diagnostic: " << serialized << Qt::endl;
+        const auto outputPath = qEnvironmentVariable("PIXEAGLE_VIDEO_DIAGNOSTIC_OUTPUT");
+        if (!outputPath.isEmpty()) {
+            QFile output(outputPath);
+            if (output.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+                output.write(serialized + '\n');
+            }
+        }
+    };
+    client.signInAt(endpoint, username, password);
+    const bool authenticated = UnitTest::waitForCondition(
+        [&]() { return client.authenticated(); }, TestTimeout::longMs(), QStringLiteral("live backend authentication"));
+    report();
+    QVERIFY(authenticated);
+    const bool mediaReady = UnitTest::waitForCondition([&]() { return client.mediaAvailable(); }, TestTimeout::longMs(),
+                                                       QStringLiteral("live backend media context"));
+    report();
+    QVERIFY(mediaReady);
+    surface.expected = client.connectionContext();
+    QVERIFY(surface.expose());
+    connect(surface.item.videoSink(), &QVideoSink::videoFrameChanged, &client, [&](const QVideoFrame& frame) {
+        if (frame.isValid()) {
+            ++decodedFrames;
+            decodedSize = frame.size();
+            decodedHandle = static_cast<int>(frame.handleType());
+        }
+    });
+    NativeSurfacePipeline pipeline;
+    QVERIFY(pipeline.start(client.mediaUrl().toString(), surface, client.mediaCookie(), client.mediaOrigin()));
+    const bool presented = UnitTest::waitForCondition(
+        [&]() { return decodedFrames >= 2 && surface.item.presentationKnown() && surface.item.frameFresh(); },
+        TestTimeout::longMs(), QStringLiteral("live native decoded and presented frame"));
+    report();
+    QVERIFY(presented);
+    const auto image = surface.window.grabWindow();
+    QVERIFY(!image.isNull());
+    const auto imagePath = qEnvironmentVariable("PIXEAGLE_VIDEO_DIAGNOSTIC_IMAGE");
+    if (!imagePath.isEmpty()) {
+        QVERIFY(image.save(imagePath));
+    }
+}
+
+UT_REGISTER_TEST_LIGHTWEIGHT(PixEagleLiveVideoTest, TestLabel::Network)

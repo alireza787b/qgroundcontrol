@@ -30,3 +30,11 @@ private slots:
     void _selectionCancelledByChanges();
     void _selectionAgeDoesNotFollowNewFrames();
 };
+
+class PixEagleLiveVideoTest : public UnitTest
+{
+    Q_OBJECT
+
+private slots:
+    void _authenticatedBackendReachesPresentedFrame();
+};

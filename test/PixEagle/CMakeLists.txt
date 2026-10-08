@@ -76,6 +76,18 @@ add_qgc_test(
 )
 
 add_qgc_test(
+    PixEagleLiveVideoTest
+    LABELS
+    Network
+    PixEagle
+    Video
+    TIMEOUT
+    120
+    RESOURCE_LOCK
+    Settings
+)
+
+add_qgc_test(
     PixEagleVideoControllerTest
     LABELS
     Integration
