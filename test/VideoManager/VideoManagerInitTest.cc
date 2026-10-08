@@ -129,7 +129,8 @@ void VideoManagerInitTest::_testExternalVideoLeavesConfiguredSourceIntact()
     QVERIFY(!requestedStart.isEmpty());
     settings->streamEnabled()->setRawValue(false);
     manager._videoSourceChanged();
-    QVERIFY(!manager.hasVideo());
+    QVERIFY(manager.hasVideo());
+    QVERIFY(requestedStart.count() > requestedStop.count());
     manager.setExternalVideoSource({});
     QVERIFY(!manager.externalVideoActive());
     QVERIFY(!manager.fullScreen());

@@ -176,6 +176,8 @@ PixEagleMovablePanel {
         ToolTip.visible: hovered
         Layout.preferredWidth: ScreenTools.defaultFontPixelHeight * 2
         Layout.preferredHeight: ScreenTools.defaultFontPixelHeight * 2
+        Layout.minimumWidth: Math.max(ScreenTools.minTouchPixels, 44)
+        Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
     }
 
     component HoldButton: IconButton {
@@ -254,6 +256,7 @@ PixEagleMovablePanel {
                 onClicked: root.centerCamera()
             }
             QGCButton {
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 Layout.fillWidth: true
                 text: qsTr("Stop")
                 enabled: root._gestureActive || (!!root.client && root.client.cameraCanStop)

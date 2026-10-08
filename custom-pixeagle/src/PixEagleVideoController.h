@@ -73,6 +73,7 @@ private:
     std::shared_ptr<QGCVideoFrameContextStore> _contexts;
     QTimer _retryTimer;
     QTimer _contextRefreshTimer;
+    QTimer _presentationWatchdog;
     QString _desiredKey;
     QString _runningKey;
     QString _error;

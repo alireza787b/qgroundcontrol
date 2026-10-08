@@ -8,6 +8,7 @@
 #include "PixEagleVideoController.h"
 #include "SettingsManager.h"
 #include "VideoManager.h"
+#include "VideoSettings.h"
 
 namespace {
 class VideoFixture
@@ -134,6 +135,21 @@ void PixEagleVideoControllerTest::_initializationIsIdempotent()
     QCOMPARE(published.count(), 0);
     QCOMPARE(sourceChanged.count(), 0);
     QVERIFY(test.videoManager->externalVideoActive());
+}
+
+void PixEagleVideoControllerTest::_externalVideoDoesNotRequireStockStreamSetting()
+{
+    VideoFixture test;
+    QVERIFY(test.valid());
+    auto* stockSettings = SettingsManager::instance()->videoSettings();
+    const QVariant stockEnabled = stockSettings->streamEnabled()->rawValue();
+    stockSettings->streamEnabled()->setRawValue(false);
+    test.restorePreferences(true);
+    test.manager->initializeVideo();
+    QVERIFY(test.videoManager->externalVideoActive());
+    QVERIFY(test.videoManager->hasVideo());
+    test.manager->video()->detachSurface(nullptr);
+    stockSettings->streamEnabled()->setRawValue(stockEnabled);
 }
 
 UT_REGISTER_TEST(PixEagleVideoControllerTest, TestLabel::Integration)

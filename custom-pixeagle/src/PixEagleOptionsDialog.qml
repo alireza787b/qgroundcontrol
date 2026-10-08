@@ -12,6 +12,7 @@ QGCPopupDialog {
     required property var trackingController
     property string _choiceNotice: ""
     property bool _openCameraAfterClose: false
+    property real panelScale: 1.0
     readonly property bool _smartMode: !!trackingController && trackingController.smartMode
     readonly property bool _externalTracker: !!trackingController && trackingController.externalTracker
     readonly property var _models: trackingController ? trackingController.modelChoices : []
@@ -84,6 +85,7 @@ QGCPopupDialog {
     }
 
     ColumnLayout {
+        scale: root.panelScale
         spacing: ScreenTools.defaultFontPixelHeight / 2
         width: Math.min(root.maxContentAvailableWidth, ScreenTools.defaultFontPixelWidth * 46)
 
@@ -101,6 +103,7 @@ QGCPopupDialog {
                 property string choiceNotice: ""
                 property var pressedChoices: []
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 currentIndex: root.trackingController ? root.trackingController.trackerIndex : -1
                 enabled: root.trackingController && root.trackingController.canConfigure
                 model: root.trackingController ? root.trackingController.trackerChoices : []
@@ -155,6 +158,7 @@ QGCPopupDialog {
                 property string choiceNotice: ""
                 property var pressedChoices: []
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 currentIndex: root._modelIndex
                 enabled: root.trackingController && root.trackingController.canSelectModel && count > 0
                 model: root._models
@@ -218,6 +222,7 @@ QGCPopupDialog {
                 property var capturedClient: null
                 property var pressedChoices: []
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 currentIndex: root._followerIndex
                 enabled: root.client && root.client.canSelectFollower && count > 0
                 model: root._followers
@@ -268,6 +273,7 @@ QGCPopupDialog {
             QGCCheckBox {
                 id: blockCommands
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 objectName: "pixeagleBlockFlightCommands"
                 text: qsTr("Block PixEagle flight commands")
                 checked: root.client && root.client.safetyFresh && root.client.safetyActive
@@ -315,6 +321,7 @@ QGCPopupDialog {
             Layout.fillWidth: true
 
             QGCButton {
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 Layout.fillWidth: true
                 objectName: "pixeagleOptionsSettings"
                 text: qsTr("Settings")
@@ -327,6 +334,7 @@ QGCPopupDialog {
             }
 
             QGCButton {
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 Layout.fillWidth: true
                 objectName: "pixeagleOptionsDashboard"
                 iconSource: "qrc:/InstrumentValueIcons/browser-window-open.svg"
@@ -343,6 +351,7 @@ QGCPopupDialog {
 
         QGCButton {
             Layout.fillWidth: true
+            Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
             text: qsTr("Camera controls")
             objectName: "pixeagleCameraControlsButton"
             visible: !!root.client && root.client.cameraFresh && !!root.client.cameraStatus.enabled
@@ -355,6 +364,7 @@ QGCPopupDialog {
 
         QGCButton {
             Layout.fillWidth: true
+            Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
             objectName: "pixeagleResetPanelPosition"
             text: qsTr("Reset panel position")
             focusPolicy: Qt.StrongFocus
