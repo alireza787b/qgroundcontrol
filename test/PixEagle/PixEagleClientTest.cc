@@ -1346,7 +1346,7 @@ void PixEagleClientTest::_targetMutationEnvelope()
     QCOMPARE(native.value("frame"), payload.value("frame"));
     QVERIFY(!body.contains("frame"));
     if (action == "tracker_switch") {
-        QCOMPARE(body.value("persist").toBool(), false);
+        QCOMPARE(body.value("persist").toBool(), payload.value("persist").toBool());
     }
     server.targetSnapshot = nativeTargetState(server.context, "2");
     QVERIFY(server.respond(server.lastRequestIndex(path), server.responseFor(request)));

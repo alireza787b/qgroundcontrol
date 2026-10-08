@@ -2027,7 +2027,7 @@ bool PixEagleClient::_submitAction(const QString& action, QJsonObject body, cons
     body.insert("dry_run", false);
     body.insert("idempotency_key", _targetActionId);
     body.insert("native_context", nativeContext);
-    if (action == "tracker_switch") {
+    if (action == "tracker_switch" && !body.contains("persist")) {
         body.insert("persist", false);
     }
     QString resource = action;
@@ -2085,6 +2085,7 @@ void PixEagleClient::_finishTargetAction(QNetworkReply* reply, const QString& ac
     const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
     const auto bytes = reply->isOpen() ? reply->read(MAX_RESPONSE_BYTES + 1) : QByteArray{};
     const auto data = QJsonDocument::fromJson(bytes).object();
+    const auto actionResult = data.value("result").toObject();
     QString outcome = QStringLiteral("unknown");
     const bool modelSelection = action == "model_select";
     QString message = modelSelection
@@ -2118,7 +2119,7 @@ void PixEagleClient::_finishTargetAction(QNetworkReply* reply, const QString& ac
                data.value("confirmed").toBool()) {
         if (data.value("status").toString() == "success" && data.value("accepted").toBool() &&
             data.value("executed").toBool()) {
-            const auto result = data.value("result").toObject();
+            const auto result = actionResult;
             const auto selectionStatus = result.value("selection_status").toString();
             const auto inventory = result.value("model_inventory").toObject();
             if (!modelSelection ||
@@ -2137,10 +2138,17 @@ void PixEagleClient::_finishTargetAction(QNetworkReply* reply, const QString& ac
             }
         } else if (data.value("status").toString() == "failure") {
             outcome = QStringLiteral("rejected");
-            message = modelSelection ? tr("PixEagle could not change the model. Review the current model and runtime.")
-                                     : tr("PixEagle could not complete the target action. Check the current target.");
+            const auto legacy = actionResult.value("legacy_result").toObject();
+            const auto backendMessage = legacy.value("message").toString();
+            message = !backendMessage.isEmpty() ? backendMessage
+                      : modelSelection
+                          ? tr("PixEagle could not change the model. Review the current model and runtime.")
+                          : tr("PixEagle could not complete the target action. Check the current target.");
+            if (action == "tracker_switch") {
+                refreshConfig();
+            }
         }
-        _acceptTargetState(data.value("result").toObject().value("target_state").toObject());
+        _acceptTargetState(actionResult.value("target_state").toObject());
     }
     _targetActionId.clear();
     _targetActionModelId.clear();
