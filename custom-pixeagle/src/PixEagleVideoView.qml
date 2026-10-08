@@ -40,6 +40,9 @@ Item {
 
     property var _optionsDialog: null
     property bool _cameraPanelOpen: false
+    property real _connectionPanelScale: 1.0
+    property real _trackingPanelScale: 1.0
+    property real _cameraPanelScale: 1.0
     readonly property string _trackingState: trackingController ? trackingController.trackingState : "unknown"
     readonly property string _followingState: _client ? _client.followingState : "unknown"
     readonly property string _trackerName: {
@@ -124,7 +127,7 @@ Item {
         _cameraPanelOpen = false
         captureControl()
         startFollowing.clearIntent()
-        if (!_optionsDialog) _optionsDialog = optionsFactory.open({client: _client, trackingController: trackingController})
+        if (!_optionsDialog) _optionsDialog = optionsFactory.open({client: _client, trackingController: trackingController, panelScale: _trackingPanelScale})
     }
 
     on_ModelsRequestedChanged: Qt.callLater(root.requestModels)
@@ -150,6 +153,7 @@ Item {
     Component {
         id: optionsComponent
         PixEagleOptionsDialog {
+            panelScale: root._trackingPanelScale
             onClosed: root._optionsDialog = null
             onResetPanelRequested: { targetPanel.resetPosition(); connectionPanel.resetPosition(); cameraPanel.resetPosition() }
             onCameraControlsRequested: {
@@ -164,6 +168,7 @@ Item {
         id: cameraPanel
         z: 2
         client: root._client
+        uiScale: root._cameraPanelScale
         visible: root._cameraPanelOpen && root.visible && !root._compact
         initialX: root.width - width - ScreenTools.defaultFontPixelWidth * 2
         initialY: ScreenTools.defaultFontPixelHeight * 4
@@ -187,6 +192,7 @@ Item {
         height: connectionDetails.implicitHeight + ScreenTools.defaultFontPixelHeight
         visible: !root._compact && (!root._connectionReady || !root._controller || !root._controller.live)
         dragHandle: connectionGrip
+        uiScale: root._connectionPanelScale
         onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
 
         ColumnLayout {
@@ -241,6 +247,7 @@ Item {
         visible: !root._compact && !!root.trackingController && !!root._client
                  && ((root._connectionReady && root._controller && root._controller.live) || root._client.canStopFollowing)
         dragHandle: panelGrip
+        uiScale: root._trackingPanelScale
         objectName: "pixeagleOperatorPanel"
         onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
 
@@ -272,6 +279,7 @@ Item {
                         required property var modelData
                         property string contextToken: ""
                         Layout.fillWidth: true
+                        Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                         checked: !!root.trackingController && root.trackingController.selectedSelectionMode === modelData.id
                         enabled: !!root.trackingController && (checked || (root.trackingController.canChangeMode && modelData.available))
                         text: modelData.label
@@ -289,6 +297,8 @@ Item {
                 QGCButton {
                     Layout.preferredWidth: implicitHeight
                     Layout.maximumWidth: implicitHeight
+                    Layout.minimumWidth: Math.max(ScreenTools.minTouchPixels, 44)
+                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                     leftPadding: ScreenTools.defaultFontPixelWidth / 2
                     rightPadding: ScreenTools.defaultFontPixelWidth / 2
                     objectName: "pixeagleTrackingOptions"
@@ -344,6 +354,7 @@ Item {
                 visible: !root._tapFact.rawValue || (root.trackingController && root.trackingController.canCancel)
                 QGCButton {
                     Layout.fillWidth: true
+                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                     visible: !root._tapFact.rawValue
                     enabled: !!root.trackingController && (root.trackingController.canSelect || root.trackingController.selectionArmed)
                     checked: !!root.trackingController && root.trackingController.selectionArmed
@@ -354,6 +365,7 @@ Item {
                 QGCButton {
                     property string contextToken: ""
                     Layout.fillWidth: true
+                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                     visible: !!root.trackingController && root.trackingController.canCancel
                     text: qsTr("Clear target")
                     objectName: "pixeagleCancelTracking"
@@ -368,6 +380,7 @@ Item {
                 property var capturedClient: null
                 function clearIntent() { contextToken = ""; capturedClient = null }
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 objectName: "pixeagleStartFollowing"
                 text: qsTr("Start following")
                 Accessible.description: qsTr("Hold to confirm following the selected target")
@@ -395,6 +408,7 @@ Item {
                 property string contextToken: ""
                 property var capturedClient: null
                 Layout.fillWidth: true
+                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
                 objectName: "pixeagleStopFollowing"
                 text: qsTr("Stop following")
                 visible: !!root._client && root._client.canStopFollowing

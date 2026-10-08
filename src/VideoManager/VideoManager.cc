@@ -492,8 +492,14 @@ bool VideoManager::hasThermal() const
 
 bool VideoManager::hasVideo() const
 {
-    return _videoSettings->streamEnabled()->rawValue().toBool() &&
-           (externalVideoActive() || _videoSettings->streamConfigured());
+    // An explicitly owned external source is independent of QGC's stock video
+    // stream switch. Custom sources must remain visible when that stock stream
+    // is disabled; the stock path keeps its existing setting and configuration
+    // requirements when no external source is active.
+    if (externalVideoActive()) {
+        return true;
+    }
+    return _videoSettings->streamEnabled()->rawValue().toBool() && _videoSettings->streamConfigured();
 }
 
 bool VideoManager::isUvc() const

@@ -23,6 +23,8 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
     _retryTimer.setSingleShot(true);
     connect(&_retryTimer, &QTimer::timeout, this, &PixEagleVideoController::_start);
     _contextRefreshTimer.setSingleShot(true);
+    _presentationWatchdog.setSingleShot(true);
+    _presentationWatchdog.setInterval(10000);
     connect(_manager, &PixEagleManager::activeClientChanged, this, &PixEagleVideoController::_bindClient);
     connect(_settings->integrationEnabled(), &Fact::rawValueChanged, this, &PixEagleVideoController::_updateDesired);
     connect(_settings->videoEnabled(), &Fact::rawValueChanged, this, &PixEagleVideoController::_updateDesired);
@@ -35,6 +37,18 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
         _stop();
     });
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &PixEagleVideoController::_updateDesired);
+    connect(&_presentationWatchdog, &QTimer::timeout, this, [this]() {
+        if (_state != State::Running || (_surface && _surface->presentationKnown())) {
+            return;
+        }
+        _error = tr("Video connected but no frame was presented. Retrying.");
+        _stop();
+        if (!_desiredKey.isEmpty() && !_suspended && _surfaceVisible()) {
+            _retryTimer.start(_retryMs);
+            _retryMs = qMin(_retryMs * 2, 15000);
+        }
+        emit changed();
+    });
 }
 
 void PixEagleVideoController::initialize()
@@ -94,8 +108,6 @@ void PixEagleVideoController::_updateDesired()
                                       QString::number(_client->sessionGeneration()),
                                       context.value("instance_id"),
                                       context.value("runtime_id"),
-                                      context.value("command").toObject().value("connection_generation"),
-                                      context.value("telemetry").toObject().value("connection_generation"),
                                       video.value("stream_id"),
                                       video.value("stream_epoch"),
                                       video.value("source_epoch"),
@@ -196,6 +208,7 @@ bool PixEagleVideoController::_createReceiver()
         if (status == VideoReceiver::STATUS_OK) {
             _state = State::Running;
             _receiver->startDecoding(_sink);
+            _presentationWatchdog.start();
         } else {
             _state = State::Idle;
             _runningKey.clear();
@@ -213,6 +226,7 @@ bool PixEagleVideoController::_createReceiver()
             return;
         }
         _state = State::Idle;
+        _presentationWatchdog.stop();
         _runningKey.clear();
         if (_surface) {
             _surface->clearStream();
@@ -278,6 +292,7 @@ void PixEagleVideoController::_stop()
 {
     _targets->cancelGesture();
     _retryTimer.stop();
+    _presentationWatchdog.stop();
     if (_surface) {
         _surface->clearStream();
     }
@@ -292,6 +307,9 @@ void PixEagleVideoController::_stop()
 void PixEagleVideoController::_presentationChanged()
 {
     const bool known = _surface && _surface->presentationKnown();
+    if (known) {
+        _presentationWatchdog.stop();
+    }
     VideoManager::instance()->setExternalVideoState(known, known ? _surface->sourceSize() : QSize());
     if (known) {
         _retryMs = 1000;

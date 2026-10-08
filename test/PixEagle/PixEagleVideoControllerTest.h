@@ -10,4 +10,5 @@ private slots:
     void _preEnabledVideoPublishesControllerBeforeView();
     void _videoEnabledAfterInitialization();
     void _initializationIsIdempotent();
+    void _externalVideoDoesNotRequireStockStreamSetting();
 };
