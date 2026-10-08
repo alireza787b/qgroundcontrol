@@ -310,6 +310,69 @@ void PixEagleVideoItemTest::_invalidMetadataBlanks()
     QTRY_COMPARE_WITH_TIMEOUT(surface.pixel(), QColor(Qt::black), TestTimeout::mediumMs());
 }
 
+void PixEagleVideoItemTest::_negotiatedDeliverySize_data()
+{
+    QTest::addColumn<QSize>("deliveredSize");
+    QTest::addColumn<QString>("scalingVersion");
+    QTest::addColumn<bool>("accepted");
+    QTest::newRow("legacy-exact") << QSize(32, 24) << QString() << true;
+    QTest::newRow("legacy-smaller") << QSize(16, 12) << QString() << false;
+    QTest::newRow("unknown-version") << QSize(16, 12) << QString("2") << false;
+    QTest::newRow("negotiated-exact") << QSize(32, 24) << QString("1") << true;
+    QTest::newRow("negotiated-half") << QSize(16, 12) << QString("1") << true;
+    QTest::newRow("negotiated-rounded") << QSize(21, 16) << QString("1") << true;
+    QTest::newRow("oversized") << QSize(64, 48) << QString("1") << false;
+    QTest::newRow("distorted") << QSize(16, 16) << QString("1") << false;
+    QTest::newRow("one-pixel-distortion") << QSize(32, 23) << QString("1") << false;
+}
+
+void PixEagleVideoItemTest::_negotiatedDeliverySize()
+{
+    QFETCH(QSize, deliveredSize);
+    QFETCH(QString, scalingVersion);
+    QFETCH(bool, accepted);
+    Surface surface;
+    auto expectedVideo = surface.expected.value("video").toObject();
+    if (!scalingVersion.isEmpty()) {
+        expectedVideo.insert("delivery_scaling_version", scalingVersion);
+    }
+    surface.expected.insert("video", expectedVideo);
+    QVERIFY(surface.expose());
+    surface.submit(1, Qt::red, selectionMetadata(1, surface.expected));
+    QTRY_VERIFY_WITH_TIMEOUT(surface.item.selectionReady(), TestTimeout::mediumMs());
+    auto envelope = selectionMetadata(2, surface.expected);
+    for (const auto* field : {"provenance", "selection_geometry"}) {
+        auto context = envelope.value(field).toObject();
+        context.insert("encoded_width", deliveredSize.width());
+        context.insert("encoded_height", deliveredSize.height());
+        envelope.insert(field, context);
+    }
+    QImage image(deliveredSize, QImage::Format_RGBA8888);
+    image.fill(Qt::green);
+    QVideoFrame video(image);
+    video.setStartTime(surface.store->insert(surface.epoch, envelope));
+    surface.item.videoSink()->setVideoFrame(video);
+    if (!accepted) {
+        QTRY_VERIFY_WITH_TIMEOUT(!surface.item.presentationKnown(), TestTimeout::mediumMs());
+        QVERIFY(!surface.item.selectionReady());
+        return;
+    }
+    QTRY_COMPARE_WITH_TIMEOUT(surface.presentedNumber(), QStringLiteral("2"), TestTimeout::mediumMs());
+    QVERIFY(surface.item.selectionReady());
+    const auto token = surface.item.beginSelection(&surface.item, {64, 48});
+    QVERIFY(!token.isEmpty());
+    const auto selection = surface.item.finishSelection(token, {64, 48}, false);
+    QVERIFY(selection.value("valid").toBool());
+    const auto geometry = selection.value("selection_geometry").toMap();
+    QCOMPARE(geometry.value("encoded_width").toInt(), deliveredSize.width());
+    QCOMPARE(geometry.value("encoded_height").toInt(), deliveredSize.height());
+    QCOMPARE(geometry.value("analysis_width").toInt(), IMAGE_WIDTH * 2);
+    QCOMPARE(geometry.value("token").toString(), QStringLiteral("retained-frame-2"));
+    const auto point = selection.value("point").toMap();
+    QCOMPARE(point.value("x").toDouble(), 0.5);
+    QCOMPARE(point.value("y").toDouble(), 0.5);
+}
+
 void PixEagleVideoItemTest::_freshness_data()
 {
     QTest::addColumn<QString>("state");
@@ -552,12 +615,16 @@ void PixEagleVideoItemTest::_nativeJpegDecodeRetainsPresentedIdentity()
     QPointer<QWebSocket> peer;
     QString token;
     qint64 acknowledged = -1;
+    bool adaptiveDimensions = false;
     connect(&server, &QWebSocketServer::newConnection, &server, [&]() {
         peer = server.nextPendingConnection();
         connect(peer, &QWebSocket::textMessageReceived, &server, [&](const QString& text) {
             const auto message = QJsonDocument::fromJson(text.toUtf8()).object();
             if (message.contains("delivery_token")) {
                 token = message.value("delivery_token").toString();
+            }
+            if (message.value("type").toString() == "stream_capabilities") {
+                adaptiveDimensions = message.value("adaptive_dimensions").toBool();
             }
             if (message.value("type").toString() == "frame_ack") {
                 acknowledged = message.value("frame_id").toInteger(-1);
@@ -567,6 +634,7 @@ void PixEagleVideoItemTest::_nativeJpegDecodeRetainsPresentedIdentity()
     NativeSurfacePipeline pipeline;
     QVERIFY(pipeline.start(QStringLiteral("ws://127.0.0.1:%1/ws/video_feed").arg(server.serverPort()), surface));
     QTRY_VERIFY_WITH_TIMEOUT(peer && !token.isEmpty(), TestTimeout::mediumMs());
+    QVERIFY(adaptiveDimensions);
     QCOMPARE(peer->request().rawHeader("Cookie"), QByteArray("session=surface-test"));
     QCOMPARE(peer->origin(), QStringLiteral("https://surface.example.test"));
     const auto send = [&](int number, int captureAge = 0) {

@@ -101,7 +101,8 @@ void PixEagleVideoController::_updateDesired()
                                       video.value("source_epoch"),
                                       video.value("variant"),
                                       video.value("width"),
-                                      video.value("height")};
+                                      video.value("height"),
+                                      video.value("delivery_scaling_version")};
             key = QString::fromUtf8(QJsonDocument(identity).toJson(QJsonDocument::Compact));
         }
     }

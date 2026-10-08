@@ -218,6 +218,22 @@ QJsonObject validatedSelectionGeometry(const IncomingFrame& incoming)
     return geometry;
 }
 
+bool compatibleDeliverySize(const QJsonObject& video, const QSize& size)
+{
+    const int baseWidth = video.value("width").toInt();
+    const int baseHeight = video.value("height").toInt();
+    if (video.value("delivery_scaling_version").toString() != "1") {
+        return (baseWidth <= 0 || size.width() == baseWidth) && (baseHeight <= 0 || size.height() == baseHeight);
+    }
+    if (baseWidth <= 0 || baseHeight <= 0 || size.width() <= 0 || size.height() <= 0 || size.width() > baseWidth ||
+        size.height() > baseHeight) {
+        return false;
+    }
+    // Both encoded dimensions may round by half a pixel after uniform scaling.
+    const qint64 aspectError = std::abs(qint64(size.width()) * baseHeight - qint64(size.height()) * baseWidth);
+    return aspectError * 2 <= qint64(baseWidth) + baseHeight;
+}
+
 QVariantMap validatedContext(const IncomingFrame& incoming)
 {
     if (!incoming.entry || !incoming.store->isCurrentEpoch(incoming.entry->epoch)) {
@@ -253,8 +269,7 @@ QVariantMap validatedContext(const IncomingFrame& incoming)
         (!captureAge.isNull() && !nonnegativeAge(captureAge)) ||
         (captureState != "fresh" && captureState != "cached" && captureState != "unavailable" &&
          captureState != "unknown") ||
-        (video.value("width").toInt() > 0 && video.value("width").toInt() != incoming.video.width()) ||
-        (video.value("height").toInt() > 0 && video.value("height").toInt() != incoming.video.height())) {
+        !compatibleDeliverySize(video, incoming.video.size())) {
         return {};
     }
     auto result = provenance.toVariantMap();
