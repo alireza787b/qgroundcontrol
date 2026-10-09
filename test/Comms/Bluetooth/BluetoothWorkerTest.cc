@@ -128,6 +128,9 @@ void BluetoothWorkerTest::_testConnectWhileConnectedWarns()
 void BluetoothWorkerTest::_testDisconnectResetsReconnectState()
 {
     BluetoothConfiguration config("TestBT_disconnectReset");
+    // This fixture has no remote device; Qt's diagnostic depends on the host adapter.
+    ignoreLogMessage("qt.bluetooth.bluez", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Invalid address to remote address passed")));
 
     std::unique_ptr<BluetoothWorker> worker(BluetoothWorker::create(&config));
 

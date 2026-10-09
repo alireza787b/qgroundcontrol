@@ -1348,16 +1348,23 @@ void GStreamerTest::_testSourceFactoryRejectsUnsafeWebSocketJpegUrl()
 
 void GStreamerTest::_testSourceFactoryRejectsBadUri()
 {
-    ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
-                     QRegularExpression(QStringLiteral("URI is not specified")));
-    ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
-                     QRegularExpression(QStringLiteral("Unsupported URI scheme|Invalid UDP port")));
-
     GStreamer::SourceFactory::Config config;
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("URI is not specified")));
     QVERIFY(!GStreamer::SourceFactory::create(QString(), config));
+    verifyExpectedLogMessage();
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("Unsupported URI scheme")));
     QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("ftp://127.0.0.1/x"), config));
+    verifyExpectedLogMessage();
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("Invalid UDP port 0")));
     QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("udp://127.0.0.1:0"), config));
+    verifyExpectedLogMessage();
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("Invalid UDP port -1")));
     QVERIFY(!GStreamer::SourceFactory::create(QStringLiteral("udp://127.0.0.1:99999"), config));
+    verifyExpectedLogMessage();
 }
 
 void GStreamerTest::_testSourceFactoryTcpMpegTs()
@@ -1386,16 +1393,22 @@ void GStreamerTest::_testSourceFactoryTcpMpegTs()
 
 void GStreamerTest::_testSourceFactoryRejectsBadTcpUri()
 {
-    ignoreLogMessage("Video.GStreamer.GstSourceFactory", QtWarningMsg,
-                     QRegularExpression(QStringLiteral("Invalid TCP port|Missing host in TCP URI")));
-
     GStreamer::SourceFactory::Config config;
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("Invalid TCP port -1")));
     QVERIFY2(!GStreamer::SourceFactory::create(QStringLiteral("tcp://192.168.1.50"), config),
              "tcp:// without a port must be rejected");
+    verifyExpectedLogMessage();
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("Missing host in TCP URI")));
     QVERIFY2(!GStreamer::SourceFactory::create(QStringLiteral("tcp://:5600"), config),
              "tcp:// without a host must be rejected");
+    verifyExpectedLogMessage();
+    expectLogMessage("Video.GStreamer.GstSourceFactory", QtCriticalMsg,
+                     QRegularExpression(QStringLiteral("Invalid TCP port 0")));
     QVERIFY2(!GStreamer::SourceFactory::create(QStringLiteral("tcp://192.168.1.50:0"), config),
              "tcp:// with port 0 must be rejected");
+    verifyExpectedLogMessage();
 }
 
 void GStreamerTest::_testSourceFactoryUdp265Caps()
