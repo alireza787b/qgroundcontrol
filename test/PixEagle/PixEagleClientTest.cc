@@ -959,8 +959,8 @@ void PixEagleClientTest::_tlsCertificateRejected()
         QSKIP("No TLS backend available");
     }
     QSslConfiguration configuration = QSslConfiguration::defaultConfiguration();
-    configuration.setLocalCertificate(QSslCertificate(NTRIPTlsTestFixtures::SERVER_CERT_PEM, QSsl::Pem));
-    configuration.setPrivateKey(QSslKey(NTRIPTlsTestFixtures::PRIVATE_KEY_PEM, QSsl::Rsa, QSsl::Pem));
+    configuration.setLocalCertificate(QSslCertificate(GPSTest::SERVER_CERT_PEM, QSsl::Pem));
+    configuration.setPrivateKey(QSslKey(GPSTest::PRIVATE_KEY_PEM, QSsl::Rsa, QSsl::Pem));
     configuration.setPeerVerifyMode(QSslSocket::VerifyNone);
     QSslServer server;
     server.setSslConfiguration(configuration);
