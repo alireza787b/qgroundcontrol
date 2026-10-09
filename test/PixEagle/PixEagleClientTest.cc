@@ -11,7 +11,7 @@
 #include <QtNetwork/QSslSocket>
 #include <QtTest/QSignalSpy>
 
-#include "GPS/NTRIP/NTRIPTlsTestFixtures.h"
+#include "GPS/NTRIP/Support/NTRIPTlsTestFixtures.h"
 #include "PixEagleTestServer.h"
 
 using namespace PixEagleTest;
