@@ -1694,6 +1694,41 @@ void PixEagleClientTest::_targetActionErrors()
     QCOMPARE(client.authenticated(), status != 401);
 }
 
+void PixEagleClientTest::_engineSaveFailureExplainsPartialOutcome()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseTargets(server.context, true);
+    PixEagleClient client(nullptr, true);
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QTRY_VERIFY_WITH_TIMEOUT(client.targetWriteAllowed(), TestTimeout::mediumMs());
+    const QByteArray path = "/api/v1/actions/tracker-switch";
+    server.deferredPath = path;
+    QSignalSpy finished(&client, &PixEagleClient::targetActionFinished);
+    QVERIFY(client.submitTargetAction("tracker_switch", {{"tracker_type", "CSRT"}, {"persist", true}},
+                                      client.targetGuard()));
+    QTRY_VERIFY_WITH_TIMEOUT(!server.lastRequest(path).target.isEmpty(), TestTimeout::mediumMs());
+    auto response = server.responseFor(server.lastRequest(path));
+    response.body.insert("status", "failure");
+    auto result = response.body.value("result").toObject();
+    result.insert("legacy_result",
+                  QJsonObject{{"runtime_applied", true},
+                              {"saved", false},
+                              {"message", "Engine changed for this session. Restart PixEagle before saving."}});
+    response.body.insert("result", result);
+    QVERIFY(server.respond(server.lastRequestIndex(path), response));
+    QTRY_COMPARE_WITH_TIMEOUT(finished.count(), 1, TestTimeout::mediumMs());
+    QCOMPARE(finished.first()[1].toString(), QStringLiteral("rejected"));
+    QVERIFY(finished.first()[2].toString().contains("Restart PixEagle"));
+    QTRY_VERIFY_WITH_TIMEOUT(client.targetStateFresh(), TestTimeout::mediumMs());
+    qsizetype mutations = 0;
+    for (const auto& request : std::as_const(server.requests)) {
+        mutations += request.target.endsWith(path) ? 1 : 0;
+    }
+    QCOMPARE(mutations, 1);
+}
+
 void PixEagleClientTest::_targetTimeoutDoesNotRetry()
 {
     CompanionServer server;

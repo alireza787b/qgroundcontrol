@@ -429,7 +429,15 @@ Item {
 
                         QGCLabel {
                             Layout.fillWidth: true
-                            text: qsTr("Applying a new engine also saves it for the next PixEagle start. Select a new target after switching. Camera controls and video source are separate settings.")
+                            text: qsTr("Applies and saves the engine. Select a new target, then choose a compatible follower in Options. Video and manual camera controls remain separate.")
+                            wrapMode: Text.WordWrap
+                        }
+
+                        QGCLabel {
+                            Layout.fillWidth: true
+                            text: root._targets ? root._targets.actionNotice : ""
+                            visible: text.length > 0
+                            textFormat: Text.PlainText
                             wrapMode: Text.WordWrap
                         }
 

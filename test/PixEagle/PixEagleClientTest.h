@@ -63,6 +63,7 @@ private slots:
     void _targetGuardInvalidation();
     void _targetActionErrors_data();
     void _targetActionErrors();
+    void _engineSaveFailureExplainsPartialOutcome();
     void _targetTimeoutDoesNotRetry();
     void _targetLateReplyCannotCrossSessions();
     void _nativeFollowingUsesCapturedVehicleAndSurvivesVideoLoss();
