@@ -95,12 +95,12 @@ Rectangle {
             id: resizeArea
             anchors.fill: parent
             cursorShape: Qt.SizeFDiagCursor
-            onPressed: {
+            onPressed: function(mouse) {
                 root._resizeStartScale = root.uiScale
                 root._resizeStartCoordinate = mouse.x + mouse.y
                 root.dragStarted()
             }
-            onPositionChanged: {
+            onPositionChanged: function(mouse) {
                 const delta = (mouse.x + mouse.y) - root._resizeStartCoordinate
                 const nextScale = root._resizeStartScale + delta / Math.max(root.width, root.height)
                 root.uiScale = Math.max(root.minimumUiScale, Math.min(root.maximumUiScale, nextScale))
