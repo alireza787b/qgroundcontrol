@@ -2261,7 +2261,7 @@ void PixEagleClient::_finishTargetAction(QNetworkReply* reply, const QString& ac
         } else if (data.value("status").toString() == "failure") {
             outcome = QStringLiteral("rejected");
             const auto legacy = actionResult.value("legacy_result").toObject();
-            const auto backendMessage = legacy.value("message").toString();
+            const auto backendMessage = legacy.value("message").toString().left(2048);
             message = !backendMessage.isEmpty() ? backendMessage
                       : modelSelection
                           ? tr("PixEagle could not change the model. Review the current model and runtime.")
