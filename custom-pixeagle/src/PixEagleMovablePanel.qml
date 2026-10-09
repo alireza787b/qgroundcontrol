@@ -10,6 +10,7 @@ Rectangle {
     property real initialY: 0
     property real edgeMargin: ScreenTools.defaultFontPixelWidth
     property bool moved: false
+    property bool resizable: true
     property real uiScale: 1.0
     readonly property real minimumUiScale: 1.0
     readonly property real maximumUiScale: 2.0
@@ -65,30 +66,28 @@ Rectangle {
         xScale: root.uiScale
         yScale: root.uiScale
     }
-    Rectangle {
+    Item {
         id: resizeHandle
         width: Math.max(ScreenTools.minTouchPixels, ScreenTools.defaultFontPixelHeight * 2)
         height: width
         anchors.right: parent.right
         anchors.bottom: parent.bottom
-        color: qgcPal.buttonHighlight
-        opacity: resizeArea.pressed ? 0.8 : 0.35
-        radius: ScreenTools.defaultBorderRadius
+        visible: root.resizable
         Accessible.name: qsTr("Resize panel")
         Accessible.description: qsTr("Drag to enlarge or reduce this panel")
         Canvas {
-            anchors.fill: parent
-            anchors.margins: parent.width * 0.25
+            anchors.centerIn: parent
+            width: ScreenTools.defaultFontPixelWidth * 2
+            height: width
+            opacity: resizeArea.pressed ? 0.8 : 0.45
             onPaint: {
                 const context = getContext("2d")
                 context.strokeStyle = qgcPal.text
-                context.lineWidth = 2
+                context.lineWidth = 1.2
+                context.lineCap = "round"
                 context.beginPath()
-                context.moveTo(width * 0.25, height * 0.75)
-                context.lineTo(width * 0.75, height * 0.25)
-                context.moveTo(width * 0.55, height * 0.25)
-                context.lineTo(width * 0.75, height * 0.25)
-                context.lineTo(width * 0.75, height * 0.45)
+                context.moveTo(width * 0.2, height * 0.8)
+                context.lineTo(width * 0.8, height * 0.2)
                 context.stroke()
             }
         }
