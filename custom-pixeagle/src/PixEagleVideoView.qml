@@ -192,6 +192,7 @@ Item {
         height: connectionDetails.implicitHeight + ScreenTools.defaultFontPixelHeight
         visible: !root._compact && (!root._connectionReady || !root._controller || !root._controller.live)
         dragHandle: connectionGrip
+        resizable: false
         uiScale: root._connectionPanelScale
         onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
 
