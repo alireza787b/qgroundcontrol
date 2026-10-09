@@ -209,6 +209,81 @@ void PixEagleCameraClientTest::_staleStatusKeepsCapturedStop()
     QVERIFY(!test.client.cameraStep("pan", 1, context));
 }
 
+void PixEagleCameraClientTest::_panelResizeKeepsPointerCoordinates()
+{
+    CameraHarness test;
+    QVERIFY(test.start());
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral("qrc:/qml"));
+    engine.addImageProvider(QLatin1String(ColoredSvgImageProvider::ProviderId), new ColoredSvgImageProvider());
+    QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/qml/PixEagle/PixEagleCameraControls.qml")));
+    QTRY_VERIFY_WITH_TIMEOUT(!component.isLoading(), TestTimeout::mediumMs());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QQuickWindow window;
+    window.resize(1200, 900);
+    std::unique_ptr<QObject> panel(component.createWithInitialProperties(
+        {{"client", QVariant::fromValue(&test.client)}, {"parent", QVariant::fromValue(window.contentItem())}}));
+    QVERIFY2(panel, qPrintable(component.errorString()));
+    auto* item = qobject_cast<QQuickItem*>(panel.get());
+    QVERIFY(item);
+    item->setParentItem(window.contentItem());
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window));
+    auto* handle = panel->findChild<QQuickItem*>("pixeaglePanelResizeHandle");
+    QVERIFY(handle);
+    const auto margin = panel->property("edgeMargin").toDouble();
+    item->setPosition(
+        QPointF(window.width() - item->width() - margin - 120, window.height() - item->height() - margin - 100));
+    const auto point = handle->mapToScene(QPointF(handle->width() / 2, handle->height() / 2)).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, point);
+    QVERIFY(panel->property("_resizing").toBool());
+    QTest::mouseMove(&window, point + QPoint(40, 30));
+    const auto firstScale = panel->property("uiScale").toDouble();
+    QVERIFY(firstScale > 1.0);
+    QTest::mouseMove(&window, point + QPoint(80, 60));
+    const auto secondScale = panel->property("uiScale").toDouble();
+    QVERIFY(secondScale > firstScale);
+    QVERIFY(qAbs((secondScale - 1.0) - 2 * (firstScale - 1.0)) < 0.02);
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, point + QPoint(80, 60));
+    QVERIFY(qAbs(panel->property("uiScale").toDouble() - secondScale) < 0.01);
+    QVERIFY(item->x() + item->width() * secondScale <= window.width() - margin + 1);
+    QVERIFY(item->y() + item->height() * secondScale <= window.height() - margin + 1);
+    item->setVisible(false);
+    window.resize(600, 500);
+    QCoreApplication::processEvents();
+    QCOMPARE(panel->property("uiScale").toDouble(), secondScale);
+    item->setVisible(true);
+    QTRY_VERIFY_WITH_TIMEOUT(item->width() * panel->property("uiScale").toDouble() <= window.width(),
+                             TestTimeout::mediumMs());
+    QCOMPARE(cameraOperationCount(test.server, "manual_begin"), 0);
+}
+
+void PixEagleCameraClientTest::_cameraPanelPreferenceSurvivesNavigation()
+{
+    QQmlEngine engine;
+    engine.addImportPath(QStringLiteral("qrc:/qml"));
+    engine.addImageProvider(QLatin1String(ColoredSvgImageProvider::ProviderId), new ColoredSvgImageProvider());
+    QQmlComponent component(&engine, QUrl(QStringLiteral("qrc:/qml/PixEagle/PixEagleVideoView.qml")));
+    QTRY_VERIFY_WITH_TIMEOUT(!component.isLoading(), TestTimeout::mediumMs());
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QQuickWindow window;
+    window.resize(1200, 900);
+    std::unique_ptr<QObject> view(component.createWithInitialProperties(
+        {{"width", 1200}, {"height", 900}, {"parent", QVariant::fromValue(window.contentItem())}}));
+    QVERIFY2(view, qPrintable(component.errorString()));
+    QVERIFY(view->setProperty("_cameraPanelOpen", true));
+    auto* panel = view->findChild<QQuickItem*>("pixeagleCameraControls");
+    QVERIFY(panel);
+    QVERIFY(panel->isVisible());
+    QVERIFY(view->setProperty("visible", false));
+    QVERIFY(!panel->isVisible());
+    QVERIFY(view->property("_cameraPanelOpen").toBool());
+    QVERIFY(view->setProperty("visible", true));
+    QVERIFY(panel->isVisible());
+    QVERIFY(!panel->property("_gestureActive").toBool());
+    QVERIFY(view->setProperty("_cameraPanelOpen", false));
+}
+
 void PixEagleCameraClientTest::_padHoldAndRelease()
 {
     CameraHarness test;

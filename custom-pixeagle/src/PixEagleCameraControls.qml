@@ -35,9 +35,10 @@ PixEagleMovablePanel {
 
     signal closed()
 
+    settingsKey: "CameraControls"
     objectName: "pixeagleCameraControls"
     width: content.implicitWidth + ScreenTools.defaultFontPixelWidth * 2
-    height: content.implicitHeight + ScreenTools.defaultFontPixelHeight
+    height: content.implicitHeight + ScreenTools.defaultFontPixelHeight + resizeFooterHeight
     dragHandle: grip
     onDragStarted: endGesture(true)
     onVisibleChanged: {
@@ -192,6 +193,7 @@ PixEagleMovablePanel {
     ColumnLayout {
         id: content
         anchors.centerIn: parent
+        anchors.verticalCenterOffset: -root.resizeFooterHeight / 2
         spacing: ScreenTools.defaultFontPixelHeight / 3
 
         RowLayout {

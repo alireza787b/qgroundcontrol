@@ -2,6 +2,7 @@ import QGC
 import QGroundControl
 import QGroundControl.Controls
 import QtQuick
+import QtCore
 import QtQuick.Controls
 import QtQuick.Layouts
 
@@ -39,10 +40,10 @@ Item {
     }
 
     property var _optionsDialog: null
-    property bool _cameraPanelOpen: false
+    property alias _cameraPanelOpen: panelPreferences.cameraOpen
     property real _connectionPanelScale: 1.0
-    property real _trackingPanelScale: 1.0
-    property real _cameraPanelScale: 1.0
+    property alias _trackingPanelScale: panelPreferences.trackingScale
+    property alias _cameraPanelScale: panelPreferences.cameraScale
     readonly property string _trackingState: trackingController ? trackingController.trackingState : "unknown"
     readonly property string _followingState: _client ? _client.followingState : "unknown"
     readonly property string _trackerName: {
@@ -115,7 +116,7 @@ Item {
     }
     function closeChoices() {
         if (_optionsDialog) _optionsDialog.close()
-        _cameraPanelOpen = false
+        cameraPanel.endGesture(true)
         startFollowing.clearIntent()
     }
     function captureControl() {
@@ -124,7 +125,7 @@ Item {
         return trackingController.captureControlContext()
     }
     function openOptions() {
-        _cameraPanelOpen = false
+        cameraPanel.endGesture(true)
         captureControl()
         startFollowing.clearIntent()
         if (!_optionsDialog) _optionsDialog = optionsFactory.open({client: _client, trackingController: trackingController, panelScale: _trackingPanelScale})
@@ -149,6 +150,14 @@ Item {
         if (root._controller) root._controller.detachSurface(frame)
     }
 
+    Settings {
+        id: panelPreferences
+        category: "PixEaglePanels"
+        property bool cameraOpen: false
+        property real trackingScale: 1.0
+        property real cameraScale: 1.0
+    }
+
     QGCPopupDialogFactory { id: optionsFactory; dialogComponent: optionsComponent }
     Component {
         id: optionsComponent
@@ -169,6 +178,7 @@ Item {
         z: 2
         client: root._client
         uiScale: root._cameraPanelScale
+        onUiScaleChanged: root._cameraPanelScale = uiScale
         visible: root._cameraPanelOpen && root.visible && !root._compact
         initialX: root.width - width - ScreenTools.defaultFontPixelWidth * 2
         initialY: ScreenTools.defaultFontPixelHeight * 4
@@ -186,6 +196,7 @@ Item {
 
     PixEagleMovablePanel {
         id: connectionPanel
+        settingsKey: "Connection"
         initialX: (root.width - width) / 2
         initialY: ScreenTools.defaultFontPixelHeight * 4
         width: Math.min(root.width - edgeMargin * 2, ScreenTools.defaultFontPixelWidth * 44)
@@ -239,22 +250,25 @@ Item {
 
     PixEagleMovablePanel {
         id: targetPanel
+        settingsKey: "Tracking"
         readonly property real instrumentInset: !root.toolInsets || QGroundControl.videoManager.fullScreen ? 0
             : Math.max(root.toolInsets.bottomEdgeLeftInset, root.toolInsets.bottomEdgeRightInset)
         initialX: (root.width - width) / 2
         initialY: root.height - height - instrumentInset - ScreenTools.defaultFontPixelHeight
         width: Math.min(root.width - edgeMargin * 2, ScreenTools.defaultFontPixelWidth * 45)
-        height: controls.implicitHeight + ScreenTools.defaultFontPixelHeight
+        height: controls.implicitHeight + ScreenTools.defaultFontPixelHeight + resizeFooterHeight
         visible: !root._compact && !!root.trackingController && !!root._client
                  && ((root._connectionReady && root._controller && root._controller.live) || root._client.canStopFollowing)
         dragHandle: panelGrip
         uiScale: root._trackingPanelScale
+        onUiScaleChanged: root._trackingPanelScale = uiScale
         objectName: "pixeagleOperatorPanel"
         onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
 
         ColumnLayout {
             id: controls
             anchors.centerIn: parent
+            anchors.verticalCenterOffset: -targetPanel.resizeFooterHeight / 2
             width: parent.width - ScreenTools.defaultFontPixelWidth * 2
             spacing: ScreenTools.defaultFontPixelHeight / 3
             Item {

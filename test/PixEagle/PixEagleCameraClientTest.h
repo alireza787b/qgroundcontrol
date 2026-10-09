@@ -13,6 +13,8 @@ private slots:
     void _manualInputExpiry();
     void _manualLatestInputAndLongHold();
     void _manualReleaseDuringBegin();
+    void _panelResizeKeepsPointerCoordinates();
+    void _cameraPanelPreferenceSurvivesNavigation();
     void _padHoldAndRelease();
     void _padFailureRequiresRelease();
     void _capabilityAndPermissionGates();
