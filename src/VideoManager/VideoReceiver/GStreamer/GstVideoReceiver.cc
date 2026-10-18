@@ -25,6 +25,7 @@
 #include "QGCLoggingCategory.h"
 #include "QGCNetworkHelper.h"
 #include "QGCQVideoSinkController.h"
+#include "QGCWebRtcVideoSource.h"
 #include "QGCWebSocketVideoSource.h"
 
 QGC_LOGGING_CATEGORY(GstVideoReceiverLog, "Video.GStreamer.GstVideoReceiver")
@@ -134,6 +135,16 @@ void GstVideoReceiver::setWebSocketOptions(std::shared_ptr<const QGCWebSocketVid
         return;
     }
     _webSocketOptions = std::move(options);
+}
+
+void GstVideoReceiver::setWebRtcOptions(std::shared_ptr<const QGCWebRtcVideoOptions> options)
+{
+    if (_needDispatch()) {
+        auto snapshot = options ? std::make_shared<const QGCWebRtcVideoOptions>(*options) : nullptr;
+        _worker->dispatch([this, snapshot]() { setWebRtcOptions(snapshot); });
+        return;
+    }
+    _webRtcOptions = std::move(options);
 }
 
 void GstVideoReceiver::start(uint32_t timeout)
@@ -266,6 +277,7 @@ void GstVideoReceiver::start(uint32_t timeout)
         sourceConfig.latencyMs = _rtpJitterLatencyMs;
         sourceConfig.timeoutS = timeout;
         sourceConfig.webSocketOptions = _webSocketOptions;
+        sourceConfig.webRtcOptions = _webRtcOptions;
         // do-retransmission needs ≥40 ms latency headroom over the default 20 ms rtx-delay;
         // forcibly disable for sub-frame latency configurations to avoid retransmit storms.
         sourceConfig.doRetransmission = (_rtpJitterLatencyMs >= 40) && (sourceConfig.jitterBuffer != GStreamer::SourceFactory::JitterBuffer::None);
@@ -1711,6 +1723,11 @@ GstPadProbeReturn GstVideoReceiver::_videoSinkProbe(GstPad *pad, GstPadProbeInfo
 
     if (user_data) {
         GstVideoReceiver *pThis = static_cast<GstVideoReceiver*>(user_data);
+#if defined(QGC_GST_WEBRTC)
+        if (pThis->_source) {
+            QGCWebRtcVideoSource::associatePresentedBuffer(pThis->_source, pad, info);
+        }
+#endif
 
         if (pThis->_resetVideoSink) {
             pThis->_resetVideoSink = false;
@@ -1749,14 +1766,14 @@ GstPadProbeReturn GstVideoReceiver::_videoSinkProbe(GstPad *pad, GstPadProbeInfo
 GstPadProbeReturn GstVideoReceiver::_eosProbe(GstPad *pad, GstPadProbeInfo *info, gpointer user_data)
 {
     Q_UNUSED(pad);
-    Q_ASSERT(user_data);
+    if (!user_data || !info) {
+        return GST_PAD_PROBE_OK;
+    }
 
-    if (info) {
-        const GstEvent *event = gst_pad_probe_info_get_event(info);
-        if (GST_EVENT_TYPE(event) == GST_EVENT_EOS) {
-            GstVideoReceiver *pThis = static_cast<GstVideoReceiver*>(user_data);
-            pThis->_noteEndOfStream();
-        }
+    const GstEvent* event = gst_pad_probe_info_get_event(info);
+    if (event && GST_EVENT_TYPE(event) == GST_EVENT_EOS) {
+        GstVideoReceiver* pThis = static_cast<GstVideoReceiver*>(user_data);
+        pThis->_noteEndOfStream();
     }
 
     return GST_PAD_PROBE_OK;

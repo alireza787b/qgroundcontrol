@@ -18,7 +18,8 @@ QVideoFrameFormat::ColorRange toQtColorRange(GstVideoColorRange range);
 /// Apply rotation + mirror flags derived from GstVideoOrientationMethod.
 void applyOrientationToFrame(QVideoFrame& frame, GstVideoOrientationMethod method);
 
-/// Per-frame orientation (meta wins, else stream fallback) + PTS/duration timing;
+/// Per-frame orientation (meta wins, else stream fallback) + PTS/duration timing.
+/// An explicit presented-frame context changes Qt identity only, preserving pipeline clock timing.
 /// @p streamOrientation is GstVideoOrientationMethod cast to int.
 void applyOrientationAndTiming(QVideoFrame& frame, GstBuffer* buffer, int streamOrientation);
 

@@ -11,4 +11,7 @@ private slots:
     void _videoEnabledAfterInitialization();
     void _initializationIsIdempotent();
     void _externalVideoDoesNotRequireStockStreamSetting();
+    void _nativeCapabilityRequiresEveryPrerequisite();
+    void _mediaFallbackResetsOnlyWithMediaIdentity();
+    void _mediaDiscoveryDoesNotBlockVerificationOrSurviveEndpointChange();
 };

@@ -3,20 +3,21 @@
 #ifdef QGC_GST_STREAMING
 
 #include "CpuVideoFramePool.h"
-#include "Fixtures/RAIIFixtures.h"
 #include "Fact.h"
+#include "Fixtures/RAIIFixtures.h"
 #include "GStreamer.h"
 #include "GStreamerFrameMap.h"
 #include "GStreamerHelpers.h"
 #include "GStreamerLogging.h"
-#include "GstVideoReceiver.h"
 #include "GstHwPathTelemetry.h"
 #include "GstHwVideoBufferFactory.h"
 #include "GstSourceFactory.h"
+#include "GstVideoReceiver.h"
 #include "HwBuffers/dmabuf/GstDmaDrmCaps.h"
 #include "QGCQVideoSinkController.h"
 #include "gstqgc/GstQgcAllocation.h"
 #include "gstqgc/GstQgcCaps.h"
+#include "gstqgc/GstQgcFrameContext.h"
 #include "gstqgc/GstQgcVideoFormats.h"
 
 #if defined(QGC_HAS_GST_DMABUF_GPU_PATH)
@@ -62,6 +63,28 @@
 #include <memory>
 #include <string_view>
 #include <vector>
+
+void GStreamerTest::_testPresentationContextPreservesMediaTiming()
+{
+    GstBuffer* buffer = gst_buffer_new();
+    QVERIFY(buffer);
+    const auto cleanup = qScopeGuard([&] { gst_buffer_unref(buffer); });
+    GST_BUFFER_PTS(buffer) = 2 * GST_SECOND;
+    GST_BUFFER_DURATION(buffer) = 50 * GST_MSECOND;
+    QVideoFrame frame(QVideoFrameFormat(QSize(16, 16), QVideoFrameFormat::Format_BGRA8888));
+    QVERIFY(frame.isValid());
+    applyOrientationAndTiming(frame, buffer, GST_VIDEO_ORIENTATION_IDENTITY);
+    QCOMPARE(frame.startTime(), 2000000);
+    QVERIFY(GStreamer::attachPresentedFrameContext(buffer, 123));
+    applyOrientationAndTiming(frame, buffer, GST_VIDEO_ORIENTATION_IDENTITY);
+    QCOMPARE(frame.startTime(), 123);
+    QCOMPARE(GST_BUFFER_PTS(buffer), 2 * GST_SECOND);
+    QCOMPARE(GST_BUFFER_DURATION(buffer), 50 * GST_MSECOND);
+    QVERIFY(GStreamer::attachPresentedFrameContext(buffer, -1));
+    applyOrientationAndTiming(frame, buffer, GST_VIDEO_ORIENTATION_IDENTITY);
+    QCOMPARE(frame.startTime(), -1);
+    QCOMPARE(GST_BUFFER_PTS(buffer), 2 * GST_SECOND);
+}
 
 void GStreamerTest::_testAppsinkFrameDelivery()
 {
@@ -798,11 +821,12 @@ void GStreamerTest::_testAppsinkTeardownUnderLoad()
         GstElement* sinkBin = gst_bin_get_by_name(GST_BIN(pipeline), "sink");
         QVERIFY(sinkBin);
         QObject controllerOwner1;
+        QSignalSpy firstFrame(&videoSink, &QVideoSink::videoFrameChanged);
         QVERIFY(GStreamer::setupQVideoSinkElement(sinkBin, &videoSink, &controllerOwner1));
         gst_object_unref(sinkBin);
 
         QVERIFY(gst_element_set_state(pipeline, GST_STATE_PLAYING) != GST_STATE_CHANGE_FAILURE);
-        QTest::qWait(150);
+        QTRY_VERIFY_WITH_TIMEOUT(!firstFrame.isEmpty(), TestTimeout::mediumMs());
         // controllerOwner1 goes out of scope here — implicit teardown.
 
         gst_element_set_state(pipeline, GST_STATE_NULL);
@@ -1596,16 +1620,18 @@ void GStreamerTest::_testAdapterFlushDropsInFlightSamples()
     gst_object_unref(flushStopPeer);
     QVERIFY(flushStopSent);
 
-    // Drain the Qt event loop so any push_frame_queued lambdas queued before the flush run.
-    QTest::qWait(100);
+    QCoreApplication::processEvents(QEventLoop::AllEvents);
 
     // The flush must leave no buffer stuck in flight: every buffer the sink accepted is now
     // accounted for as either delivered or dropped. A leaked in-flight buffer would make
     // input strictly exceed delivered+dropped.
     guint64 inputAfter = 0, deliveredAfter = 0, droppedAfter = 0;
-    g_object_get(vsink, "frames-input", &inputAfter, "frames-delivered", &deliveredAfter, "frames-dropped",
-                 &droppedAfter, nullptr);
-    QCOMPARE(inputAfter, deliveredAfter + droppedAfter);
+    const auto allBuffersAccounted = [&]() {
+        g_object_get(vsink, "frames-input", &inputAfter, "frames-delivered", &deliveredAfter, "frames-dropped",
+                     &droppedAfter, nullptr);
+        return inputAfter == deliveredAfter + droppedAfter;
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(allBuffersAccounted(), TestTimeout::mediumMs());
     gst_object_unref(vsink);
 
     gst_object_unref(idSrc);

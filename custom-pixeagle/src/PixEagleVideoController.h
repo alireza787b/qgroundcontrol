@@ -11,6 +11,8 @@
 #include "PixEagleVideoItem.h"
 
 class GstVideoReceiver;
+class QNetworkAccessManager;
+class QNetworkReply;
 class PixEagleManager;
 class PixEagleSettings;
 class QGCVideoFrameContextStore;
@@ -64,6 +66,10 @@ private:
     bool _surfaceVisible() const;
     bool _createReceiver();
     void _retireReceiver();
+    void _requestMediaConfig();
+    void _cancelMediaConfig();
+    void _failVideo(const QString& stage, const QString& message);
+    static bool _nativeConfigEligible(const QJsonObject& config);
 
     PixEagleManager* _manager = nullptr;
     PixEagleTargetController* _targets = nullptr;
@@ -78,6 +84,12 @@ private:
     QTimer _presentationWatchdog;
     QString _desiredKey;
     QString _runningKey;
+    QNetworkAccessManager* _mediaNetwork = nullptr;
+    QPointer<QNetworkReply> _mediaConfigReply;
+    QJsonObject _mediaConfig;
+    QString _mediaConfigKey;
+    bool _usingWebRtc = false;
+    bool _webRtcFailed = false;
     QString _error;
     State _state = State::Idle;
     int _retryMs = 1000;

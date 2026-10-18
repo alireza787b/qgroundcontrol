@@ -16,3 +16,7 @@ target_sources(${CMAKE_PROJECT_NAME}
 target_include_directories(${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 
 add_qgc_test(GStreamerTest LABELS Integration)
+if(QGC_ENABLE_NATIVE_WEBRTC)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE QGCWebRtcVideoSourceTest.cc QGCWebRtcVideoSourceTest.h)
+    add_qgc_test(QGCWebRtcVideoSourceTest LABELS Integration Network)
+endif()

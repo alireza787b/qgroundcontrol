@@ -33,6 +33,7 @@ private slots:
     void _testAppsinkFrameDelivery();
     void _testAppsinkYuvPassthrough();
     void _testAppsinkPtsAndColorimetry();
+    void _testPresentationContextPreservesMediaTiming();
     void _testQgcVideoSinkBinGpuZeroCopyProperty();
     void _testQgcVideoSinkBinRejectsFailedAdopt();
     void _testGlMemoryDispatch();

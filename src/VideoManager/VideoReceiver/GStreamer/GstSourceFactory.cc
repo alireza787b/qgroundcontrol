@@ -11,6 +11,9 @@
 #include "QGCLoggingCategory.h"
 #include "QGCNetworkHelper.h"
 #include "QGCWebSocketVideoSource.h"
+#if defined(QGC_GST_WEBRTC)
+#include "QGCWebRtcVideoSource.h"
+#endif
 
 QGC_LOGGING_CATEGORY(GstSourceFactoryLog, "Video.GStreamer.GstSourceFactory")
 
@@ -737,6 +740,13 @@ GstElement* create(const QString& uri, const Config& config)
 
     const QUrl sourceUrl(uri);
     const QString scheme = sourceUrl.scheme().toLower();
+#if defined(QGC_GST_WEBRTC)
+    if (scheme == QLatin1String("webrtc+ws") || scheme == QLatin1String("webrtc+wss")) {
+        QUrl signalingUrl(sourceUrl);
+        signalingUrl.setScheme(scheme.mid(7));
+        return QGCWebRtcVideoSource::create(signalingUrl, config.webRtcOptions);
+    }
+#endif
 
     const bool isRtsp = scheme.startsWith(QLatin1String("rtsp"));
     const bool isUdpH264 = (scheme == QLatin1String("udp"));
@@ -898,7 +908,14 @@ bool activate(GstElement* source)
     auto* context =
         static_cast<QGCWebSocketVideoSource*>(g_object_get_data(G_OBJECT(source), kWebSocketSourceContextKey));
     if (!context) {
+#if defined(QGC_GST_WEBRTC)
+        GstBus* bus = pipelineBusForSource(source);
+        const bool started = QGCWebRtcVideoSource::activate(source, bus);
+        gst_clear_object(&bus);
+        return started;
+#else
         return true;
+#endif
     }
 
     GstBus* bus = pipelineBusForSource(source);
@@ -916,6 +933,9 @@ void deactivate(GstElement* source)
     if (!source) {
         return;
     }
+#if defined(QGC_GST_WEBRTC)
+    QGCWebRtcVideoSource::deactivate(source);
+#endif
 
     auto* context =
         static_cast<QGCWebSocketVideoSource*>(g_object_get_data(G_OBJECT(source), kWebSocketSourceContextKey));

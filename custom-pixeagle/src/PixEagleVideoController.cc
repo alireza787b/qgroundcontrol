@@ -4,6 +4,8 @@
 #include <QtCore/QJsonDocument>
 #include <QtCore/QScopedValueRollback>
 #include <QtGui/QGuiApplication>
+#include <QtNetwork/QNetworkAccessManager>
+#include <QtNetwork/QNetworkReply>
 #include <QtQuick/QQuickWindow>
 
 #include "GStreamer.h"
@@ -15,6 +17,10 @@
 #include "QGCWebSocketVideoSource.h"
 #include "VideoManager.h"
 
+#if defined(QGC_GST_WEBRTC)
+#include "QGCWebRtcVideoSource.h"
+#endif
+
 QGC_LOGGING_CATEGORY(PixEagleVideoLog, "Custom.PixEagle.Video")
 
 PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEagleSettings* settings)
@@ -23,6 +29,7 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
     , _targets(new PixEagleTargetController(this))
     , _settings(settings)
 {
+    _mediaNetwork = new QNetworkAccessManager(this);
     _retryTimer.setSingleShot(true);
     connect(&_retryTimer, &QTimer::timeout, this, &PixEagleVideoController::_start);
     _contextRefreshTimer.setSingleShot(true);
@@ -44,13 +51,7 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
         if ((_state != State::Running && _state != State::Starting) || (_surface && _surface->frameFresh())) {
             return;
         }
-        _error = tr("Video connected but no frame was presented. Retrying.");
-        _stop();
-        if (!_desiredKey.isEmpty() && !_suspended && _surfaceVisible()) {
-            _retryTimer.start(_retryMs);
-            _retryMs = qMin(_retryMs * 2, 15000);
-        }
-        emit changed();
+        _failVideo(QStringLiteral("presentation"), tr("No fresh video frame was presented. Retrying."));
     });
 }
 
@@ -61,6 +62,7 @@ void PixEagleVideoController::initialize()
 
 PixEagleVideoController::~PixEagleVideoController()
 {
+    _cancelMediaConfig();
     if (_surface) {
         _surface->clearStream();
     }
@@ -122,6 +124,10 @@ void PixEagleVideoController::_updateDesired()
         }
     }
     if (_desiredKey != key) {
+        _cancelMediaConfig();
+        _mediaConfig = {};
+        _mediaConfigKey.clear();
+        _webRtcFailed = false;
         _desiredKey = key;
         _error.clear();
         _retryMs = 1000;
@@ -216,8 +222,7 @@ bool PixEagleVideoController::_createReceiver()
             _receiver->startDecoding(_sink);
             _presentationWatchdog.start();
         } else {
-            _error = tr("Video could not connect. Check streaming access and the allowed Origin in PixEagle.");
-            _stop();
+            _failVideo(QStringLiteral("startup"), tr("Video could not connect. Check streaming access in PixEagle."));
         }
         emit changed();
     });
@@ -225,7 +230,12 @@ bool PixEagleVideoController::_createReceiver()
         if (attempt != _attemptGeneration || _state == State::Idle) {
             return;
         }
+        if (_state != State::Stopping && _usingWebRtc) {
+            _webRtcFailed = true;
+            qCDebug(PixEagleVideoLog) << "WebRTC transport ended; using JPEG fallback; attempt" << attempt;
+        }
         _state = State::Idle;
+        _usingWebRtc = false;
         qCDebug(PixEagleVideoLog) << "Receiver stopped; attempt" << attempt;
         _retireReceiver();
         _presentationWatchdog.stop();
@@ -242,8 +252,7 @@ bool PixEagleVideoController::_createReceiver()
     });
     connect(_receiver, &VideoReceiver::onStartDecodingComplete, this, [this, attempt](VideoReceiver::STATUS status) {
         if (attempt == _attemptGeneration && status != VideoReceiver::STATUS_OK && _state == State::Running) {
-            _error = tr("Video could not be decoded. Check PixEagle's stream.");
-            _stop();
+            _failVideo(QStringLiteral("decode"), tr("Video could not be decoded. Retrying."));
         }
     });
     return true;
@@ -258,12 +267,106 @@ void PixEagleVideoController::_retireReceiver()
     }
 }
 
+bool PixEagleVideoController::_nativeConfigEligible(const QJsonObject& config)
+{
+    const auto native = config.value("native_webrtc").toObject();
+    const auto protocol = config.value("default_protocol").toString();
+    return config.value("schema_version") == QJsonValue(1) &&
+           config.value("source") == QJsonValue("streaming_client_config") &&
+           config.value("streaming_enabled") == QJsonValue(true) && (protocol == "auto" || protocol == "webrtc") &&
+           config.value("transports").toObject().value("webrtc") == QJsonValue(true) &&
+           native.value("available") == QJsonValue(true) && native.value("runtime_ready") == QJsonValue(true) &&
+           native.value("provider") == QJsonValue("gstreamer") &&
+           native.value("frame_association") == QJsonValue("verified") &&
+           native.value("missing_components").isArray() && native.value("missing_components").toArray().isEmpty() &&
+           native.value("signaling_path") == QJsonValue("/ws/webrtc_signaling") &&
+           native.value("fallback") == QJsonValue("websocket_jpeg");
+}
+
+void PixEagleVideoController::_cancelMediaConfig()
+{
+    if (_mediaConfigReply) {
+        disconnect(_mediaConfigReply, nullptr, this, nullptr);
+        _mediaConfigReply->abort();
+        _mediaConfigReply->deleteLater();
+        _mediaConfigReply = nullptr;
+    }
+}
+
+void PixEagleVideoController::_requestMediaConfig()
+{
+    if (_mediaConfigReply || !_client || !_client->mediaAvailable() || _desiredKey.isEmpty()) {
+        return;
+    }
+    QUrl url(_client->endpoint());
+    url.setPath(url.path() + "/api/v1/streams/client-config");
+    QNetworkRequest request(url);
+    request.setTransferTimeout(3000);
+    request.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::ManualRedirectPolicy);
+    request.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    request.setAttribute(QNetworkRequest::CacheSaveControlAttribute, false);
+    request.setAttribute(QNetworkRequest::CookieLoadControlAttribute, QNetworkRequest::Manual);
+    request.setAttribute(QNetworkRequest::CookieSaveControlAttribute, QNetworkRequest::Manual);
+    request.setRawHeader("Cookie", _client->mediaCookie());
+    request.setRawHeader("Origin", _client->mediaOrigin().toUtf8());
+    request.setRawHeader("Accept", "application/json");
+    auto* reply = _mediaNetwork->get(request);
+    _mediaConfigReply = reply;
+    constexpr qint64 responseLimit = 128 * 1024;
+    reply->setReadBufferSize(responseLimit + 1);
+    connect(reply, &QNetworkReply::readyRead, this, [reply]() {
+        if (reply->bytesAvailable() > responseLimit) {
+            reply->abort();
+        }
+    });
+    connect(reply, &QNetworkReply::finished, this, [this, reply, key = _desiredKey]() {
+        reply->deleteLater();
+        if (_mediaConfigReply != reply) {
+            return;
+        }
+        _mediaConfigReply = nullptr;
+        if (key != _desiredKey || !_client || !_client->mediaAvailable()) {
+            return;
+        }
+        _mediaConfigKey = key;
+        _mediaConfig = {};
+        const auto status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+        if (reply->error() == QNetworkReply::NoError && status == 200) {
+            const auto bytes = reply->read(responseLimit + 1);
+            if (bytes.size() <= responseLimit) {
+                _mediaConfig = QJsonDocument::fromJson(bytes).object();
+            }
+        } else if (status == 401) {
+            // The independent media request never mutates authentication/verification sequencing.
+            _client->refresh();
+        }
+        _updateDesired();
+    });
+}
+
+void PixEagleVideoController::_failVideo(const QString& stage, const QString& message)
+{
+    _error = message;
+    if (_usingWebRtc) {
+        _webRtcFailed = true;
+    }
+    qCDebug(PixEagleVideoLog) << "Receiver failure; stage" << stage << "attempt" << _attemptGeneration << "WebRTC"
+                              << _usingWebRtc;
+    _stop();
+}
+
 void PixEagleVideoController::_start()
 {
     if (_state != State::Idle || _desiredKey.isEmpty() || !_client || !_client->mediaAvailable() || _suspended ||
         !_surfaceVisible() || !VideoManager::instance()->hasVideo()) {
         return;
     }
+#if defined(QGC_GST_WEBRTC)
+    if (_mediaConfigKey != _desiredKey && QGCWebRtcVideoSource::available()) {
+        _requestMediaConfig();
+        return;
+    }
+#endif
     if (!_createReceiver()) {
         _error = tr("The video backend is not ready.");
         _retryTimer.start(2000);
@@ -277,11 +380,6 @@ void PixEagleVideoController::_start()
         return;
     }
     _contexts = std::make_shared<QGCVideoFrameContextStore>();
-    auto options = std::make_shared<QGCWebSocketVideoOptions>();
-    options->cookie = cookie;
-    options->origin = _client->mediaOrigin();
-    options->requireFrameMetadata = true;
-    options->frameContexts = _contexts;
     _surface->setStream(_contexts, _client->mediaContext());
     _receiver->setWidget(_surface);
     if (!GStreamer::setupQVideoSinkElement(_sink, _surface->videoSink(), _receiver)) {
@@ -290,8 +388,31 @@ void PixEagleVideoController::_start()
         emit changed();
         return;
     }
-    _receiver->setWebSocketOptions(options);
-    _receiver->setUri(_client->mediaUrl().toString(QUrl::FullyEncoded));
+    _usingWebRtc = false;
+#if defined(QGC_GST_WEBRTC)
+    _usingWebRtc = !_webRtcFailed && _nativeConfigEligible(_mediaConfig) && QGCWebRtcVideoSource::available();
+    if (_usingWebRtc) {
+        auto options = std::make_shared<QGCWebRtcVideoOptions>();
+        options->cookie = cookie;
+        options->origin = _client->mediaOrigin();
+        options->iceServers = _mediaConfig.value("ice_servers").toArray();
+        options->frameContexts = _contexts;
+        _receiver->setWebRtcOptions(options);
+        QUrl url(_client->endpoint());
+        url.setScheme(url.scheme() == "https" ? "webrtc+wss" : "webrtc+ws");
+        url.setPath(url.path() + "/ws/webrtc_signaling");
+        _receiver->setUri(url.toString(QUrl::FullyEncoded));
+    } else
+#endif
+    {
+        auto options = std::make_shared<QGCWebSocketVideoOptions>();
+        options->cookie = cookie;
+        options->origin = _client->mediaOrigin();
+        options->requireFrameMetadata = true;
+        options->frameContexts = _contexts;
+        _receiver->setWebSocketOptions(options);
+        _receiver->setUri(_client->mediaUrl().toString(QUrl::FullyEncoded));
+    }
     _runningKey = _desiredKey;
     _state = State::Starting;
     _error.clear();
@@ -304,6 +425,7 @@ void PixEagleVideoController::_start()
 void PixEagleVideoController::_stop()
 {
     _targets->cancelGesture();
+    _cancelMediaConfig();
     _retryTimer.stop();
     _presentationWatchdog.stop();
     if (_surface) {

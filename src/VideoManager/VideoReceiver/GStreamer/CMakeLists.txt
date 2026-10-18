@@ -14,6 +14,10 @@ find_package(Qt6
 # rtsp-server lib out of release builds. It is also optional: a define is emitted below only
 # when the SDK actually ships it.
 set(_qgc_gst_components Core Base Video App Rtsp)
+option(QGC_ENABLE_NATIVE_WEBRTC "Build the native authenticated WebRTC receiver" OFF)
+if(QGC_ENABLE_NATIVE_WEBRTC)
+    list(APPEND _qgc_gst_components WebRTC Sdp Rtp)
+endif()
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     list(APPEND _qgc_gst_components RtspServer)
 endif()
@@ -22,6 +26,13 @@ if(LINUX)
 endif()
 set(QGCGStreamer_FIND_COMPONENTS ${_qgc_gst_components})
 include(GStreamer/Orchestrator)
+if(QGC_ENABLE_NATIVE_WEBRTC)
+    foreach(_component WebRTC Sdp Rtp)
+        if(NOT GStreamer_${_component}_FOUND)
+            message(FATAL_ERROR "Native WebRTC requires the GStreamer ${_component} development component")
+        endif()
+    endforeach()
+endif()
 
 # QGCGStreamer: one static lib for the self-contained HwBuffers + gstqgc leaf layer (no app deps).
 # PUBLIC usage reqs flow to the app via the link below; facade sources stay app-side (need app headers).
@@ -120,6 +131,13 @@ target_sources(${CMAKE_PROJECT_NAME}
 )
 
 target_link_libraries(${CMAKE_PROJECT_NAME} PRIVATE Qt6::WebSockets)
+if(QGC_ENABLE_NATIVE_WEBRTC)
+    target_sources(${CMAKE_PROJECT_NAME} PRIVATE QGCWebRtcVideoSource.cc QGCWebRtcVideoSource.h)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE QGC_GST_WEBRTC)
+    set_source_files_properties("${CMAKE_CURRENT_SOURCE_DIR}/QGCWebRtcVideoSource.cc"
+        TARGET_DIRECTORY ${CMAKE_PROJECT_NAME}
+        PROPERTIES COMPILE_DEFINITIONS GST_USE_UNSTABLE_API)
+endif()
 
 # iOS xcframework ships no CA list / no keychain-via-OpenSSL; bundle a Mozilla NSS extract for
 # libgioopenssl (fetched at configure time, IOS.cmake). On the app target for MACOSX_PACKAGE_LOCATION.

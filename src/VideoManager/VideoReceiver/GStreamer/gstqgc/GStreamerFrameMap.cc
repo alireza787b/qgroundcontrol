@@ -1,12 +1,14 @@
 #include "GStreamerFrameMap.h"
 
-#include <QtMultimedia/QAbstractVideoBuffer>
-#include <QtMultimedia/QVideoFrame>
 #include <atomic>
 #include <gst/gst.h>
 #include <gst/video/gstvideometa.h>
 #include <gst/video/video-hdr.h>
 
+#include <QtMultimedia/QAbstractVideoBuffer>
+#include <QtMultimedia/QVideoFrame>
+
+#include "GstQgcFrameContext.h"
 #include "GstQgcVideoFormats.h"
 #include "HwBuffers/common/CpuVideoFramePool.h"
 #include "QGCLoggingCategory.h"
@@ -157,6 +159,13 @@ void applyOrientationAndTiming(QVideoFrame& frame, [[maybe_unused]] GstBuffer* b
         } else {
             // No duration: collapse the interval so consumers never see a stale/zero endTime.
             frame.setEndTime(GST_BUFFER_PTS(buffer) / GST_USECOND);
+        }
+    }
+    if (auto* meta = gst_buffer_get_custom_meta(buffer, GStreamer::PRESENTED_FRAME_CONTEXT_META)) {
+        gint64 timestampUs = -1;
+        if (gst_structure_get_int64(gst_custom_meta_get_structure(meta), "timestamp-us", &timestampUs)) {
+            frame.setStartTime(timestampUs);
+            frame.setEndTime(timestampUs);
         }
     }
 }

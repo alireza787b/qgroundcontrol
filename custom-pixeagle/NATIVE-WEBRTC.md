@@ -1,0 +1,106 @@
+# Native WebRTC development checkpoint — 2026-10-18
+
+Native WebRTC is under qualification. The normal application continues to
+use authenticated WebSocket JPEG. No Pi configuration, operator setting or
+public QGC release changes in this checkpoint.
+
+## Implemented and checked
+
+- Generic `QGCWebRtcVideoSource` with a dedicated Qt signaling thread,
+  memory-only session credentials, verified WSS trust, asynchronous SDP/ICE,
+  bounded metadata and explicit shutdown ownership.
+- Receiver output joins exact RTP SSRC/timestamp to decoded segment running
+  time. A custom buffer meta carries the existing context-store identity into
+  `QVideoFrame`; it does not overwrite GStreamer scheduling timestamps.
+- Delayed, absent, duplicate, ambiguous, expired and retired-epoch contexts
+  cannot borrow another image's selection identity. A prior client challenge
+  provides a conservative age bound without synchronizing machine clocks.
+- ICE and frame challenges wait until the offer is sent. The backend rejects
+  changing providers inside an existing signaling session.
+- Five consecutive Linux start/present/stop runs passed for both H.264 and VP8.
+  Each decoded at least 12 presented 16-bit barcodes and matched capture IDs
+  to the exact frame context.
+- The same receiver now passes with recorded test9 at 1280×720. Both codecs
+  render through `PixEagleVideoItem`; a selection references the displayed
+  capture ID and its exact retained backend geometry. The fixture does not
+  execute a production tracking/retarget action or establish camera quality.
+- Independent read-only client-config discovery preserves sign-in and aircraft
+  verification sequencing. It uses the authorized endpoint/cookie/Origin,
+  bounded responses, no redirects/cookie persistence, and rejects obsolete
+  endpoint replies. Eligible receivers prefer native WebRTC, then retain JPEG
+  after a named native failure until media identity changes. No operator switch.
+- The QGC build passed. Of 446 Unit/Integration CTest suites with the standard
+  Flaky/Network exclusions, 445 passed on the first run; the CMake multi-config
+  fixture could not find Ninja on PATH. It passed when rerun with the project's
+  locked tools on PATH. Focused media/selection tests passed after later edits.
+- Changed-file pre-commit checks passed except pre-existing CMake formatting
+  and lint failures, reproduced on pristine HEAD copies. No whole-file CMake
+  reformatting or public argument renaming is mixed into this media change.
+
+## Local verification
+
+The developer-only `QGC_ENABLE_NATIVE_WEBRTC=ON` build option requires the
+GStreamer WebRTC, SDP and RTP development components. It is off by default
+until deployment packaging is qualified. This is not an operator setting.
+
+```bash
+cmake -S . -B build/pixeagle-custom-debug-latest2 -DQGC_ENABLE_NATIVE_WEBRTC=ON
+cmake --build build/pixeagle-custom-debug-latest2 -j 6
+```
+
+In the PixEagle checkout, with the optional GStreamer Python runtime and GCC
+plugin available, start the loopback-only fixture:
+
+```bash
+PYTHONPATH=src .venv/bin/python tools/qualify_gstreamer_native_server.py --port 8197
+```
+
+Then in this checkout:
+
+```bash
+QGC_WEBRTC_TEST_SIGNALING_URL=ws://127.0.0.1:8197/ws/webrtc_signaling \
+  ctest --test-dir build/pixeagle-custom-debug-latest2 \
+    -R '^QGCWebRtcVideoSourceTest$' --repeat until-fail:5 --output-on-failure
+ctest --test-dir build/pixeagle-custom-debug-latest2 \
+  -R '^(GStreamerTest|PixEagleVideoItemTest|PixEagleVideoControllerTest|PixEagleClientTest)$' \
+  -LE 'Flaky|Network' --output-on-failure
+```
+
+The fixture has no aircraft or tracking routes. It reuses local-compat
+authorization and explicitly admits the experimental provider for this test;
+it does not establish remote browser-session security or production readiness.
+
+Local evidence: `~/.cache/pixeagle-qgc-baseline/native-webrtc-2026-10-18/`.
+The development runtime is Linux GStreamer 1.24.2 with gst-plugins-rs 0.13.7
+(`cdec77cad2d9b7348d800507bc6eeec5039717eb`). QGC's release SDK remains pinned
+at 1.28.4. The extra development dependencies were installed in a user cache;
+no Pi service or system installation was changed.
+
+## Remaining gates
+
+1. End-to-end automatic transport/fallback tests through the custom controller,
+   beyond the independent capability/endpoint/authentication regression checks.
+2. Production selection/retarget actions, missing metadata, restart/revocation
+   and failure/recovery tests; the retained-fixture selection is a prerequisite.
+3. Measured congestion feedback, shared automatic per-client/aggregate policy,
+   0.5/1/2/5/10 Mbps and load tests. A connected estimator hook is not adaptation
+   evidence; the short uniform loopback did not exercise bitrate changes.
+4. Bundle and probe complete runtimes on Windows, Linux and Android, followed
+   by full release regression. Operators must not install development GStreamer.
+5. Request the cooled Pi/camera for deployment and physical acceptance only
+   after the recorded-video software gates pass. Pixhawk is a later regression.
+
+PixEagle-device GStreamer remains optional. Browser WebRTC and qualified JPEG
+must continue to work without it. The advanced provider is selected by runtime
+capability, never by requiring beginners to tune codecs, ICE or estimators.
+
+## Optional backend installation
+
+PixEagle's existing optional GStreamer setup installs media dependencies and
+repairs them during updates of GStreamer-enabled installations. It does not add
+a codec/ICE/estimator prompt. Core installations retain browser aiortc WebRTC
+and JPEG without GI/GStreamer. Managed plugins are discovered in the active
+backend venv, including services. The QGC receiver runtime is a separate bundled
+application dependency; operators must not install development GStreamer on
+Windows. Native automatic adoption remains gated until these platform packages
+and congestion/failure tests pass.
