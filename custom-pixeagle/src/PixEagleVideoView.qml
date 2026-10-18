@@ -10,7 +10,8 @@ Item {
     id: root
 
     property bool compactView: false
-    property var toolInsets: null
+    property rect panelViewport: Qt.rect(0, 0, width, height)
+    property var panelObstacles: []
     readonly property var _controller: QGroundControl.corePlugin.pixeagle.video
     readonly property var _client: QGroundControl.corePlugin.pixeagle.activeClient
     readonly property var trackingController: _controller ? _controller.targets : null
@@ -176,6 +177,8 @@ Item {
     PixEagleCameraControls {
         id: cameraPanel
         z: 2
+        usableBounds: root.panelViewport
+        obstacles: root.panelObstacles
         client: root._client
         uiScale: root._cameraPanelScale
         onUiScaleChanged: root._cameraPanelScale = uiScale
@@ -196,6 +199,8 @@ Item {
 
     PixEagleMovablePanel {
         id: connectionPanel
+        usableBounds: root.panelViewport
+        obstacles: root.panelObstacles
         settingsKey: "Connection"
         initialX: (root.width - width) / 2
         initialY: ScreenTools.defaultFontPixelHeight * 4
@@ -251,10 +256,10 @@ Item {
     PixEagleMovablePanel {
         id: targetPanel
         settingsKey: "Tracking"
-        readonly property real instrumentInset: !root.toolInsets || QGroundControl.videoManager.fullScreen ? 0
-            : Math.max(root.toolInsets.bottomEdgeLeftInset, root.toolInsets.bottomEdgeRightInset)
+        usableBounds: root.panelViewport
+        obstacles: root.panelObstacles
         initialX: (root.width - width) / 2
-        initialY: root.height - height - instrumentInset - ScreenTools.defaultFontPixelHeight
+        initialY: root.height - height - ScreenTools.defaultFontPixelHeight
         width: Math.min(root.width - edgeMargin * 2, ScreenTools.defaultFontPixelWidth * 45)
         height: controls.implicitHeight + ScreenTools.defaultFontPixelHeight + resizeFooterHeight
         visible: !root._compact && !!root.trackingController && !!root._client

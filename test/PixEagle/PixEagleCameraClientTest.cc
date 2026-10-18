@@ -62,11 +62,12 @@ struct CameraHarness
             return false;
         }
         configure(client, server);
-        client.setCameraRequested(true);
+        client.setCameraRequested(&demand, true);
         return signIn(client) && QTest::qWaitFor([this]() { return client.cameraFresh(); }, TestTimeout::mediumMs());
     }
 
     CompanionServer server;
+    QObject demand;
     PixEagleClient client;
 };
 
@@ -83,6 +84,41 @@ qsizetype cameraOperationCount(const CompanionServer& server, const QString& ope
 }
 
 }  // namespace
+
+void PixEagleCameraClientTest::_statusDemandSurvivesOtherPanelClosing()
+{
+    CameraHarness test;
+    QVERIFY(test.start());
+    QObject cameraPanel;
+    auto options = std::make_unique<QObject>();
+    test.client.setCameraRequested(&cameraPanel, true);
+    test.client.setCameraRequested(options.get(), true);
+    test.client.setCameraRequested(&test.demand, false);
+    test.client.setCameraRequested(options.get(), false);
+    test.client.setCameraRequested(options.get(), false);
+    test.client.setCameraRequested(&cameraPanel, true);
+    auto status = cameraStatus(test.server.context);
+    status.insert("connected", false);
+    test.server.overrides.insert(CAMERA_PATH, {200, status, {}});
+    QTRY_VERIFY_WITH_TIMEOUT(!test.client.cameraStatus().value("connected").toBool(), TestTimeout::mediumMs());
+    test.client.setCameraRequested(options.get(), true);
+    options.reset();
+    test.server.overrides.insert(CAMERA_PATH, {200, cameraStatus(test.server.context), {}});
+    QTRY_VERIFY_WITH_TIMEOUT(test.client.cameraStatus().value("connected").toBool(), TestTimeout::mediumMs());
+    QVERIFY(test.server.lastRequest(CONTROL_PATH).target.isEmpty());
+}
+
+void PixEagleCameraClientTest::_statusRetryRecoversWithoutNewInput()
+{
+    CameraHarness test;
+    QVERIFY(test.start());
+    test.server.overrides.insert(CAMERA_PATH, {503, {}, {}});
+    test.client.refreshCamera();
+    QTRY_VERIFY_WITH_TIMEOUT(!test.client.cameraFresh(), TestTimeout::mediumMs());
+    test.server.overrides.insert(CAMERA_PATH, {200, cameraStatus(test.server.context), {}});
+    QTRY_VERIFY_WITH_TIMEOUT(test.client.cameraFresh(), TestTimeout::mediumMs());
+    QVERIFY(test.server.lastRequest(CONTROL_PATH).target.isEmpty());
+}
 
 void PixEagleCameraClientTest::_capabilityAndPermissionGates()
 {
@@ -255,6 +291,22 @@ void PixEagleCameraClientTest::_panelResizeKeepsPointerCoordinates()
     item->setVisible(true);
     QTRY_VERIFY_WITH_TIMEOUT(item->width() * panel->property("uiScale").toDouble() <= window.width(),
                              TestTimeout::mediumMs());
+    window.resize(1200, 900);
+    panel->setProperty("uiScale", 1.0);
+    panel->setProperty("usableBounds", QRectF(100, 120, 1000, 700));
+    item->setPosition(QPointF(0, 0));
+    QVERIFY(QMetaObject::invokeMethod(panel.get(), "constrain"));
+    QVERIFY(item->x() >= 100 + margin);
+    QVERIFY(item->y() >= 120 + margin);
+    const auto beforeDrag = item->position();
+    // The bottom-left unused footer is a drag surface, not a video target or joystick.
+    const auto footer = item->mapToScene(QPointF(margin / 2, item->height() - margin)).toPoint();
+    QTest::mousePress(&window, Qt::LeftButton, Qt::NoModifier, footer);
+    QTest::mouseMove(&window, footer + QPoint(30, 20));
+    QTest::mouseMove(&window, footer + QPoint(70, 50));
+    QTest::mouseRelease(&window, Qt::LeftButton, Qt::NoModifier, footer + QPoint(70, 50));
+    QVERIFY(item->x() > beforeDrag.x());
+    QVERIFY(item->y() > beforeDrag.y());
     QCOMPARE(cameraOperationCount(test.server, "manual_begin"), 0);
 }
 

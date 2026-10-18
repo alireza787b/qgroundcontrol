@@ -39,11 +39,11 @@ QGCPopupDialog {
     objectName: "pixeagleOptionsDialog"
     onOpened: {
         closePolicy |= Popup.CloseOnEscape
-        if (client) client.setCameraRequested(true)
+        if (client) client.setCameraRequested(root, true)
         if (client) client.refreshSafety()
     }
     onClosed: {
-        if (client) client.setCameraRequested(false)
+        if (client) client.setCameraRequested(root, false)
         if (_openCameraAfterClose) cameraControlsRequested()
     }
     on_SmartModeChanged: closeChoices()

@@ -7,7 +7,8 @@ Item {
     id: _root
 
     property Item pipView
-    property var toolInsets: null
+    property rect panelViewport: Qt.rect(0, 0, width, height)
+    property var panelObstacles: []
     property Item pipState: videoPipState
     readonly property bool externalVideoActive: QGroundControl.videoManager.externalVideoActive
 
@@ -46,7 +47,8 @@ Item {
         id:             videoStreaming
         anchors.fill:   parent
         useSmallFont:   _root.pipState.state !== _root.pipState.fullState
-        toolInsets:     _root.toolInsets
+        panelViewport:  _root.panelViewport
+        panelObstacles: _root.panelObstacles
         visible:        QGroundControl.videoManager.isStreamSource || QGroundControl.videoManager.isUvc
         z:              _root.externalVideoActive ? 1 : 0
     }

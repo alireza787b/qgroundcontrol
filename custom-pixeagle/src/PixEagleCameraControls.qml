@@ -29,7 +29,8 @@ PixEagleMovablePanel {
     readonly property var _status: client ? client.cameraStatus : ({})
     property var _capabilities: []
     readonly property bool _ready: !!client && client.cameraFresh && !!_status.available
-                                  && !!_status.connected && !client.cameraActionPending
+                                  && !!_status.connected && client.cameraControlPermitted
+                                  && !_status.following_active && !client.cameraActionPending
     readonly property bool _inputDown: pad.touchActive || _buttonOperation.length > 0
     readonly property real _deadZone: 0.18
 
@@ -53,9 +54,9 @@ PixEagleMovablePanel {
 
     function updateDemand() {
         const next = visible ? client : null
-        if (_requestedClient && _requestedClient !== next) _requestedClient.setCameraRequested(false)
+        if (_requestedClient && _requestedClient !== next) _requestedClient.setCameraRequested(root, false)
         _requestedClient = next
-        if (next) next.setCameraRequested(true)
+        if (next) next.setCameraRequested(root, true)
     }
 
     function captureInput() {
@@ -308,10 +309,14 @@ PixEagleMovablePanel {
             text: root._notice || (root.client ? root.client.cameraError : "")
                   || (root.client && root.client.cameraManualState === "preparing" ? qsTr("Taking manual control…") : "")
                   || (root.client && root.client.cameraManualState === "refreshing" ? qsTr("Refreshing camera controls…") : "")
-                  || (!root._ready && !root._gestureActive
-                      ? qsTr("Camera unavailable") : "")
+                  || (root.client && root.client.cameraFresh && root._status.following_active
+                      ? qsTr("Following active") : "")
+                  || (root.client && root.client.cameraFresh && !root.client.cameraControlPermitted
+                      ? qsTr("Camera control permission required") : "")
+                  || (root.client && !root.client.cameraFresh ? qsTr("Refreshing camera controls…") : "")
+                  || (root.client && root.client.cameraFresh && (!root._status.available || !root._status.connected)
+                      ? qsTr("Camera disconnected") : "")
             color: root._notice.length > 0 || (root.client && root.client.cameraError.length > 0)
-                   || (!root._ready && !root._gestureActive)
                    ? QGroundControl.globalPalette.warningText : QGroundControl.globalPalette.text
             wrapMode: Text.WordWrap
         }
@@ -348,6 +353,6 @@ PixEagleMovablePanel {
     }
     Component.onDestruction: {
         endGesture(true)
-        if (_requestedClient) _requestedClient.setCameraRequested(false)
+        if (_requestedClient) _requestedClient.setCameraRequested(root, false)
     }
 }

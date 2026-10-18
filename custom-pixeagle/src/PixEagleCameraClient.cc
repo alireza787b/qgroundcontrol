@@ -50,6 +50,8 @@ void PixEagleClient::_initializeCameraState()
 {
     _cameraClientId = QUuid::createUuid().toString(QUuid::WithoutBraces);
     _cameraExpiryTimer.setSingleShot(true);
+    _cameraPollTimer.setInterval(2000);
+    connect(&_cameraPollTimer, &QTimer::timeout, this, &PixEagleClient::refreshCamera);
     _cameraRenewTimer.setInterval(100);
     connect(&_cameraRenewTimer, &QTimer::timeout, this, &PixEagleClient::_renewCameraManual);
     connect(this, &PixEagleClient::changed, this, [this]() {
@@ -72,6 +74,12 @@ bool PixEagleClient::cameraAvailable() const
     // verified PX4 association; aircraft following remains separately gated.
     return _sessionReady() && _context.value("capabilities").toArray().contains("camera.control.v1") &&
            _context.value("permissions").toObject().value("scopes").toArray().contains("control:read");
+}
+
+bool PixEagleClient::cameraControlPermitted() const
+{
+    return cameraAvailable() &&
+           _context.value("permissions").toObject().value("scopes").toArray().contains("actions:execute");
 }
 
 bool PixEagleClient::cameraFresh() const
@@ -112,16 +120,32 @@ bool PixEagleClient::cameraCanStop() const
            !_csrfHeader.isEmpty() && !_csrfToken.isEmpty() && !_cameraStopReply;
 }
 
-void PixEagleClient::setCameraRequested(bool requested)
+void PixEagleClient::setCameraRequested(QObject* owner, bool requested)
 {
-    if (_cameraRequested == requested) {
+    if (!owner || owner == this) {
         return;
     }
-    _cameraRequested = requested;
     if (requested) {
+        if (_cameraSubscribers.contains(owner)) {
+            return;
+        }
+        _cameraSubscribers.insert(
+            owner, connect(owner, &QObject::destroyed, this, [this, owner]() { setCameraRequested(owner, false); }));
+        _cameraPollTimer.start();
         refreshCamera();
-    } else if (cameraCanStop()) {
-        stopCamera(_cameraCapturedContext);
+    } else {
+        const auto subscription = _cameraSubscribers.find(owner);
+        if (subscription == _cameraSubscribers.end()) {
+            return;
+        }
+        disconnect(subscription.value());
+        _cameraSubscribers.erase(subscription);
+        if (_cameraSubscribers.isEmpty()) {
+            _cameraPollTimer.stop();
+            if (cameraCanStop()) {
+                stopCamera(_cameraCapturedContext);
+            }
+        }
     }
 }
 
@@ -169,7 +193,7 @@ bool PixEagleClient::_acceptCameraStatus(const QJsonObject& data)
 
 void PixEagleClient::refreshCamera()
 {
-    if (!_cameraRequested || !cameraAvailable() || _cameraReply) {
+    if (_cameraSubscribers.isEmpty() || !cameraAvailable() || _cameraReply) {
         return;
     }
     auto* reply = _network->get(cameraRequest(_endpoint, QStringLiteral("/api/v1/gimbal/control")));

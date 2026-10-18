@@ -10,9 +10,12 @@
 #include "GstVideoReceiver.h"
 #include "PixEagleManager.h"
 #include "PixEagleSettings.h"
+#include "QGCLoggingCategory.h"
 #include "QGCVideoFrameContextStore.h"
 #include "QGCWebSocketVideoSource.h"
 #include "VideoManager.h"
+
+QGC_LOGGING_CATEGORY(PixEagleVideoLog, "Custom.PixEagle.Video")
 
 PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEagleSettings* settings)
     : QObject(manager)
@@ -38,7 +41,7 @@ PixEagleVideoController::PixEagleVideoController(PixEagleManager* manager, PixEa
     });
     connect(qGuiApp, &QGuiApplication::applicationStateChanged, this, &PixEagleVideoController::_updateDesired);
     connect(&_presentationWatchdog, &QTimer::timeout, this, [this]() {
-        if (_state != State::Running || (_surface && _surface->presentationKnown())) {
+        if ((_state != State::Running && _state != State::Starting) || (_surface && _surface->frameFresh())) {
             return;
         }
         _error = tr("Video connected but no frame was presented. Retrying.");
@@ -101,11 +104,11 @@ void PixEagleVideoController::_updateDesired()
 
     QString key;
     if (_selected && _client->mediaAvailable()) {
-        const auto context = _client->connectionContext();
+        const auto context = _client->mediaContext();
         const auto video = context.value("video").toObject();
         if (!video.value("stream_id").toString().isEmpty() && !video.value("stream_epoch").toString().isEmpty()) {
             const QJsonArray identity{_client->endpoint(),
-                                      QString::number(_client->sessionGeneration()),
+                                      QString::number(_client->mediaSessionGeneration()),
                                       context.value("instance_id"),
                                       context.value("runtime_id"),
                                       video.value("stream_id"),
@@ -192,17 +195,20 @@ bool PixEagleVideoController::_createReceiver()
     }
     GStreamer::VideoSinkConfig config;
     config.gpuZeroCopy = false;
-    _sink = GStreamer::createVideoSink(config);
+    if (!_sink) {
+        _sink = GStreamer::createVideoSink(config);
+    }
     if (!_sink) {
         return false;
     }
     _receiver = new GstVideoReceiver(this);
+    const auto attempt = ++_attemptGeneration;
     _receiver->setName(QStringLiteral("pixeagleVideo"));
     _receiver->setSink(_sink);
     _receiver->setLowLatency(true);
     _receiver->setAutoReconnect(false);
-    connect(_receiver, &VideoReceiver::onStartComplete, this, [this](VideoReceiver::STATUS status) {
-        if (_state != State::Starting) {
+    connect(_receiver, &VideoReceiver::onStartComplete, this, [this, attempt](VideoReceiver::STATUS status) {
+        if (attempt != _attemptGeneration || _state != State::Starting) {
             return;
         }
         if (status == VideoReceiver::STATUS_OK) {
@@ -210,22 +216,18 @@ bool PixEagleVideoController::_createReceiver()
             _receiver->startDecoding(_sink);
             _presentationWatchdog.start();
         } else {
-            _state = State::Idle;
-            _runningKey.clear();
             _error = tr("Video could not connect. Check streaming access and the allowed Origin in PixEagle.");
-            if (_surface) {
-                _surface->clearStream();
-            }
-            _retryTimer.start(_retryMs);
-            _retryMs = qMin(_retryMs * 2, 15000);
+            _stop();
         }
         emit changed();
     });
-    connect(_receiver, &VideoReceiver::onStopComplete, this, [this](VideoReceiver::STATUS) {
-        if (_state == State::Idle) {
+    connect(_receiver, &VideoReceiver::onStopComplete, this, [this, attempt](VideoReceiver::STATUS) {
+        if (attempt != _attemptGeneration || _state == State::Idle) {
             return;
         }
         _state = State::Idle;
+        qCDebug(PixEagleVideoLog) << "Receiver stopped; attempt" << attempt;
+        _retireReceiver();
         _presentationWatchdog.stop();
         _runningKey.clear();
         if (_surface) {
@@ -238,13 +240,22 @@ bool PixEagleVideoController::_createReceiver()
         }
         emit changed();
     });
-    connect(_receiver, &VideoReceiver::onStartDecodingComplete, this, [this](VideoReceiver::STATUS status) {
-        if (status != VideoReceiver::STATUS_OK && _state == State::Running) {
+    connect(_receiver, &VideoReceiver::onStartDecodingComplete, this, [this, attempt](VideoReceiver::STATUS status) {
+        if (attempt == _attemptGeneration && status != VideoReceiver::STATUS_OK && _state == State::Running) {
             _error = tr("Video could not be decoded. Check PixEagle's stream.");
             _stop();
         }
     });
     return true;
+}
+
+void PixEagleVideoController::_retireReceiver()
+{
+    if (_receiver) {
+        disconnect(_receiver, nullptr, this, nullptr);
+        _receiver->deleteLater();
+        _receiver = nullptr;
+    }
 }
 
 void PixEagleVideoController::_start()
@@ -271,7 +282,7 @@ void PixEagleVideoController::_start()
     options->origin = _client->mediaOrigin();
     options->requireFrameMetadata = true;
     options->frameContexts = _contexts;
-    _surface->setStream(_contexts, _client->connectionContext());
+    _surface->setStream(_contexts, _client->mediaContext());
     _receiver->setWidget(_surface);
     if (!GStreamer::setupQVideoSinkElement(_sink, _surface->videoSink(), _receiver)) {
         _surface->clearStream();
@@ -284,6 +295,8 @@ void PixEagleVideoController::_start()
     _runningKey = _desiredKey;
     _state = State::Starting;
     _error.clear();
+    qCDebug(PixEagleVideoLog) << "Starting receiver; attempt" << _attemptGeneration;
+    _presentationWatchdog.start();
     _receiver->start(5);
     emit changed();
 }
@@ -299,6 +312,7 @@ void PixEagleVideoController::_stop()
     VideoManager::instance()->setExternalVideoState(false, {});
     if (_state == State::Starting || _state == State::Running) {
         _state = State::Stopping;
+        qCDebug(PixEagleVideoLog) << "Stopping receiver; attempt" << _attemptGeneration;
         _receiver->stop();
     }
     emit changed();
@@ -307,11 +321,14 @@ void PixEagleVideoController::_stop()
 void PixEagleVideoController::_presentationChanged()
 {
     const bool known = _surface && _surface->presentationKnown();
-    if (known) {
+    const bool fresh = known && _surface->frameFresh();
+    if (fresh) {
         _presentationWatchdog.stop();
+    } else if (_state == State::Running && !_presentationWatchdog.isActive()) {
+        _presentationWatchdog.start();
     }
     VideoManager::instance()->setExternalVideoState(known, known ? _surface->sourceSize() : QSize());
-    if (known) {
+    if (fresh) {
         _retryMs = 1000;
         _error.clear();
     }

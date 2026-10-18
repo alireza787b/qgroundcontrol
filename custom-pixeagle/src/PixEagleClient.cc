@@ -66,7 +66,7 @@ PixEagleClient::PixEagleClient(QObject* parent, bool companionOnly)
     });
     connect(&_pollTimer, &QTimer::timeout, this, &PixEagleClient::refresh);
     connect(&_expiryTimer, &QTimer::timeout, this, [this]() {
-        _clearContext();
+        _clearContext(true);
         _autoVerificationAttemptedKey.clear();
         _error = _companionOnly ? tr("Connection status is out of date. Retry the connection in PixEagle settings.")
                                 : tr("Connection status is out of date. Verify the vehicle again.");
@@ -79,6 +79,10 @@ PixEagleClient::PixEagleClient(QObject* parent, bool companionOnly)
 
 PixEagleClient::~PixEagleClient()
 {
+    for (const auto& subscription : std::as_const(_cameraSubscribers)) {
+        disconnect(subscription);
+    }
+    _cameraSubscribers.clear();
     for (const auto& reply : {_targetStateReply, _targetCatalogReply, _targetActionReply, _modelsReply, _followingReply,
                               _followingActionReply, _configReply, _configActionReply, _cameraReply, _cameraActionReply,
                               _cameraStopReply}) {
@@ -328,7 +332,7 @@ void PixEagleClient::setVehicleIdentity(int systemId, const QString& aircraftUid
     _aircraftUid = aircraftUid;
     _online = online;
     observeAircraftUid(aircraftUid);
-    _clearContext();
+    _clearContext(true);
     _autoVerificationAttemptedKey.clear();
     // A reply captured for a previous aircraft identity must not establish the new binding.
     if (!_reply || (_requestKind != Request::Login && _requestKind != Request::Logout)) {
@@ -399,7 +403,7 @@ void PixEagleClient::setAutoVerifySingleVehicle(bool enabled)
     emit changed();
 }
 
-void PixEagleClient::_clearContext()
+void PixEagleClient::_clearContext(bool preserveMedia)
 {
     _clearConfigState();
     _clearSafetyState();
@@ -420,6 +424,9 @@ void PixEagleClient::_clearContext()
     emit followingChanged();
     _clearTargetState();
     _context = {};
+    if (!preserveMedia) {
+        _mediaContext = {};
+    }
     _runtimeStatus = {};
     _statusExpiryTimer.stop();
     if (_statusReply) {
@@ -444,6 +451,8 @@ void PixEagleClient::_resetSession()
     _pendingCredentialPassword.clear();
     const bool cameraStopOwnsNetwork = _stopCameraBeforeReset();
     _clearCameraState(cameraStopOwnsNetwork);
+    _mediaContext = {};
+    ++_mediaSessionGeneration;
     ++_generation;
     _pollTimer.stop();
     _contextRetryMs = 2000;
@@ -567,7 +576,7 @@ void PixEagleClient::signOut()
 void PixEagleClient::verifyVehicle()
 {
     if (canVerify()) {
-        _clearContext();
+        _clearContext(true);
         _request(Request::Verify);
     }
 }
@@ -663,7 +672,15 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
                 _restartNextSignInMs = _restartAge.elapsed() + 3000;
             }
         }
-        _clearContext();
+        const auto networkError = reply->error();
+        const bool transient = status == 500 || status == 502 || status == 503 || status == 504 ||
+                               (status == 0 && (networkError == QNetworkReply::ConnectionRefusedError ||
+                                                networkError == QNetworkReply::RemoteHostClosedError ||
+                                                networkError == QNetworkReply::HostNotFoundError ||
+                                                networkError == QNetworkReply::TimeoutError ||
+                                                networkError == QNetworkReply::TemporaryNetworkFailureError ||
+                                                networkError == QNetworkReply::NetworkSessionFailedError));
+        _clearContext(readContext && transient);
         _pollTimer.stop();
         if (status == 401) {
             if (kind == Request::Login) {
@@ -692,14 +709,6 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
                               "address.")
                          : tr("Could not connect to PixEagle. Check its address and whether it is running.");
         }
-        const auto networkError = reply->error();
-        const bool transient = status == 500 || status == 502 || status == 503 || status == 504 ||
-                               (status == 0 && (networkError == QNetworkReply::ConnectionRefusedError ||
-                                                networkError == QNetworkReply::RemoteHostClosedError ||
-                                                networkError == QNetworkReply::HostNotFoundError ||
-                                                networkError == QNetworkReply::TimeoutError ||
-                                                networkError == QNetworkReply::TemporaryNetworkFailureError ||
-                                                networkError == QNetworkReply::NetworkSessionFailedError));
         if (readContext && transient && _authenticated && !backendRestarting()) {
             _autoVerificationAttemptedKey.clear();
             // Recover read-only context; never replay discovery or operator mutations.
@@ -713,7 +722,7 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
         return;
     }
     if (readContext && _requestTimer.elapsed() > 3000) {
-        _clearContext();
+        _clearContext(true);
         if (!backendRestarting()) {
             _pollTimer.start(_contextRetryMs);
             _contextRetryMs = qMin(_contextRetryMs * 2, 15000);
@@ -845,6 +854,7 @@ bool PixEagleClient::_acceptContext(const QJsonObject& data)
     }
     const QString oldTargetKey = _targetContextKey();
     _context = data;
+    _mediaContext = data;
     if (!_followingStatus.isEmpty() && (_followingStatus.value("instance_id") != data.value("instance_id") ||
                                         _followingStatus.value("runtime_id") != data.value("runtime_id"))) {
         _clearFollowingState();
@@ -994,9 +1004,10 @@ QString PixEagleClient::diagnostics() const
 
 bool PixEagleClient::mediaAvailable() const
 {
-    const auto video = _context.value("video").toObject();
-    return _sessionReady() && _context.value("capabilities").toArray().contains("video.frame_provenance.v1") &&
-           _context.value("permissions").toObject().value("scopes").toArray().contains("media:read") &&
+    const auto video = _mediaContext.value("video").toObject();
+    return _enabled && _authenticated && !_mediaContext.isEmpty() &&
+           _mediaContext.value("capabilities").toArray().contains("video.frame_provenance.v1") &&
+           _mediaContext.value("permissions").toObject().value("scopes").toArray().contains("media:read") &&
            video.value("provenance_version").toString() == "1" && video.value("ws_path").toString() == "/ws/video_feed";
 }
 

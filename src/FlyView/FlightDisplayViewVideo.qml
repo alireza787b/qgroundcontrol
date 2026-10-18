@@ -11,7 +11,8 @@ Item {
     clip:   true
 
     property bool useSmallFont: true
-    property var toolInsets: null
+    property rect panelViewport: Qt.rect(0, 0, width, height)
+    property var panelObstacles: []
     readonly property var externalTrackingController: externalVideoLoader.item && externalVideoLoader.item.trackingController !== undefined ? externalVideoLoader.item.trackingController : null
 
     property double _ar:                (cameraLoader.visible && cameraLoader.status === Loader.Ready)
@@ -123,7 +124,8 @@ Item {
             source: QGroundControl.videoManager.externalVideoSource
             onLoaded: {
                 if (item && item.compactView !== undefined) item.compactView = Qt.binding(() => root.useSmallFont)
-                if (item && item.toolInsets !== undefined) item.toolInsets = Qt.binding(() => root.toolInsets)
+                if (item && item.panelViewport !== undefined) item.panelViewport = Qt.binding(() => root.panelViewport)
+                if (item && item.panelObstacles !== undefined) item.panelObstacles = Qt.binding(() => root.panelObstacles)
             }
         }
         //-- UVC Video (USB Camera or Video Device)

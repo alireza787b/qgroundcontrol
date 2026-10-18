@@ -996,9 +996,15 @@ void PixEagleClientTest::_contextRecoversAfterTransientFailure()
     QVERIFY(signIn(client));
     QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
     server.overrides[CONTEXT_PATH] = {503, {}, {}};
+    const auto mediaBefore = client.mediaContext();
+    const auto generationBefore = client.mediaSessionGeneration();
     client.refresh();
     QTRY_VERIFY_WITH_TIMEOUT(client.canRefreshConnection(), TestTimeout::mediumMs());
-    QVERIFY(!client.mediaAvailable());
+    QVERIFY(client.mediaAvailable());
+    QCOMPARE(client.mediaContext(), mediaBefore);
+    QCOMPARE(client.mediaSessionGeneration(), generationBefore);
+    QVERIFY(client.connectionContext().isEmpty());
+    QVERIFY(!client.canStartFollowing());
     QVERIFY(client.authenticated());
     QVERIFY(client.statusText().contains("Retrying"));
     const auto previousRequest = server.lastRequestIndex(CONTEXT_PATH);

@@ -11,6 +11,12 @@ Rectangle {
     property real initialX: 0
     property real initialY: 0
     property real edgeMargin: ScreenTools.defaultFontPixelWidth
+    property rect usableBounds: Qt.rect(0, 0, parent ? parent.width : 0, parent ? parent.height : 0)
+    property var obstacles: []
+    readonly property real minimumX: Math.max(edgeMargin, usableBounds.x + edgeMargin)
+    readonly property real minimumY: Math.max(edgeMargin, usableBounds.y + edgeMargin)
+    readonly property real rightBound: Math.min(parent ? parent.width : 0, usableBounds.x + usableBounds.width) - edgeMargin
+    readonly property real bottomBound: Math.min(parent ? parent.height : 0, usableBounds.y + usableBounds.height) - edgeMargin
     property bool moved: false
     property bool resizable: true
     property real uiScale: 1.0
@@ -32,14 +38,43 @@ Rectangle {
         if (!parent || !visible) return
         if (_resizing) return
         const fittingScale = Math.min(maximumUiScale,
-            (parent.width - edgeMargin * 2) / width, (parent.height - edgeMargin * 2) / height)
+            (rightBound - minimumX) / width, (bottomBound - minimumY) / height)
         if (uiScale > Math.max(minimumUiScale, fittingScale)) {
             uiScale = Math.max(minimumUiScale, fittingScale)
         }
         const scaledWidth = width * uiScale
         const scaledHeight = height * uiScale
-        x = Math.max(edgeMargin, Math.min(moved ? x : initialX, parent.width - scaledWidth - edgeMargin))
-        y = Math.max(edgeMargin, Math.min(moved ? y : initialY, parent.height - scaledHeight - edgeMargin))
+        const position = unobscuredPosition(moved ? x : initialX, moved ? y : initialY, scaledWidth, scaledHeight)
+        x = position.x
+        y = position.y
+    }
+    function unobscuredPosition(wantedX, wantedY, panelWidth, panelHeight) {
+        const maxX = Math.max(minimumX, rightBound - panelWidth)
+        const maxY = Math.max(minimumY, bottomBound - panelHeight)
+        const clampX = value => Math.max(minimumX, Math.min(value, maxX))
+        const clampY = value => Math.max(minimumY, Math.min(value, maxY))
+        const origin = Qt.point(clampX(wantedX), clampY(wantedY))
+        const xs = [origin.x, minimumX, maxX]
+        const ys = [origin.y, minimumY, maxY]
+        for (const rect of obstacles) {
+            xs.push(clampX(rect.x - panelWidth - edgeMargin), clampX(rect.x + rect.width + edgeMargin))
+            ys.push(clampY(rect.y - panelHeight - edgeMargin), clampY(rect.y + rect.height + edgeMargin))
+        }
+        let best = origin
+        let bestScore = Infinity
+        for (const px of xs) {
+            for (const py of ys) {
+                let overlap = 0
+                for (const rect of obstacles) {
+                    overlap += Math.max(0, Math.min(px + panelWidth, rect.x + rect.width) - Math.max(px, rect.x))
+                        * Math.max(0, Math.min(py + panelHeight, rect.y + rect.height) - Math.max(py, rect.y))
+                }
+                // Prefer unobscured controls; nearest position breaks ties.
+                const score = overlap * 1e6 + Math.pow(px - origin.x, 2) + Math.pow(py - origin.y, 2)
+                if (score < bestScore) { bestScore = score; best = Qt.point(px, py) }
+            }
+        }
+        return best
     }
     function resetPosition() {
         uiScale = minimumUiScale
@@ -47,6 +82,8 @@ Rectangle {
         constrain()
     }
 
+    onUsableBoundsChanged: Qt.callLater(constrain)
+    onObstaclesChanged: Qt.callLater(constrain)
     onInitialXChanged: Qt.callLater(constrain)
     onInitialYChanged: Qt.callLater(constrain)
     onWidthChanged: Qt.callLater(constrain)
@@ -74,20 +111,22 @@ Rectangle {
         function onWidthChanged() { root.constrain() }
         function onHeightChanged() { root.constrain() }
     }
-    MouseArea { anchors.fill: parent }
-    MouseArea {
-        parent: root.dragHandle
+    component PanelDragArea: MouseArea {
         anchors.fill: parent
         cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
         drag.target: root
-        drag.minimumX: root.edgeMargin
-        drag.maximumX: Math.max(root.edgeMargin, root.parent.width - root.width * root.uiScale - root.edgeMargin)
-        drag.minimumY: root.edgeMargin
-        drag.maximumY: Math.max(root.edgeMargin, root.parent.height - root.height * root.uiScale - root.edgeMargin)
+        drag.minimumX: root.minimumX
+        drag.maximumX: Math.max(root.minimumX, root.rightBound - root.width * root.uiScale)
+        drag.minimumY: root.minimumY
+        drag.maximumY: Math.max(root.minimumY, root.bottomBound - root.height * root.uiScale)
         onPressed: root.dragStarted()
         onPositionChanged: { if (drag.active) root.moved = true }
+        onReleased: root.constrain()
+        onCanceled: root.constrain()
         onDoubleClicked: root.resetPosition()
     }
+    PanelDragArea { objectName: "pixeaglePanelBackgroundDrag" }
+    PanelDragArea { parent: root.dragHandle }
     transform: Scale {
         origin.x: 0
         origin.y: 0
@@ -130,8 +169,8 @@ Rectangle {
                 root._resizeStartPosition = resizeArea.mapToItem(root.parent, mouse.x, mouse.y)
                 root._resizeOrigin = Qt.point(root.x, root.y)
                 root._resizeMaximumScale = Math.min(root.maximumUiScale,
-                    (root.parent.width - root.edgeMargin * 2) / root.width,
-                    (root.parent.height - root.edgeMargin * 2) / root.height)
+                    (root.rightBound - root.minimumX) / root.width,
+                    (root.bottomBound - root.minimumY) / root.height)
                 root.moved = true
                 root._resizing = true
                 root.dragStarted()
@@ -147,10 +186,10 @@ Rectangle {
                     / (root.width * root.width + root.height * root.height)
                 root.uiScale = Math.max(root.minimumUiScale,
                     Math.min(root._resizeMaximumScale, root._resizeStartScale + deltaScale))
-                root.x = Math.max(root.edgeMargin, Math.min(root._resizeOrigin.x,
-                    root.parent.width - root.width * root.uiScale - root.edgeMargin))
-                root.y = Math.max(root.edgeMargin, Math.min(root._resizeOrigin.y,
-                    root.parent.height - root.height * root.uiScale - root.edgeMargin))
+                root.x = Math.max(root.minimumX, Math.min(root._resizeOrigin.x,
+                    root.rightBound - root.width * root.uiScale))
+                root.y = Math.max(root.minimumY, Math.min(root._resizeOrigin.y,
+                    root.bottomBound - root.height * root.uiScale))
             }
         }
     }

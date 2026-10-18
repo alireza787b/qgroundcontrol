@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QtCore/QElapsedTimer>
+#include <QtCore/QHash>
 #include <QtCore/QJsonObject>
 #include <QtCore/QObject>
 #include <QtCore/QPointer>
@@ -70,6 +71,7 @@ class PixEagleClient : public QObject
     Q_PROPERTY(QString safetyStatusText READ safetyStatusText NOTIFY safetyChanged)
 
     Q_PROPERTY(bool cameraAvailable READ cameraAvailable NOTIFY cameraChanged)
+    Q_PROPERTY(bool cameraControlPermitted READ cameraControlPermitted NOTIFY cameraChanged)
     Q_PROPERTY(bool cameraFresh READ cameraFresh NOTIFY cameraChanged)
     Q_PROPERTY(QVariantMap cameraStatus READ cameraStatus NOTIFY cameraChanged)
     Q_PROPERTY(bool cameraActionPending READ cameraActionPending NOTIFY cameraChanged)
@@ -121,7 +123,11 @@ public:
 
     QJsonObject connectionContext() const { return _context; }
 
+    QJsonObject mediaContext() const { return _mediaContext; }
+
     quint64 sessionGeneration() const { return _generation; }
+
+    quint64 mediaSessionGeneration() const { return _mediaSessionGeneration; }
 
     bool mediaAvailable() const;
 
@@ -234,6 +240,7 @@ public:
 
     bool cameraAvailable() const;
     bool cameraFresh() const;
+    bool cameraControlPermitted() const;
     QVariantMap cameraStatus() const;
     bool cameraActionPending() const;
     bool cameraCanStop() const;
@@ -242,7 +249,7 @@ public:
 
     QString cameraManualState() const { return _cameraManualState; }
 
-    Q_INVOKABLE void setCameraRequested(bool requested);
+    Q_INVOKABLE void setCameraRequested(QObject* owner, bool requested);
     Q_INVOKABLE void refreshCamera();
     Q_INVOKABLE QString captureCameraContext() const;
     Q_INVOKABLE bool cameraStep(const QString& operation, int direction, const QString& context);
@@ -290,7 +297,7 @@ private:
     bool _identitiesMatch() const;
     bool _identitiesReadyForVerification() const;
     QString _contextKey() const;
-    void _clearContext();
+    void _clearContext(bool preserveMedia = false);
     void _refreshRuntimeStatus();
     bool _readOnlyReady() const;
     bool _sessionReady() const;
@@ -343,7 +350,8 @@ private:
     QString _cameraCapturedContext;
     QString _cameraError;
     QString _cameraClientId;
-    bool _cameraRequested = false;
+    QHash<QObject*, QMetaObject::Connection> _cameraSubscribers;
+    QTimer _cameraPollTimer;
 
     QNetworkAccessManager* _network = nullptr;
     QPointer<QNetworkReply> _reply;
@@ -383,6 +391,7 @@ private:
     int _authenticationRetryMs = 2000;
     int _contextRetryMs = 2000;
     QTimer _expiryTimer;
+
     QTimer _statusExpiryTimer;
     QTimer _targetExpiryTimer;
     QTimer _modelExpiryTimer;
@@ -393,6 +402,8 @@ private:
     QElapsedTimer _followingAge;
     QUrl _endpoint{defaultEndpoint()};
     QJsonObject _context;
+    QJsonObject _mediaContext;
+    quint64 _mediaSessionGeneration = 0;
     QJsonObject _runtimeStatus;
     QJsonObject _targetState;
     QJsonObject _targetCatalog;

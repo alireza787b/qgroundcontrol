@@ -48,6 +48,7 @@ signals:
     void changed();
 
 private:
+    friend class PixEagleVideoControllerTest;
     enum class State
     {
         Idle,
@@ -62,6 +63,7 @@ private:
     void _presentationChanged();
     bool _surfaceVisible() const;
     bool _createReceiver();
+    void _retireReceiver();
 
     PixEagleManager* _manager = nullptr;
     PixEagleTargetController* _targets = nullptr;
@@ -79,6 +81,7 @@ private:
     QString _error;
     State _state = State::Idle;
     int _retryMs = 1000;
+    quint64 _attemptGeneration = 0;
     bool _selected = false;
     bool _suspended = false;
     bool _updating = false;

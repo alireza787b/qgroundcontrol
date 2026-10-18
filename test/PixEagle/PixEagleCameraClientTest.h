@@ -7,6 +7,8 @@ class PixEagleCameraClientTest : public UnitTest
     Q_OBJECT
 
 private slots:
+    void _statusDemandSurvivesOtherPanelClosing();
+    void _statusRetryRecoversWithoutNewInput();
     void _stalePollCannotReplacePostStopState();
     void _contextConflictRefreshesWithoutOperatorError();
     void _automaticStopPreservesFailure();

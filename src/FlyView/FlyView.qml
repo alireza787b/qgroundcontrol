@@ -109,7 +109,10 @@ Item {
         FlyViewVideo {
             id:         videoControl
             pipView:    _pipView
-            toolInsets: customOverlay.totalToolInsets
+            panelViewport: QGroundControl.videoManager.fullScreen
+                ? Qt.rect(0, 0, width, height)
+                : Qt.rect(widgetLayer.x, widgetLayer.y, widgetLayer.width, widgetLayer.height)
+            panelObstacles: QGroundControl.videoManager.fullScreen ? [] : _mapOccluders
         }
 
         PipView {
