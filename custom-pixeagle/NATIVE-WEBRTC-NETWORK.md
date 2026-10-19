@@ -366,3 +366,37 @@ This is development qualification, not enabling native capability in ordinary
 installations. Low-bandwidth freshness, browser/provider parity and clean
 Windows/Android runtime qualification remain open. No release build, public
 QGC PR or Pi deployment was performed by these local tests.
+
+## Pi cooling and additional local tests — 2026-10-19
+
+The Pi's isolated Core replay presented 720p but failed sustained freshness
+during runtime-installation traffic. Its optional build was cleanly cancelled
+when cooling became unavailable; its venv transaction rolled back, the Cargo
+cache remains, and all 41 backed-up configuration files match the installed
+profile. OpenCV 4.13.0 and installed source revision 664171e00 are preserved.
+Heavy Pi qualification waits for a fan. Its normal service and owned replay
+are stopped; no compiler remains. Camera and Pixhawk are not needed for the
+next recorded-video comparison. Private resume instructions and evidence are
+under `~/.cache/pixeagle-qgc-baseline/native-webrtc-2026-10-19/pi/`.
+
+The full-controller source/freeze/sign-out recovery fixture passed at 1 Mbps.
+At 0.5 Mbps it obtained fresh JPEG after native fallback, failing its expected
+native-transport assertion; later recovery steps did not run. Neither fixture
+establishes sustained camera quality or Pi performance.
+
+A candidate change applied receive-side reference discontinuities in decoder
+order, allowing an earlier intact queued access unit despite later packet loss.
+It passed a deterministic queued-frame check and a 2 Mbps recorded run, but
+failed the stronger 10 Mbps recorded pixel-identity test: H.264 barcode 103 was
+presented with context 106. **The candidate was discarded; the conservative
+reference guard is retained unchanged.** These experimental results do not
+qualify native selection or establish that receive-side lookahead alone was
+the cause. The failed logs and candidate-independent reproduction are retained
+in `ordered-decoder-*` and `reference-lookahead-proof/` under the private
+2026-10-19 evidence root.
+
+The shaping helper now identifies deliberate packet loss to the test. Only
+the specific expired-NACK warning is allowed in that case and remains in logs.
+Other unexpected warnings, wrong pixels and unsafe selections still fail.
+Native product capability remains disabled; exact pixel provenance under loss,
+weak-link freshness, Pi performance and clean platform runtimes remain open.

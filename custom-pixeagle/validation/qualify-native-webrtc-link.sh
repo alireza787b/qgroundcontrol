@@ -167,6 +167,7 @@ if [[ $controller_mode == off ]]; then
     export QGC_WEBRTC_TEST_SIGNALING_URL=ws://127.0.0.1:8197/ws/webrtc_signaling
     export QGC_WEBRTC_FAILURE_IMAGE="$output/failure"
     export QGC_WEBRTC_TEST_DURATION_MS=$duration
+    export QGC_WEBRTC_TEST_PACKET_LOSS_PERCENT=$loss
     test_name=QGCWebRtcVideoSourceTest
 else
     export QGC_PIXEAGLE_WEBRTC_FIXTURE_URL=http://127.0.0.1:8197

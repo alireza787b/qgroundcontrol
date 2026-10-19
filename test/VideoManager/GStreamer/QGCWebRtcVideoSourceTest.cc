@@ -96,6 +96,10 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
     QVERIFY(GStreamer::completeInit());
     ignoreLogMessage("default", QtWarningMsg,
                      QRegularExpression(QStringLiteral("No RHI backend\\. Using CPU conversion\\.")));
+    if (qEnvironmentVariable("QGC_WEBRTC_TEST_PACKET_LOSS_PERCENT").toDouble() > 0) {
+        ignoreLogMessage("Video.GStreamer.GStreamerAPI", QtWarningMsg,
+                         QRegularExpression(QStringLiteral("^\\(NULL\\) Removing \\d+ expired NACKS$")));
+    }
     QVERIFY(QGCWebRtcVideoSource::available());
     auto options = std::make_shared<QGCWebRtcVideoOptions>();
     options->codecPreferences = {codec};
