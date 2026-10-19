@@ -95,6 +95,42 @@ the initial failures and their resolutions separately.
 The next [constrained-network checkpoint](NATIVE-WEBRTC-NETWORK.md) records
 real namespace-shaped traffic and the outstanding low-bandwidth repairs.
 
+### Real recorded replay on a separate Pi
+
+The same controller integration test can read the private `credentials.json`
+created by PixEagle's isolated `tools/native_replay_demo.py`. Forward the test
+API/signaling port to loopback, retain direct ICE reachability for RTP, and run:
+
+```bash
+QGC_PIXEAGLE_WEBRTC_FIXTURE_URL=http://127.0.0.1:8093 \
+QGC_PIXEAGLE_WEBRTC_FIXTURE_LOGIN_FILE=/private/replay/credentials.json \
+QGC_PIXEAGLE_WEBRTC_OBSERVATION_MS=20000 \
+  ctest --test-dir build/native-webrtc-port \
+    -R '^PixEagleVideoControllerTest$' -V
+```
+
+The file must match the loopback endpoint and deny group/other read access.
+Credentials are not printed or passed on the command line. The test signs in,
+requires fresh selectable presentation, observes up to 20 seconds, reports
+actual presentation counters/gaps/age bounds even on failure, and signs out.
+It does not select a target, move a camera or send aircraft commands. Use the
+backend's validated replay profile, not a forwarded field service.
+
+For the Core replay without GI/native capability, also set
+`QGC_PIXEAGLE_EXPECT_NATIVE_UNAVAILABLE=1`; its expected transport is JPEG and
+no native attempt is allowed. For deliberately failed native negotiation,
+retain the existing `QGC_PIXEAGLE_EXPECT_FALLBACK=1` and named failure-stage
+fixture contract. Neither switch changes product capability or configuration.
+
+The initial Pi Core run presented 1280×720 JPEG and preserved analysis/display
+geometry, but failed sustained freshness during optional-runtime downloads.
+Its rotating-ACK probe observed no frame/token/dimension mismatch before a
+delivery stall exceeded the existing two-second ACK limit. These SSH-forwarded,
+shared-Wi-Fi measurements are failed load evidence, not a qualified LAN rate
+or native-media result. Repeat after setup load clears. Preserve the installed
+field configuration and keep the isolated replay's camera/MAVLink disabled,
+circuit breaker enabled, and command preview active.
+
 ## Remaining gates
 
 1. Extend the passing loopback controller transport/fallback tests to constrained

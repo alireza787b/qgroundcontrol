@@ -1,7 +1,10 @@
 #include "PixEagleVideoControllerTest.h"
 
+#include <algorithm>
 #include <gst/gst.h>
 
+#include <QtCore/QElapsedTimer>
+#include <QtCore/QFile>
 #include <QtCore/QJsonArray>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSaveFile>
@@ -320,6 +323,23 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
         QSKIP("Start the isolated native integration fixture and provide its loopback endpoint");
     }
     QVERIFY(endpoint.scheme() == QStringLiteral("http") && endpoint.host() == QStringLiteral("127.0.0.1"));
+    QString username = QStringLiteral("operator");
+    QString password = QStringLiteral("fixture-only");
+    const QString loginPath = qEnvironmentVariable("QGC_PIXEAGLE_WEBRTC_FIXTURE_LOGIN_FILE");
+    if (!loginPath.isEmpty()) {
+        QFile login(loginPath);
+        QVERIFY(login.open(QIODevice::ReadOnly));
+        QVERIFY(login.size() <= 65536);
+        QVERIFY(!(login.permissions() & (QFile::ReadGroup | QFile::ReadOther)));
+        const auto credentials = QJsonDocument::fromJson(login.readAll()).object();
+        QCOMPARE(QUrl(credentials.value("endpoint").toString()), endpoint);
+        username = credentials.value("username").toString();
+        password = credentials.value("password").toString();
+        QVERIFY(!username.isEmpty() && !password.isEmpty());
+    }
+    const int observationMs = qEnvironmentVariableIntValue("QGC_PIXEAGLE_WEBRTC_OBSERVATION_MS");
+    QVERIFY(observationMs >= 0 && observationMs <= 20000);
+    const bool nativeUnavailable = qEnvironmentVariableIntValue("QGC_PIXEAGLE_EXPECT_NATIVE_UNAVAILABLE") != 0;
     if (!gst_is_initialized()) {
         GStreamer::prepareEnvironment();
         gst_init(nullptr, nullptr);
@@ -336,7 +356,7 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
     auto& client = *test.manager->activeClient();
     client.setEndpoint(endpoint.toString());
     client.setEnabled(true);
-    client.signIn(QStringLiteral("operator"), QStringLiteral("fixture-only"));
+    client.signIn(username, password);
     QTRY_VERIFY2_WITH_TIMEOUT(client.authenticated() && !client.busy(), qPrintable(client.statusText()), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), 5000);
     const auto signOut = qScopeGuard([&]() { client.signOut(); });
@@ -362,7 +382,9 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
     }
     controller->attachSurface(&surface);
     const auto cleanup = qScopeGuard([&]() { controller->detachSurface(&surface); });
-    QTRY_VERIFY_WITH_TIMEOUT(attemptedNative, 5000);
+    if (!nativeUnavailable) {
+        QTRY_VERIFY_WITH_TIMEOUT(attemptedNative, 5000);
+    }
     const QString mediaIdentity = controller->_desiredKey;
     QVERIFY(!mediaIdentity.isEmpty());
     QTRY_VERIFY2_WITH_TIMEOUT(surface.frameFresh(), qPrintable(controller->statusText()), 25000);
@@ -373,11 +395,52 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
     QTRY_VERIFY_WITH_TIMEOUT(surface.selectionReady(), 5000);
     const bool expectFallback = qEnvironmentVariableIntValue("QGC_PIXEAGLE_EXPECT_FALLBACK") != 0;
     QCOMPARE(controller->_webRtcFailed, expectFallback);
-    QCOMPARE(controller->_usingWebRtc, !expectFallback);
+    QCOMPARE(controller->_usingWebRtc, !expectFallback && !nativeUnavailable);
+    QCOMPARE(attemptedNative, !nativeUnavailable);
     QCOMPARE(controller->_desiredKey, mediaIdentity);
     QCOMPARE(controller->_runningKey, mediaIdentity);
     const auto receipt = controller->_contexts->presentationStatistics();
     QVERIFY(receipt.value("presented_frames").toInteger() > 0);
+    if (observationMs > 0) {
+        QSignalSpy presentations(&surface, &PixEagleVideoItem::presentationChanged);
+        QElapsedTimer elapsed;
+        elapsed.start();
+        qint64 previousMs = 0;
+        qint64 maximumGapMs = 0;
+        double maximumAgeMs = 0;
+        bool complete = false;
+        const auto report = qScopeGuard([&]() {
+            auto result = controller->_contexts->presentationStatistics();
+            result.insert("observation_ms", elapsed.elapsed());
+            result.insert("observation_complete", complete);
+            if (result.value("epoch") == receipt.value("epoch")) {
+                const auto frames =
+                    result.value("presented_frames").toInteger() - receipt.value("presented_frames").toInteger();
+                result.insert("observed_presented_frames", frames);
+                result.insert("observed_presented_fps", frames * 1000.0 / std::max<qint64>(1, elapsed.elapsed()));
+            }
+            result.insert("maximum_observed_gap_ms", std::max(maximumGapMs, elapsed.elapsed() - previousMs));
+            result.insert("maximum_observed_age_bound_ms", maximumAgeMs);
+            result.insert("native_webrtc", controller->_usingWebRtc);
+            expectLogMessage("default", QtInfoMsg,
+                             QRegularExpression(QStringLiteral("^Recorded replay presentation: ")));
+            qInfo().noquote() << "Recorded replay presentation:"
+                              << QJsonDocument(result).toJson(QJsonDocument::Compact);
+            verifyExpectedLogMessage();
+        });
+        while (elapsed.elapsed() < observationMs) {
+            QVERIFY2(presentations.wait(5000), qPrintable(controller->statusText()));
+            const auto nowMs = elapsed.elapsed();
+            maximumGapMs = std::max(maximumGapMs, nowMs - previousMs);
+            previousMs = nowMs;
+            QVERIFY2(surface.frameFresh() && surface.selectionReady(), qPrintable(controller->statusText()));
+            maximumAgeMs = std::max(
+                maximumAgeMs,
+                controller->_contexts->presentationStatistics().value("last_presented_age_bound_ms").toDouble());
+            QCOMPARE(controller->_webRtcFailed, expectFallback);
+        }
+        complete = true;
+    }
     const QString mediaControl = qEnvironmentVariable("QGC_PIXEAGLE_TEST_MEDIA_CONTROL_FILE");
     if (!mediaControl.isEmpty()) {
         QVERIFY(!expectFallback);
@@ -416,7 +479,7 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
         QVERIFY(!surface.presentationKnown());
         QVERIFY(!controller->_retryTimer.isActive());
         QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), 5000);
-        client.signIn(QStringLiteral("operator"), QStringLiteral("fixture-only"));
+        client.signIn(username, password);
         QTRY_VERIFY2_WITH_TIMEOUT(client.authenticated() && !client.busy(), qPrintable(client.statusText()), 5000);
         QTRY_VERIFY_WITH_TIMEOUT(surface.frameFresh() && surface.selectionReady(), 15000);
         QVERIFY(controller->_desiredKey != recoveredIdentity);
