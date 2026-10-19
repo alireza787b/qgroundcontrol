@@ -450,3 +450,66 @@ path and the thermal guard, not sustained Pi capacity. A fan or equivalent
 cooling is required before longer replay, constrained-link tests or physical
 qualification. The normal `pixeagle.service`, saved field profile and installed
 source were not changed.
+
+## Cooled Pi continuation and operator quality report — 2026-10-19
+
+The Pi returned with cooling, camera and Pixhawk connected. Its normal service
+had restarted with the saved flight-command circuit breaker disabled. That
+service was stopped before isolated media tests; no saved flight or network
+configuration was changed and no aircraft command was sent. The camera answered
+ping and a separate TCP RTSP probe received/parsed 60 H.264 access units in
+2.33 seconds without errors. This proves receive/parse connectivity, not camera
+presentation quality or motor behavior. The MAVLink router opened its UART;
+aircraft identity and command delivery were not qualified in this checkpoint.
+
+The cooled recorded replay completed its ten-minute guard: 601.76 seconds
+including graceful shutdown, peak 60.6°C, and no throttling. All 41 saved
+configuration files still match the earlier backup. Cooling is no longer the
+blocker for these short media tests. The original product installation and
+native-capability gate remain unchanged.
+
+The operator reported acceptable motion but progressive pixelation. Preserve
+that raw feedback separately from automated results. Across a 119.7-second
+media-health observation, capture was never stale (115 samples, maximum source
+age 573 ms), but 111 samples reported 320×180 native delivery. The encoder target
+ranged from 64 kbps to 1.187 Mbps. Receiver feedback included renderer/age
+pressure; a healthy source therefore does not establish acceptable delivery.
+The strict production-controller checks failed freshness/selectability, and
+remain failed evidence despite the earlier short passes.
+
+At the recording's loop boundary, the sender reported `source_changed`. QGC
+retired that transport, recovered through JPEG, and the refreshed identity
+allowed a new native peer. This is distinct from a camera RTSP reconnect or
+backend restart. It does not excuse the earlier loss of detail.
+
+Detailed `rtpgccbwe` logs show delay-overuse decisions reducing the target rate.
+Temporarily disabling Pi Wi-Fi power saving did not remove these decisions or
+the strict controller failure. The original power-save setting was restored;
+no persistent network workaround was applied. Missing padding support in this
+runtime is an investigation lead, not an established cause or a reason to
+override congestion control.
+
+Two independent local comparisons narrow the next investigation:
+
+- Ubuntu sender/QGC receiver, recorded test11, no shaping: H.264 and VP8 both
+  passed exact presented IDs for 20 seconds each, held 960×540, and produced no
+  estimator decreases. Largest verified-frame gaps were 92/102 ms. This fixture
+  does not include the full production capture/tracker workload.
+- Pi-local H.264, synthetic 1280×720 input with GCC, 20-second observation:
+  exact decoded mappings passed at 960×540 with no estimator decreases. It
+  exercises ICE/DTLS/SRTP and decoding, not QGC presentation, recorded detail or
+  network capacity.
+
+Next compare the actual Pi recorded sender over a wired path while retaining
+Wi-Fi management. Wi-Fi remains a required operating target; the comparison
+isolates path jitter from production workload and receiver behavior. Do not
+force a high bitrate, relax freshness/provenance gates, deploy the candidate to
+the field service or start platform release builds on these results.
+
+Private evidence: `pi/native-cooled-recorded-v2/`,
+`pi/cooled-controller.log`, `pi/cooled-gcc-ready-controller.log`,
+`pi/cooled-wifi-off-controller.log`, `pi/native-cooled-gcc-v3/`,
+`pi/native-cooled-wifi-v4/`, `pi/pi-loopback-media.*`, and
+`local-comparison-v1/receiver.log`. An initial diagnostic test ran before API
+readiness, and a local setup attempt lacked the optional GI runtime; neither
+is media-quality evidence. All failed setup and media runs remain retained.
