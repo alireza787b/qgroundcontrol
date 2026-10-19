@@ -513,3 +513,65 @@ Private evidence: `pi/native-cooled-recorded-v2/`,
 `local-comparison-v1/receiver.log`. An initial diagnostic test ran before API
 readiness, and a local setup attempt lacked the optional GI runtime; neither
 is media-quality evidence. All failed setup and media runs remain retained.
+
+## Repaired cadence, real datalink and camera continuation — 2026-10-19
+
+Backend `15ae6d2` removes raw-cap renegotiation on adaptive FPS-only changes;
+dimensions still renegotiate and PTS/duration retain actual cadence. The
+regression failed before the repair. Renewed backend gates: 328 streaming
+tests (seven optional skips), 74 route/config tests, 25 optional-runtime peer
+tests, schema and syntax checks. Existing BLE001/PIE807 lint findings were
+reproduced from baseline; they were not hidden by modifying production logic.
+QGC implementation/binary is unchanged from the earlier tested receiver.
+
+The Windows GCS bridges its two Ethernet interfaces. Ubuntu temporarily adds
+192.168.0.203/24 on its Ethernet interface while retaining Wi-Fi management;
+the Pi is 192.168.0.226 on the datalink. This is a path through a radio/datalink,
+not a direct Pi-to-laptop cable or loss-free laboratory wire. An initial ICE
+run still chose Wi-Fi despite the backend address; interface counters caught
+that. A private ICE-binding experiment crashed before media and is rejected,
+never installed in product code.
+
+Later tests used the normal sender with an automatically removed, process-test
+UDP path exclusion to establish actual Ethernet media delivery. TCP SSH/API
+management stayed on Wi-Fi. No persistent network workaround was deployed.
+
+| Test | Result and scope |
+|---|---|
+| Recorded datalink, repaired sender, 20 s | Passed: 13.51 presented FPS, largest gap 263 ms, maximum conservative frame-age bound 631 ms |
+| Recorded datalink, visible 119 s observation | No stale source samples; dimensions moved between 640×360/960×540 and reached 1280×720. Operator: “yes it loosk perfect smoothand quality good.” This does not establish uninterrupted 720p/20 FPS. |
+| Recorded Wi-Fi, repaired sender, 20 s | Passed: 12.11 presented FPS, largest gap 336 ms, maximum age bound 631 ms. A longer GUI observation was incomplete; do not call it sustained Wi-Fi acceptance. |
+| Camera native TCP decode, 30 s | 1920×1080, 29.88 decoded FPS, maximum sample gap 176 ms, no reported decode errors, peak 52.9°C. No QGC/encoder evidence in this baseline. |
+| Camera Wi-Fi, QGC 20 s | Passed: 11.85 presented FPS, largest gap 418 ms, maximum age bound 706 ms |
+| Same camera Wi-Fi, visible 120 s | Sustained quality failed: mostly 320×180, target reached 64 kbps, source remained fresh; Pi peaked 73.8°C before requested shutdown. Short freshness success does not establish picture quality. |
+| Camera datalink, QGC 20 s | Passed: 13.42 presented FPS, largest gap 302 ms, maximum age bound 651 ms. Longer visible run was stopped by the 75.45°C guard; sustained acceptance remains open. |
+
+The first camera datalink attempt caught a source identity change during initial
+capture startup, before its fixed-identity observation began. Its failed log is
+retained. A repeat after source readiness passed; no test assertion or product
+freshness guard was relaxed. A requested 120-second controller observation was
+also refused by the fixture's documented 20-second bound; this is invalid test
+setup, not a measured media failure. Failed GUI polling at guarded shutdown is
+likewise not a completed long-duration result.
+
+Backend `73e6057` documents actual user parameters, internal adaptation
+thresholds, startup, cooldown, the current per-peer bitrate allocation and
+limits of the shared budget. No tuning/default value changed. Wi-Fi is not
+established as a universal Raspberry Pi defect; disabling power saving alone
+did not solve the earlier failure. Backend `f384607` extends the existing
+private harness with explicit RTSP capture-only import. Its 119 harness/API/
+config tests and changed-file Ruff checks passed. The camera bench disables
+MAVLink, camera-owned tracking/control and aircraft commands; it cannot qualify
+those physical behaviors. It preserves the installed field profile separately.
+
+Evidence lives under `native-webrtc-2026-10-19/pi/`, notably
+`native-datalink-cadence-v8/`, `native-wifi-cadence-v9/`,
+`camera-source-baseline/`, `native-camera-cadence-v10/`,
+`native-camera-datalink-v11/`, and `qgc-desktop/`. Private files may contain
+credentials; do not publish the cache or manifests.
+
+Keep native capability disabled. Sustained Wi-Fi quality, packet-loss pixel
+identity, lowest-bandwidth fallback, thermal operating range, browser/provider
+parity and platform runtime packages remain open. The installed Pi service,
+saved geometry/gains/safety policy and main checkout are not updated by these
+isolated candidates. No release/Actions build was triggered from this evidence.
