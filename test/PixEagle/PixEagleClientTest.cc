@@ -1,5 +1,7 @@
 #include "PixEagleClientTest.h"
 
+#include <algorithm>
+
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QSettings>
@@ -962,18 +964,28 @@ void PixEagleClientTest::_tlsCertificateRejected()
     configuration.setLocalCertificate(QSslCertificate(GPSTest::SERVER_CERT_PEM, QSsl::Pem));
     configuration.setPrivateKey(QSslKey(GPSTest::PRIVATE_KEY_PEM, QSsl::Rsa, QSsl::Pem));
     configuration.setPeerVerifyMode(QSslSocket::VerifyNone);
+    QByteArray applicationData;
+    QList<QPointer<QSslSocket>> peers;
     QSslServer server;
     server.setSslConfiguration(configuration);
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
     QSignalSpy handshakes(&server, &QSslServer::startedEncryptionHandshake);
-    QSignalSpy encryptedConnections(&server, &QSslServer::pendingConnectionAvailable);
+    connect(&server, &QSslServer::startedEncryptionHandshake, &server, [&](QSslSocket* socket) {
+        peers.append(socket);
+        connect(socket, &QIODevice::readyRead, &server, [&, socket]() { applicationData += socket->readAll(); });
+    });
     PixEagleClient client;
     client.setEndpoint(QStringLiteral("https://127.0.0.1:%1").arg(server.serverPort()));
     client.setEnabled(true);
     client.signIn("pilot", "tls-password");
     QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), TestTimeout::mediumMs());
     QVERIFY(!handshakes.isEmpty());
-    QVERIFY(encryptedConnections.isEmpty());
+    // Server-side handshake completion does not prove the client accepted its certificate.
+    QTRY_VERIFY_WITH_TIMEOUT(
+        std::all_of(peers.cbegin(), peers.cend(),
+                    [](const auto& peer) { return !peer || peer->state() == QAbstractSocket::UnconnectedState; }),
+        TestTimeout::mediumMs());
+    QVERIFY(applicationData.isEmpty());
     QVERIFY(!client.authenticated());
     QVERIFY(client.statusText().contains("certificate", Qt::CaseInsensitive));
 }
@@ -1011,8 +1023,9 @@ void PixEagleClientTest::_contextRecoversAfterTransientFailure()
     server.overrides.remove(CONTEXT_PATH);
     server.context.insert("runtime_id", "runtime-recovered");
     QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(CONTEXT_PATH) > previousRequest, TestTimeout::mediumMs());
-    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), TestTimeout::mediumMs());
-    QCOMPARE(client.connectionContext().value("runtime_id").toString(), QStringLiteral("runtime-recovered"));
+    QTRY_COMPARE_WITH_TIMEOUT(client.connectionContext().value("runtime_id").toString(),
+                              QStringLiteral("runtime-recovered"), TestTimeout::mediumMs());
+    QVERIFY(client.mediaAvailable());
     QVERIFY(!client.associationVerified());
     QVERIFY(!client.canStartFollowing());
     QCOMPARE(server.lastRequest(LOGIN_PATH).target, LOGIN_PATH);

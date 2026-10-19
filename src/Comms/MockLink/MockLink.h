@@ -41,6 +41,7 @@ public:
     void run10HzTasks();
     void run500HzTasks();
     void sendStatusTextMessages();
+    void sendBootStatusTextMessages();
 
     bool shouldSendStatusText() const { return _sendStatusText; }
 
@@ -134,6 +135,13 @@ public:
     /// delayed flight mode and causes QGC to re-query standard modes.
     void bumpAvailableModesMonitorSequence() { ++_availableModesMonitorSeqNumber; }
 
+    /// Unit test support: change the AVAILABLE_MODES sequence immediately before sending this index.
+    void setAvailableModesSequenceBumpAtIndex(uint8_t index, bool repeat = false)
+    {
+        _availableModesSequenceBumpAtIndex = index;
+        _availableModesSequenceBumpRepeatedly = repeat;
+    }
+
     /// Unit test support: sends every vehicle->QGC message twice, as when two links receive the same traffic.
     void setDuplicateResponses(bool duplicate) { _duplicateResponses = duplicate; }
 
@@ -189,6 +197,9 @@ public:
     int hashCheckRequestCount() const { return _hashCheckRequestCount; }
     /// Index-based PARAM_REQUEST_READs received, in arrival order: (componentId, paramIndex)
     QList<QPair<int, int>> paramRequestReadIndexLog() const { return _paramRequestReadIndexLog; }
+
+    /// Target component of each PARAM_REQUEST_LIST received, in arrival order
+    QList<int> paramRequestListTargetLog() const { return _paramRequestListTargetLog; }
 
     /// Change a float parameter value directly on MockLink (for testing cache invalidation)
     void setMockParamValue(int componentId, const QString &paramName, float value);
@@ -318,6 +329,7 @@ private:
     void _handleRequestMessageAvailableModes(const mavlink_command_long_t &request, bool &accepted);
 
     void _sendHeartBeat();
+    void _sendCompanionHeartBeat();
     void _sendHighLatency2();
     void _sendHomePosition();
     void _sendGpsRawInt();
@@ -380,6 +392,7 @@ private:
     const bool _stayMavlinkV1 = false;  ///< Test-only: never upgrade outgoing traffic to MAVLink v2
     const bool _ftpCapability = false;  ///< Test-only: advertise MAV_PROTOCOL_CAPABILITY_FTP
     const bool _sendRadioStatusEnabled = true; ///< Stream RADIO_STATUS at 1Hz (marks the link as a radio link)
+    const bool _companionParams = _mockConfig->companionParams();  ///< Test-only: companion param component
     const uint8_t _vehicleSystemId = 0;
     const QGeoCoordinate _homeCoordinate = MockConfiguration::homeCoordinate(_mockConfig->homeLocationEnum());
     const double _defaultVehicleLatitude = _homeCoordinate.latitude();
@@ -468,6 +481,8 @@ private:
     /// Sequence number sent in AVAILABLE_MODES_MONITOR. Written from the test (main) thread via
     /// bumpAvailableModesMonitorSequence, read from the worker thread at 1Hz/500Hz.
     std::atomic<uint8_t> _availableModesMonitorSeqNumber = 0;
+    std::atomic<uint8_t> _availableModesSequenceBumpAtIndex = 0;
+    std::atomic<bool> _availableModesSequenceBumpRepeatedly = false;
 
     QString _logDownloadFilename;                       ///< Filename for log download which is in progress
     bool _logsErased = false;                           ///< Set by LOG_ERASE, LOG_REQUEST_LIST reports no logs
@@ -490,6 +505,7 @@ private:
     bool _hashCheckNoResponse = false;
     int _hashCheckRequestCount = 0;
     QList<QPair<int, int>> _paramRequestReadIndexLog;
+    QList<int> _paramRequestListTargetLog;
     bool _paramRequestListHashCheckSent = false;
     bool _resetSysAutostartOnParamReset = false;
 
@@ -556,6 +572,7 @@ private:
     static constexpr const char *_failParam = "COM_FLTMODE6";
 
     static constexpr uint8_t _vehicleComponentId = MAV_COMP_ID_AUTOPILOT1;
+    static constexpr uint8_t _companionComponentId = MAV_COMP_ID_ONBOARD_COMPUTER;
 
     // Simulated DroneCAN node exposed as its own param component (FailMissingParamOnAllRequestsNonDefaultComponent and friends)
     static constexpr uint8_t _nonDefaultParamComponentId = 125;

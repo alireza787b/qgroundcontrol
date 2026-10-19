@@ -106,7 +106,9 @@ void ParameterManager::_updateProgressBar()
 
 void ParameterManager::mavlinkMessageReceived(const mavlink_message_t &message)
 {
-    if (message.msgid == MAVLINK_MSG_ID_PARAM_VALUE) {
+    if (message.msgid == MAVLINK_MSG_ID_HEARTBEAT) {
+        _handleHeartbeat(message.compid);
+    } else if (message.msgid == MAVLINK_MSG_ID_PARAM_VALUE) {
         mavlink_param_value_t param_value{};
         mavlink_msg_param_value_decode(&message, &param_value);
 
@@ -543,8 +545,9 @@ void ParameterManager::_factRawValueUpdated(const QVariant &rawValue)
 
     if (fact->vehicleRebootRequired()) {
         _vehicle->setRebootRequired();
-        QGC::showRebootAppMessage(tr(
-            "Vehicle reboot required for changes to take effect. Use the power indicator in the toolbar to reboot."));
+        QGC::showRebootAppMessage(
+            tr("Vehicle reboot required for changes to take effect. "
+               "Use the main status indicator in the toolbar to reboot."));
     }
 
     _mavlinkParamSet(fact->componentId(), fact->name(), fact->type(), rawValue);
@@ -563,6 +566,10 @@ void ParameterManager::_ftpDownloadComplete(const QString &fileName, const QStri
         qCDebug(ParameterManagerLog) << "ParameterManager::_ftpDownloadComplete : Parameter file received:" << fileName;
         if (_parseParamFile(fileName)) {
             qCDebug(ParameterManagerLog) << "ParameterManager::_ftpDownloadComplete : Parsed!";
+            _ftpParamsLoaded = true;
+            for (const int componentId : _heartbeatComponentIds) {
+                _sendParamRequestList(static_cast<uint8_t>(componentId));
+            }
             return;
         } else {
             qCDebug(ParameterManagerLog) << "ParameterManager::_ftpDownloadComplete : Error in parameter file";
@@ -597,6 +604,36 @@ void ParameterManager::_ftpDownloadComplete(const QString &fileName, const QStri
     } else {
         _paramRequestListTimer.start();
     }
+}
+
+void ParameterManager::_handleHeartbeat(int componentId)
+{
+    if ((componentId == MAV_COMP_ID_ALL) || (componentId == MAV_COMP_ID_AUTOPILOT1) ||
+        _heartbeatComponentIds.contains(componentId)) {
+        return;
+    }
+    _heartbeatComponentIds.insert(componentId);
+
+    // Components first heard after the param.pck load missed the requests sent when it completed
+    if (_ftpParamsLoaded) {
+        _sendParamRequestList(static_cast<uint8_t>(componentId));
+    }
+}
+
+void ParameterManager::_sendParamRequestList(uint8_t componentId)
+{
+    const SharedLinkInterfacePtr sharedLink = _vehicle->vehicleLinkManager()->primaryLink().lock();
+    if (!sharedLink) {
+        return;
+    }
+
+    qCDebug(ParameterManagerLog) << _logVehiclePrefix(componentId) << "Sending PARAM_REQUEST_LIST";
+
+    mavlink_message_t msg{};
+    mavlink_msg_param_request_list_pack_chan(MAVLinkProtocol::instance()->getSystemId(),
+                                             MAVLinkProtocol::getComponentId(), sharedLink->mavlinkChannel(), &msg,
+                                             _vehicle->id(), componentId);
+    (void) _vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
 }
 
 void ParameterManager::_ftpDownloadProgress(float progress)
@@ -721,14 +758,7 @@ void ParameterManager::_startParameterDownload(uint8_t componentId)
             }
         }
 
-        mavlink_message_t msg{};
-        mavlink_msg_param_request_list_pack_chan(MAVLinkProtocol::instance()->getSystemId(),
-                                                 MAVLinkProtocol::getComponentId(),
-                                                 sharedLink->mavlinkChannel(),
-                                                 &msg,
-                                                 _vehicle->id(),
-                                                 componentId);
-        (void) _vehicle->sendMessageOnLinkThreadSafe(sharedLink.get(), msg);
+        _sendParamRequestList(componentId);
     }
 
     const QString what = (componentId == MAV_COMP_ID_ALL) ? "MAV_COMP_ID_ALL" : QString::number(componentId);
@@ -1528,7 +1558,7 @@ void ParameterManager::_paramRequestListTimeout()
     if (!_vehicle->genericFirmware()) {
         const QString errorMsg = tr("Vehicle %1 did not respond to request for parameters. "
                                     "This will cause %2 to be unable to display its full user interface.").arg(_vehicle->id()).arg(QCoreApplication::applicationName());
-        qCDebug(ParameterManagerLog) << errorMsg;
+        qCWarning(ParameterManagerLog) << errorMsg;
         QGC::showAppMessage(errorMsg);
     }
     emit initialParametersRequestFailed();
@@ -1583,17 +1613,21 @@ void ParameterManager::_loadOfflineEditingParams()
     QFile paramFile(paramFilename);
     if (!paramFile.open(QFile::ReadOnly)) {
         qCWarning(ParameterManagerLog) << "Unable to open offline editing params file" << paramFilename;
+        return;
     }
 
     QTextStream paramStream(&paramFile);
     while (!paramStream.atEnd()) {
         const QString line = paramStream.readLine();
-        if (line.startsWith("#")) {
+        if (line.trimmed().isEmpty() || line.startsWith("#")) {
             continue;
         }
 
         const QStringList paramData = line.split("\t");
-        Q_ASSERT(paramData.count() == 5);
+        if (paramData.count() != 5) {
+            qCWarning(ParameterManagerLog) << "Skipping malformed offline editing param line" << line;
+            continue;
+        }
 
         const int offlineDefaultComponentId = paramData.at(1).toInt();
         _vehicle->setOfflineEditingDefaultComponentId(offlineDefaultComponentId);
@@ -1629,10 +1663,14 @@ void ParameterManager::_loadOfflineEditingParams()
             break;
         }
 
-        Fact *const fact = new Fact(offlineDefaultComponentId, paramName, mavTypeToFactType(paramType), this);
+        CompInfoParam* const compInfoParam = _vehicle->compInfoManager()->compInfoParam(offlineDefaultComponentId);
+        if (!compInfoParam) {
+            qCWarning(ParameterManagerLog) << "No parameter metadata for component" << offlineDefaultComponentId;
+            continue;
+        }
 
-        FactMetaData *const factMetaData = _vehicle->compInfoManager()->compInfoParam(offlineDefaultComponentId)->factMetaDataForName(paramName, fact->type());
-        fact->setMetaData(factMetaData);
+        Fact* const fact = new Fact(offlineDefaultComponentId, paramName, mavTypeToFactType(paramType), this);
+        fact->setMetaData(compInfoParam->factMetaDataForName(paramName, fact->type()));
 
         _mapCompId2FactMap[defaultComponentId][paramName] = fact;
     }

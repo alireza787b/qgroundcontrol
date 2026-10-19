@@ -27,7 +27,9 @@ qt_add_qml_module(
               RemoteIDIndicator.qml
               RemoteIDIndicatorPage.qml
               SelectViewDropdown.qml
+              SeverityPill.qml
               SignalStrength.qml
+              StatusPill.qml
               TelemetryRSSIIndicator.qml
               VehicleMessageList.qml
     NO_PLUGIN

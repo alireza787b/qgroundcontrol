@@ -1227,15 +1227,22 @@ signals:
 /*                         STATUS TEXT HANDLER                               */
 /*===========================================================================*/
 private:
-    Q_PROPERTY(int criticalMessageCount READ criticalMessageCount NOTIFY criticalMessageCountChanged)
+    Q_PROPERTY(int unreadCriticalMessageCount READ unreadCriticalMessageCount NOTIFY unreadCriticalMessageCountChanged)
+    Q_PROPERTY(int unreadWarningMessageCount READ unreadWarningMessageCount NOTIFY unreadWarningMessageCountChanged)
+    Q_PROPERTY(bool hasUnreadMessages READ hasUnreadMessages NOTIFY hasUnreadMessagesChanged)
+    Q_PROPERTY(int unreadMessageCount READ unreadMessageCount NOTIFY unreadMessageCountChanged)
     Q_PROPERTY(QString formattedMessages READ formattedMessages NOTIFY formattedMessagesChanged)
 
     // Q_PROPERTY(StatusTextHandler *statusTextHandler READ statusTextHandler NOTIFY statusTextHandlerChanged)
 
 public:
     Q_INVOKABLE void clearMessages();
+    Q_INVOKABLE void markMessagesRead();
 
-    int criticalMessageCount() const;
+    int unreadCriticalMessageCount() const;
+    int unreadWarningMessageCount() const;
+    bool hasUnreadMessages() const;
+    int unreadMessageCount() const;
     QString formattedMessages() const;
 
     // StatusTextHandler* statusTextHandler() { return m_statusTextHandler; }
@@ -1246,7 +1253,10 @@ signals:
     void messagesReceivedChanged();
     void messagesSentChanged();
     void messagesLostChanged();
-    void criticalMessageCountChanged();
+    void unreadCriticalMessageCountChanged();
+    void unreadWarningMessageCountChanged();
+    void hasUnreadMessagesChanged();
+    void unreadMessageCountChanged();
     void formattedMessagesChanged();
     void newFormattedMessage(QString formattedMessage);
 

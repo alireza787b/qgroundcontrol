@@ -279,11 +279,11 @@ QVariantMap validatedContext(const IncomingFrame& incoming)
 
 QImage presentationImage(const QVideoFrame& video)
 {
-    // JPEG's dedicated receiver supplies CPU frames. Never force GPU texture readback.
+    // The integration supplies CPU display frames; never force GPU texture readback.
     if (!video.isValid() || video.handleType() != QVideoFrame::NoHandle) {
         return {};
     }
-    // Pinned Qt 6.11.1 private CPU path: toImage() may upload and read back even a CPU-backed frame.
+    // Force the CPU conversion path: toImage() may upload and read back even a CPU-backed frame.
     QImage image = qImageFromVideoFrame(video, VideoTransformation{}, true).copy();
     if (image.isNull()) {
         return {};

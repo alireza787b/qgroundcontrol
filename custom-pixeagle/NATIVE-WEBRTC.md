@@ -43,9 +43,12 @@ The developer-only `QGC_ENABLE_NATIVE_WEBRTC=ON` build option requires the
 GStreamer WebRTC, SDP and RTP development components. It is off by default
 until deployment packaging is qualified. This is not an operator setting.
 
+With `QT_ROOT_DIR` pointing to the Qt installation required by build-config:
+
 ```bash
-cmake -S . -B build/pixeagle-custom-debug-latest2 -DQGC_ENABLE_NATIVE_WEBRTC=ON
-cmake --build build/pixeagle-custom-debug-latest2 -j 6
+cmake --preset Linux-debug -B build/native-webrtc-port \
+  -DQGC_CUSTOM_DIR=custom-pixeagle -DQGC_ENABLE_NATIVE_WEBRTC=ON
+cmake --build build/native-webrtc-port -j 6
 ```
 
 In the PixEagle checkout, with the optional GStreamer Python runtime and GCC
@@ -59,9 +62,9 @@ Then in this checkout:
 
 ```bash
 QGC_WEBRTC_TEST_SIGNALING_URL=ws://127.0.0.1:8197/ws/webrtc_signaling \
-  ctest --test-dir build/pixeagle-custom-debug-latest2 \
+  ctest --test-dir build/native-webrtc-port \
     -R '^QGCWebRtcVideoSourceTest$' --repeat until-fail:5 --output-on-failure
-ctest --test-dir build/pixeagle-custom-debug-latest2 \
+ctest --test-dir build/native-webrtc-port \
   -R '^(GStreamerTest|PixEagleVideoItemTest|PixEagleVideoControllerTest|PixEagleClientTest)$' \
   -LE 'Flaky|Network' --output-on-failure
 ```
@@ -82,11 +85,12 @@ the pinned runtime manifest. The matching QGC revision is
 `919bfc82fb1e2fbc24583f5ea56939ca8eefbdca` and the matching PixEagle revision
 is `7d9fed9987fb7cd74019050c31a1ffefca2f873d`.
 
-The feature branch is intentionally based on the verified QGC integration
-baseline. QGC upstream has since refactored the GStreamer receiver and related
-build modules; a mechanical merge is not valid because it mixes two receiver
-architectures. Port that refactor as a dedicated integration step, with a
-fresh build and receiver tests, before rebasing this feature for publication.
+The dedicated [upstream receiver port](NATIVE-WEBRTC-UPSTREAM-PORT.md) uses
+upstream `5540c98a05365c448d9c8f066c009a41b64deccb` and Qt 6.12.0. It retains the
+new worker/pipeline lifecycle and ports transport/provenance into the new
+components. Its fresh build, repeated native presentation tests and all 471
+Unit/Integration suites pass with the standard exclusions. The checkpoint records
+the initial failures and their resolutions separately.
 
 ## Remaining gates
 
@@ -96,7 +100,7 @@ fresh build and receiver tests, before rebasing this feature for publication.
    and failure/recovery tests; the retained-fixture selection is a prerequisite.
 3. Measured congestion feedback, shared automatic per-client/aggregate policy,
    0.5/1/2/5/10 Mbps and load tests. A connected estimator hook is not adaptation
-   evidence; the short uniform loopback did not exercise bitrate changes.
+   evidence; loopback feedback does not establish a constrained-link operating range.
 4. Bundle and probe complete runtimes on Windows, Linux and Android, followed
    by full release regression. Operators must not install development GStreamer.
 5. Request the cooled Pi/camera for deployment and physical acceptance only
@@ -117,13 +121,12 @@ application dependency; operators must not install development GStreamer on
 Windows. Native automatic adoption remains gated until these platform packages
 and congestion/failure tests pass.
 
-
 ## Platform bundle policy
 
 QGC's existing GStreamer Orchestrator remains the only package owner. When the
 native WebRTC build option is off, no WebRTC/ICE/DTLS/SRTP/SCTP plugin is added
 to the QGC bundle. When it is on, the same platform SDK allowlist adds
-`webrtc`, `nice`, `srtp`, `dtls` and `sctp`, and configure/install verification
-requires the complete runtime. Missing components stop that build clearly;
+`webrtc`, `nice`, `srtp`, `dtls` and `sctp`. Component discovery, package verification
+and runtime initialization check the required pieces. Missing components fail clearly;
 normal JPEG/QGC builds remain available. The option is still developer-gated
 until Windows, Linux and Android clean-runtime probes pass.

@@ -35,11 +35,17 @@ The Flight Status indicator dropdown fills the window and also gives you access 
 - **Force Arm** - Arms the vehicle while bypassing pre-arm checks. Only shown when **Allow Force Arm** is enabled in [Fly View Settings](../settings_view/fly_view.md).
 - **Reboot Vehicle** - Shown at the right when the vehicle needs a reboot (see [Vehicle Reboot Required](#vehicle-reboot-required)).
 - **Firmware update available** - Shown when the vehicle is not running the latest stable firmware (see [Firmware Update Available](#firmware-update-available)).
-- **Vehicle Messages** - The messages sent by the vehicle. Use the trash button to clear them.
+- **Vehicle Messages** - The messages sent by the vehicle. Unread messages are shown in bold. Use **Mark as Read** to mark them all as read, or **Clear** to delete them.
 
 In the cases of warnings or not ready state you can click the indicator to display the dropdown which will show the reason(s) why. The toggle on the right expands each error with additional information and possible solutions.
 
 Once each issue is resolved it will disappear from the UI. When all issues blocking arming have been removed you should now be ready to fly.
+
+#### Acknowledging Warnings
+
+With PX4 health and arming checks, press **Acknowledge All Warnings** on the **Overall Status** tab once you have reviewed the warnings, for example high wind or magnetic interference. Acknowledged warnings stay in the list, dimmed and marked **Acknowledged**, but no longer count toward the **Warning** status label or the yellow **Ready To Fly** background, so a new warning still gets your attention.
+
+An acknowledgement is kept while the warning persists, even if values in its message (such as the wind speed) change or you switch flight modes. It is cleared if the warning becomes an error or is resolved, so the warning shows again if it comes back. Errors cannot be acknowledged, and acknowledging never affects whether the vehicle can arm. Acknowledgements are not kept after the vehicle disconnects.
 
 ### Flight Mode <img src="../../../assets/fly/toolbar/flight_modes_indicator.png" alt="Flight Mode indicator" style="height: 1.15em; vertical-align: text-bottom;" />
 
@@ -53,19 +59,25 @@ The Flight Mode indicator shows you the current flight mode. The dropdown allows
 
 ![Flight Status badges](../../../assets/fly/toolbar/main_status_indicator_badges.png)
 
-Small badges can appear at the top right of the Flight Status indicator: a blue update icon when newer stable vehicle firmware is available, an orange power icon when the vehicle needs a reboot, and a red badge with the count of critical vehicle messages. Click the indicator to open the dropdown and act on them.
+Small badges can appear at the top right of the Flight Status indicator: a blue update icon when newer stable vehicle firmware is available, an orange power icon when the vehicle needs a reboot, and a status label showing the most severe issue across the dropdown tabs. Click the indicator to open the dropdown and act on them.
+
+The status label shows the worst of:
+
+- **Error** (_red_) - Unread critical vehicle messages, or health and arming check errors.
+- **Warning** (_orange_) - Unread warning or notice messages, health and arming check warnings, or an incomplete [Pre-Flight Checklist](fly_tools.md#preflight_checklist) while the vehicle is disarmed. When the incomplete checklist is the only warning, the label reads **Pre-Flight** instead.
+- **Info** (_blue_) - Other unread vehicle messages.
 
 #### Vehicle Messages
 
-When the vehicle sends critical messages (error severity or worse) a red badge is shown at the top right of the Flight Status indicator. The badge shows the number of critical messages, or `!` if there are more than 9. Opening the dropdown does not clear the badge, only clearing the message list with the trash button does.
+Opening the dropdown does not mark messages as read. Press **Mark as Read** in the message list to clear their contribution to the status label while keeping the messages, or use **Clear** to delete the messages. Health and arming check errors and an incomplete checklist keep the label shown until they are resolved. Health and arming check warnings keep it shown until they are resolved or [acknowledged](#acknowledging-warnings).
 
-In the dropdown message list, critical messages are shown in red and warnings and notices in orange.
+In the dropdown message list, unread messages are shown in bold and read messages in normal weight. Critical messages are shown in red and warnings and notices in orange. New messages are always unread, even after earlier ones were marked as read.
 
 Critical messages are also shown in a **Vehicle Alert** popup below the toolbar. Up to 5 messages are shown at once, fewer if the window is too short to fit them. If more arrive the popup title changes to **Vehicle Alert - Click to see more**, clicking it opens the Flight Status dropdown. The popup closes automatically after 10 seconds, or when you click it.
 
 #### Vehicle Reboot Required
 
-Some parameter changes and sensor calibrations only take effect after the vehicle reboots. When you make such a change an orange power icon is shown next to the message badge, and stays there until the vehicle is rebooted. You can make several changes and reboot once at the end.
+Some parameter changes and sensor calibrations only take effect after the vehicle reboots. When you make such a change an orange power icon is shown next to the status label, and stays there until the vehicle is rebooted. You can make several changes and reboot once at the end.
 
 When a parameter change needs a reboot, a message also reminds you that the change will not take effect until the vehicle is rebooted. The message is not repeated for further changes made within 2 minutes.
 

@@ -144,28 +144,7 @@ void VideoManagerInitTest::_testExternalVideoLeavesConfiguredSourceIntact()
 
 #else
 
-void VideoManagerInitTest::init()
-{
-    UnitTest::init();
-    QSKIP("GStreamer not enabled");
-}
-
-void VideoManagerInitTest::_testQmlReadyBeforeBackendReady()
-{
-    QSKIP("GStreamer not enabled");
-}
-
-void VideoManagerInitTest::_testBackendReadyBeforeQmlReady()
-{
-    QSKIP("GStreamer not enabled");
-}
-
-void VideoManagerInitTest::_testBackendInitFailure()
-{
-    QSKIP("GStreamer not enabled");
-}
-
-void VideoManagerInitTest::_testExternalVideoLeavesConfiguredSourceIntact()
+void VideoManagerInitTest::_testGStreamerDisabled()
 {
     QSKIP("GStreamer not enabled");
 }

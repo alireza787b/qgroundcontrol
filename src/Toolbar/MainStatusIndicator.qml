@@ -17,20 +17,90 @@ RowLayout {
     property var    _vehicleInAir:      _activeVehicle ? _activeVehicle.airborne || _activeVehicle.landing : false
     property bool   _vtolInFWDFlight:   _activeVehicle ? _activeVehicle.vtolInFwdFlight : false
     property bool   _rebootRequired:    _activeVehicle ? _activeVehicle.rebootRequired : false
+    property bool   _checklistEnabled:  QGroundControl.settingsManager.appSettings.useChecklist.rawValue
+    property bool   _checklistComplete: _activeVehicle ? _activeVehicle.checkListState === Vehicle.CheckListPassed : false
+    property bool   _checklistBlocksArming: _checklistEnabled && QGroundControl.settingsManager.appSettings.enforceChecklist.rawValue && !_checklistComplete
+    // The checklist is pre-flight, so an unfinished one is not flagged once armed
+    property bool   _checklistWarning:  _checklistEnabled && !_checklistComplete && !_armed
+    property int    _healthErrorCount:      _healthAndArmingChecksSupported ?
+                                                _activeVehicle.healthAndArmingCheckReport.errorCount : 0
+    property int    _healthWarningCount:    _healthAndArmingChecksSupported ?
+                                                _activeVehicle.healthAndArmingCheckReport.warningCount : 0
 
-    function dropMainStatusIndicator() {
+    readonly property int tabChecklist: 0
+    readonly property int tabMessages:  1
+    readonly property int tabStatus:    2
+
+    property int _initialTab: -1
+
+    // Raised when the dropdown is already open and should switch tabs
+    signal tabRequested(int tab)
+
+    component TabStatusLabel: StatusPill {
+        anchors.right:          parent.right
+        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth
+        anchors.verticalCenter: parent.verticalCenter
+    }
+
+    component TabSeverityBadge: SeverityPill {
+        anchors.right:          parent.right
+        anchors.rightMargin:    ScreenTools.defaultFontPixelWidth
+        anchors.verticalCenter: parent.verticalCenter
+    }
+
+    // Measures a StatusPill's text, for reserving its width
+    component LabelMetrics: TextMetrics {
+        font.family:    ScreenTools.normalFontFamily
+        font.pointSize: ScreenTools.smallFontPointSize
+        font.bold:      true
+    }
+
+    LabelMetrics { id: errorLabelMetrics;   text: qsTr("Error") }
+    LabelMetrics { id: warningLabelMetrics; text: qsTr("Warning") }
+    LabelMetrics { id: infoLabelMetrics;    text: qsTr("Info") }
+    LabelMetrics { id: preFlightLabelMetrics; text: qsTr("Pre-Flight") }
+
+    readonly property real _severityLabelMaxWidth: Math.max(errorLabelMetrics.advanceWidth,
+                                                            warningLabelMetrics.advanceWidth,
+                                                            infoLabelMetrics.advanceWidth)
+
+    function dropMainStatusIndicator(showMessages = false) {
+        _initialTab = showMessages ? tabMessages : -1
         let overallStatusComponent = _activeVehicle ? overallStatusIndicatorPage : overallStatusOfflineIndicatorPage
         mainWindow.showIndicatorDrawer(overallStatusComponent, control)
+        if (_initialTab !== -1) {
+            tabRequested(_initialTab)
+        }
     }
 
     QGCPalette { id: qgcPal }
 
+    // Lives here rather than in the dropdown so checklist progress survives the dropdown closing
+    Loader {
+        id:         checklistLoader
+        visible:    false
+        active:     _checklistEnabled && !!_activeVehicle
+        source:     "qrc:/qml/QGroundControl/FlyView/PreFlightCheckList.qml"
+
+        // The vehicle may still hold the Passed state of the previous checklist, so sync it to the new one
+        onLoaded: {
+            if (_activeVehicle) {
+                _activeVehicle.checkListState = item.allChecksPassed === true ? Vehicle.CheckListPassed : Vehicle.CheckListNotSetup
+            }
+        }
+    }
+
     QGCLabel {
         id:                 mainStatusLabel
+        objectName:         "mainStatusText"
         Layout.fillHeight:  true
+        // Reserves room for every badge, visible or not, so neighboring toolbar items don't shift as badges come and go
+        // and the severity label changes width
         Layout.preferredWidth: Math.max(contentWidth,
-                                        criticalMessageBadge.width + rebootRequiredIcon.width +
-                                        firmwareUpdateBadge.width + ScreenTools.defaultFontPixelWidth * 0.5)
+                                        Math.max(_severityLabelMaxWidth, preFlightLabelMetrics.advanceWidth) +
+                                        ScreenTools.defaultFontPixelWidth +
+                                        rebootRequiredIcon.width + firmwareUpdateBadge.width +
+                                        ScreenTools.defaultFontPixelWidth * 0.5)
         verticalAlignment:  Text.AlignVCenter
         text:               mainStatusText()
         color:              qgcPal.text
@@ -72,6 +142,10 @@ RowLayout {
                         return mainStatusLabel._armedText
                     }
                 } else {
+                    if (_checklistBlocksArming) {
+                        _mainStatusBGColor = (_healthAndArmingChecksSupported && !_activeVehicle.healthAndArmingCheckReport.canArm) ? "red" : "yellow"
+                        return mainStatusLabel._notReadyToFlyText
+                    }
                     if (_healthAndArmingChecksSupported) {
                         if (_activeVehicle.healthAndArmingCheckReport.canArm) {
                             if (_activeVehicle.healthAndArmingCheckReport.hasWarningsOrErrors) {
@@ -109,35 +183,27 @@ RowLayout {
             }
         }
 
-        Rectangle {
-            id:                 criticalMessageBadge
+        // Worst state across the dropdown tabs: messages, health and arming checks, and the pre-flight checklist
+        SeverityPill {
+            id:                 severityBadge
+            objectName:         "mainStatusSeverityBadge"
             anchors.top:        parent.top
             anchors.topMargin:  ScreenTools.defaultFontPixelHeight * 0.25
             anchors.right:      parent.right
-            width:              ScreenTools.defaultFontPixelHeight
-            height:             width
-            radius:             width / 2
-            color:              qgcPal.colorRed
-            visible:            _criticalMessageCount > 0
-
-            property int _criticalMessageCount: _activeVehicle ? _activeVehicle.criticalMessageCount : 0
-
-            QGCLabel {
-                anchors.centerIn:   parent
-                text:               criticalMessageBadge._criticalMessageCount > 9 ? "!" : criticalMessageBadge._criticalMessageCount.toString()
-                color:              qgcPal.buttonHighlightText
-                font.pointSize:     ScreenTools.smallFontPointSize
-                font.bold:          true
-            }
+            errorCount:         _activeVehicle ? _activeVehicle.unreadCriticalMessageCount + _healthErrorCount : 0
+            warningCount:       _activeVehicle ? _activeVehicle.unreadWarningMessageCount + _healthWarningCount +
+                                                 (_checklistWarning ? 1 : 0) : 0
+            unreadCount:        _activeVehicle ? _activeVehicle.unreadMessageCount : 0
+            warningLabel:       (_checklistWarning && warningCount === 1) ? qsTr("Pre-Flight") : qsTr("Warning")
         }
 
         QGCColoredImage {
             id:                 rebootRequiredIcon
             objectName:         "mainStatusRebootRequiredIcon"
-            anchors.verticalCenter: criticalMessageBadge.verticalCenter
-            anchors.right:      criticalMessageBadge.visible ? criticalMessageBadge.left : parent.right
-            anchors.rightMargin: criticalMessageBadge.visible ? ScreenTools.defaultFontPixelWidth * 0.25 : 0
-            width:              criticalMessageBadge.width * 0.9
+            anchors.verticalCenter: severityBadge.verticalCenter
+            anchors.right:      severityBadge.visible ? severityBadge.left : parent.right
+            anchors.rightMargin: severityBadge.visible ? ScreenTools.defaultFontPixelWidth * 0.25 : 0
+            width:              ScreenTools.defaultFontPixelHeight * 0.9
             height:             width
             source:             "/res/PowerButton.svg"
             color:              qgcPal.colorOrange
@@ -147,10 +213,10 @@ RowLayout {
         Rectangle {
             id:                 firmwareUpdateBadge
             objectName:         "mainStatusFirmwareUpdateBadge"
-            anchors.verticalCenter: criticalMessageBadge.verticalCenter
-            anchors.right:      rebootRequiredIcon.visible ? rebootRequiredIcon.left : (criticalMessageBadge.visible ? criticalMessageBadge.left : parent.right)
-            anchors.rightMargin: (rebootRequiredIcon.visible || criticalMessageBadge.visible) ? ScreenTools.defaultFontPixelWidth * 0.25 : 0
-            width:              criticalMessageBadge.width
+            anchors.verticalCenter: severityBadge.verticalCenter
+            anchors.right:      rebootRequiredIcon.visible ? rebootRequiredIcon.left : (severityBadge.visible ? severityBadge.left : parent.right)
+            anchors.rightMargin: (rebootRequiredIcon.visible || severityBadge.visible) ? ScreenTools.defaultFontPixelWidth * 0.25 : 0
+            width:              ScreenTools.defaultFontPixelHeight
             height:             width
             radius:             width / 2
             color:              Qt.rgba(1, 1, 1, 0.75)
@@ -204,9 +270,6 @@ RowLayout {
             waitForParameters:  false
             fillWindow:         true
             contentComponent:   mainStatusContentComponent
-
-            Component.onCompleted:   mainWindow.suppressCriticalVehicleMessages = true
-            Component.onDestruction: mainWindow.suppressCriticalVehicleMessages = false
         }
     }
 
@@ -219,8 +282,20 @@ RowLayout {
 
             property bool parametersReady: QGroundControl.multiVehicleManager.parameterReadyVehicleAvailable
 
+            // Only the Messages tab shows critical messages, so only then is the popup redundant
+            Binding {
+                target:     mainWindow
+                property:   "suppressCriticalVehicleMessages"
+                value:      tabBar.currentIndex === control.tabMessages
+            }
+
+            Connections {
+                target: control
+                function onTabRequested(tab) { tabBar.currentIndex = tab }
+            }
+
             RowLayout {
-                Layout.fillWidth:   true
+                Layout.alignment:   Qt.AlignHCenter
                 spacing:            ScreenTools.defaultFontPixelWidth
                 // Stop controls must stay reachable without parameters
                 visible:            parametersReady || _guidedController.showEmergencyStop || _guidedController.showDisarm || _rebootRequired
@@ -292,8 +367,6 @@ RowLayout {
                     }
                 }
 
-                Item { Layout.fillWidth: true }
-
                 QGCLabel {
                     Layout.maximumWidth:    ScreenTools.defaultFontPixelWidth * 16
                     Layout.maximumHeight:   rebootButton.height
@@ -346,20 +419,138 @@ RowLayout {
 
                 QGCButton {
                     objectName:     "mainStatusFirmwareUpdateAckButton"
-                    implicitHeight: contentItem.implicitHeight + topPadding + bottomPadding
-                    heightFactor:   0.2
-                    leftPadding:    ScreenTools.defaultFontPixelWidth
-                    rightPadding:   leftPadding
+                    small:          true
                     text:           qsTr("Acknowledge and Hide")
-                    pointSize:      ScreenTools.smallFontPointSize
                     visible:        _activeVehicle && !_activeVehicle.newStableFirmwareVersionAcknowledged
                     onClicked:      _activeVehicle.acknowledgeNewStableFirmwareVersion()
                 }
             }
 
-            SettingsGroupLayout {
+            QGCTabBar {
+                id:                 tabBar
                 Layout.fillWidth:   true
-                heading:            qsTr("Vehicle Messages")
+
+                // Keeps the centered tab labels clear of the widest (translated) status label
+                readonly property real badgePadding: Math.max(_severityLabelMaxWidth, passedLabelMetrics.advanceWidth,
+                                                              inProgressLabelMetrics.advanceWidth) + ScreenTools.defaultFontPixelWidth * 3
+
+                LabelMetrics { id: passedLabelMetrics;     text: qsTr("Passed") }
+                LabelMetrics { id: inProgressLabelMetrics; text: qsTr("In Progress") }
+
+                QGCTabButton {
+                    objectName:     "mainStatusChecklistTab"
+                    text:           qsTr("Pre-Flight Checklist")
+                    visible:        _checklistEnabled
+                    leftPadding:    tabBar.badgePadding
+                    rightPadding:   leftPadding
+
+                    TabStatusLabel {
+                        objectName: "mainStatusChecklistTabBadge"
+                        text:       _checklistComplete ? qsTr("Passed") : qsTr("In Progress")
+                        color:      _checklistComplete ? QGroundControl.globalPalette.successIndicator : QGroundControl.globalPalette.warningIndicator
+                    }
+                }
+
+                QGCTabButton {
+                    objectName:     "mainStatusMessagesTab"
+                    text:           qsTr("Vehicle Messages")
+                    leftPadding:    tabBar.badgePadding
+                    rightPadding:   leftPadding
+
+                    TabSeverityBadge {
+                        objectName:     "mainStatusMessagesTabBadge"
+                        errorCount:     _activeVehicle ? _activeVehicle.unreadCriticalMessageCount : 0
+                        warningCount:   _activeVehicle ? _activeVehicle.unreadWarningMessageCount : 0
+                        unreadCount:    _activeVehicle ? _activeVehicle.unreadMessageCount : 0
+                    }
+                }
+
+                QGCTabButton {
+                    objectName:     "mainStatusOverallStatusTab"
+                    text:           qsTr("Overall Status")
+                    leftPadding:    tabBar.badgePadding
+                    rightPadding:   leftPadding
+
+                    TabSeverityBadge {
+                        objectName:     "mainStatusOverallStatusTabBadge"
+                        errorCount:     _healthErrorCount
+                        warningCount:   _healthWarningCount
+                    }
+                }
+
+                Component.onCompleted: {
+                    if (control._initialTab !== -1) {
+                        currentIndex = control._initialTab
+                    } else {
+                        currentIndex = (_checklistEnabled && !_checklistComplete) ? control.tabChecklist : control.tabStatus
+                    }
+                }
+            }
+
+            Item {
+                id:                 checklistHost
+                Layout.fillWidth:   true
+                implicitHeight:     checklistLoader.item ? checklistLoader.item.implicitHeight : 0
+                visible:            _checklistEnabled && tabBar.currentIndex === control.tabChecklist
+
+                function adoptChecklist() {
+                    if (checklistLoader.item) {
+                        checklistLoader.item.parent = checklistHost
+                    }
+                }
+
+                Connections {
+                    target: checklistLoader
+                    function onItemChanged() { checklistHost.adoptChecklist() }
+                }
+
+                Binding {
+                    target:         checklistLoader.item
+                    property:       "width"
+                    value:          checklistHost.width
+                    restoreMode:    Binding.RestoreNone
+                }
+
+                Component.onCompleted: adoptChecklist()
+
+                // The checklist keeps its progress, so hand it back before this page is destroyed
+                Component.onDestruction: {
+                    if (checklistLoader.item) {
+                        checklistLoader.item.parent = checklistLoader
+                    }
+                }
+            }
+
+            ColumnLayout {
+                Layout.fillWidth:   true
+                spacing:            ScreenTools.defaultFontPixelHeight / 4
+                visible:            tabBar.currentIndex === control.tabMessages
+
+                RowLayout {
+                    Layout.fillWidth:   true
+                    spacing:            ScreenTools.defaultFontPixelWidth / 2
+                    visible:            !vehicleMessageList.noMessages
+
+                    Item { Layout.fillWidth: true }
+
+                    QGCButton {
+                        objectName:     "vehicleMessagesMarkReadButton"
+                        small:          true
+                        text:           qsTr("Mark as Read")
+                        visible:        _activeVehicle && _activeVehicle.hasUnreadMessages
+                        onClicked:      _activeVehicle.markMessagesRead()
+                    }
+
+                    QGCButton {
+                        objectName:     "vehicleMessagesClearButton"
+                        small:          true
+                        text:           qsTr("Clear")
+                        onClicked: {
+                            _activeVehicle.clearMessages()
+                            mainWindow.closeIndicatorDrawer()
+                        }
+                    }
+                }
 
                 VehicleMessageList {
                     id:                 vehicleMessageList
@@ -368,44 +559,56 @@ RowLayout {
                 }
 
                 QGCLabel {
-                    text: qsTr("No new vehicle messages")
-                    visible: vehicleMessageList.noMessages
+                    text:       qsTr("No new vehicle messages")
+                    visible:    vehicleMessageList.noMessages
                 }
             }
 
-            SettingsGroupLayout {
-                Layout.fillWidth:   true
-                heading:            qsTr("Sensor Status")
-                visible:            parametersReady && !_healthAndArmingChecksSupported
+            GridLayout {
+                id:             sensorStatusGrid
+                rowSpacing:     _spacing
+                columnSpacing:  _spacing
+                rows:           _activeVehicle.sysStatusSensorInfo.sensorNames.length
+                flow:           GridLayout.TopToBottom
+                visible:        tabBar.currentIndex === control.tabStatus && parametersReady && !_healthAndArmingChecksSupported
 
-                GridLayout {
-                    rowSpacing:     _spacing
-                    columnSpacing:  _spacing
-                    rows:           _activeVehicle.sysStatusSensorInfo.sensorNames.length
-                    flow:           GridLayout.TopToBottom
+                Repeater {
+                    model: _activeVehicle.sysStatusSensorInfo.sensorNames
+                    QGCLabel { text: modelData }
+                }
 
-                    Repeater {
-                        model: _activeVehicle.sysStatusSensorInfo.sensorNames
-                        QGCLabel { text: modelData }
-                    }
-
-                    Repeater {
-                        model: _activeVehicle.sysStatusSensorInfo.sensorStatus
-                        QGCLabel { text: modelData }
-                    }
+                Repeater {
+                    model: _activeVehicle.sysStatusSensorInfo.sensorStatus
+                    QGCLabel { text: modelData }
                 }
             }
 
-            SettingsGroupLayout {
+            ColumnLayout {
+                id:                 overallStatusList
                 Layout.fillWidth:   true
-                heading:            qsTr("Overall Status")
-                visible:            parametersReady && _healthAndArmingChecksSupported && _activeVehicle.healthAndArmingCheckReport.problemsForCurrentMode.count > 0
+                spacing:            _spacing
+                visible:            tabBar.currentIndex === control.tabStatus && parametersReady && _healthAndArmingChecksSupported &&
+                                    _activeVehicle.healthAndArmingCheckReport.problemsForCurrentMode.count > 0
+
+                QGCButton {
+                    objectName:         "healthChecksAcknowledgeAllButton"
+                    Layout.alignment:   Qt.AlignRight
+                    small:              true
+                    text:               qsTr("Acknowledge All Warnings")
+                    visible:            _healthWarningCount > 0
+                    onClicked:          _activeVehicle.healthAndArmingCheckReport.acknowledgeAllWarnings()
+                }
 
                 // List health and arming checks
                 Repeater {
                     model:      _activeVehicle ? _activeVehicle.healthAndArmingCheckReport.problemsForCurrentMode : null
                     delegate:   listdelegate
                 }
+            }
+
+            QGCLabel {
+                text:       parametersReady ? qsTr("No status issues") : qsTr("Waiting for parameters...")
+                visible:    tabBar.currentIndex === control.tabStatus && !sensorStatusGrid.visible && !overallStatusList.visible
             }
 
             Component {
@@ -422,12 +625,11 @@ RowLayout {
                         QGCLabel {
                             id:                     message
                             Layout.fillWidth:       true
-                            // Rounded up: the layout's whole-pixel width would otherwise wrap a short message
-                            Layout.maximumWidth:    Math.ceil(implicitWidth)
                             text:                   object.message
                             textFormat:             TextEdit.RichText
                             wrapMode:               Text.WordWrap
-                            color:                  object.severity == 'error' ? qgcPal.colorRed : object.severity == 'warning' ? qgcPal.colorOrange : qgcPal.text
+                            color:                  object.severity == 'error' ? qgcPal.errorText : (object.severity == 'warning' && !object.acknowledged) ? qgcPal.warningText : qgcPal.text
+                            opacity:                object.acknowledged ? 0.6 : 1
                             MouseArea {
                                 anchors.fill: parent
                                 onClicked: {
@@ -435,6 +637,14 @@ RowLayout {
                                         object.expanded = !object.expanded
                                 }
                             }
+                        }
+
+                        QGCLabel {
+                            Layout.alignment:       Qt.AlignVCenter
+                            text:                   qsTr("Acknowledged")
+                            font.pointSize:         ScreenTools.smallFontPointSize
+                            opacity:                0.6
+                            visible:                object.acknowledged
                         }
 
                         QGCColoredImage {
