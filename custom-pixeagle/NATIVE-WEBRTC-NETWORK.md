@@ -442,3 +442,11 @@ standard exclusions in the preceding final renewal (`post-pi-final-qgc.log`).
 The earlier installation-load failure and rejected reference-order experiment
 remain failed evidence. Short Pi success does not close provenance under loss,
 weak-link freshness, browser parity, sustained performance or platform gates.
+
+The guarded operator replay was intentionally capped at 75°C and ten minutes.
+It reached 75.45°C after 131.37 seconds and shut down cleanly; QGC had already
+shown the video and PixEagle panel before the cutoff. This confirms the operator
+path and the thermal guard, not sustained Pi capacity. A fan or equivalent
+cooling is required before longer replay, constrained-link tests or physical
+qualification. The normal `pixeagle.service`, saved field profile and installed
+source were not changed.
