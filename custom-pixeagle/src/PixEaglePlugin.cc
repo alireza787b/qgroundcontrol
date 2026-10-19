@@ -17,6 +17,14 @@ QGCCorePlugin* PixEaglePlugin::instance()
     return _pixEaglePluginInstance();
 }
 
+void PixEaglePlugin::cleanup()
+{
+    if (_pixeagle) {
+        _pixeagle->cleanupVideo();
+    }
+    QGCCorePlugin::cleanup();
+}
+
 const QVariantList& PixEaglePlugin::toolBarIndicators()
 {
     if (_toolBarIndicators.isEmpty()) {

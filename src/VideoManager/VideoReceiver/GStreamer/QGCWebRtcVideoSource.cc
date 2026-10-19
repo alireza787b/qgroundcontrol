@@ -6,20 +6,25 @@
 #include <gst/gst.h>
 #include <gst/rtp/gstrtpbuffer.h>
 #include <gst/sdp/sdp.h>
+#include <gst/video/video-event.h>
 #include <gst/webrtc/webrtc.h>
 
+#include <QtCore/QDeadlineTimer>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QJsonObject>
 #include <QtCore/QMap>
 #include <QtCore/QMutex>
 #include <QtCore/QMutexLocker>
 #include <QtCore/QSemaphore>
+#include <QtCore/QSize>
 #include <QtCore/QThread>
 #include <QtCore/QTimer>
 #include <QtCore/QUuid>
+#include <QtCore/QWaitCondition>
 #include <QtNetwork/QNetworkRequest>
 #include <QtWebSockets/QWebSocket>
 
+#include "GstSourceFactory.h"
 #include "QGCLoggingCategory.h"
 #include "QGCNetworkHelper.h"
 #include "QGCVideoFrameContextStore.h"
@@ -32,6 +37,7 @@ namespace {
 constexpr char CONTEXT_KEY[] = "qgc-webrtc-video-source";
 constexpr int MAX_CONTEXTS = 128;
 constexpr int MAX_CONTEXT_AGE_MS = 2000;
+constexpr int METADATA_JOIN_BUDGET_MS = 100;
 
 struct PacketContext
 {
@@ -55,11 +61,13 @@ struct MediaState
     GstBus* bus = nullptr;
     std::shared_ptr<const QGCWebRtcVideoOptions> options;
     QMutex mutex;
+    QWaitCondition metadataReady;
     QMap<GstClockTime, PacketContext> packets;
     QMap<quint64, FrameContext> metadata;
     QMap<quint64, qint64> consumed;
     QString providerEpoch;
     quint64 epoch = 0;
+    QSize requestedGeometry;
 
     void fail(const char* stage)
     {
@@ -67,6 +75,7 @@ struct MediaState
             return;
         }
         qCWarning(QGCWebRtcVideoSourceLog) << "WebRTC failed at stage" << stage;
+        metadataReady.wakeAll();
         GError* error = g_error_new_literal(GST_RESOURCE_ERROR, GST_RESOURCE_ERROR_READ, stage);
         gst_bus_post(bus, gst_message_new_error(GST_OBJECT(peer), error, stage));
         g_error_free(error);
@@ -146,6 +155,19 @@ GstPadProbeReturn observeRtp(GstPad* pad, GstPadProbeInfo* info, gpointer data)
     }
     gst_rtp_buffer_unmap(&packet);
     return GST_PAD_PROBE_OK;
+}
+
+void configureLossRecovery(GstBin*, GstBin*, GstElement* element, gpointer)
+{
+    GstElementFactory* factory = gst_element_get_factory(element);
+    if (!factory || !gst_element_factory_list_is_type(factory, GST_ELEMENT_FACTORY_TYPE_DEPAYLOADER)) {
+        return;
+    }
+    for (const auto* property : {"request-keyframe", "wait-for-keyframe"}) {
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(element), property)) {
+            g_object_set(element, property, TRUE, nullptr);
+        }
+    }
 }
 
 void exposeParsedPad(GstElement* parser, GstPad* pad, gpointer data)
@@ -399,7 +421,8 @@ private:
         }
         for (guint i = 0; i < gst_caps_get_size(caps); ++i) {
             gst_structure_set(gst_caps_get_structure(caps, i), "extmap-1", G_TYPE_STRING,
-                              "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01", nullptr);
+                              "http://www.ietf.org/id/draft-holmer-rmcat-transport-wide-cc-extensions-01",
+                              "rtcp-fb-nack", G_TYPE_BOOLEAN, TRUE, "rtcp-fb-nack-pli", G_TYPE_BOOLEAN, TRUE, nullptr);
         }
         GstWebRTCRTPTransceiver* transceiver = nullptr;
         g_signal_emit_by_name(_state->peer, "add-transceiver", GST_WEBRTC_RTP_TRANSCEIVER_DIRECTION_RECVONLY, caps,
@@ -409,6 +432,12 @@ private:
             _state->fail("transceiver");
             return;
         }
+        if (!g_object_class_find_property(G_OBJECT_GET_CLASS(transceiver), "do-nack")) {
+            gst_object_unref(transceiver);
+            _state->fail("packet_recovery");
+            return;
+        }
+        g_object_set(transceiver, "do-nack", TRUE, nullptr);
         gst_object_unref(transceiver);
         // The promise callback runs on a GStreamer task; never wait on the Qt event loop.
         auto* callbackTarget = new CallbackTargetPtr(_target);
@@ -594,6 +623,7 @@ private:
             envelope.insert("selection_geometry", geometry);
         }
         _state->metadata.insert(identity, FrameContext{envelope, challenge.value(), now});
+        _state->metadataReady.wakeAll();
     }
 
     const QUrl _url;
@@ -674,6 +704,10 @@ public:
     void stop()
     {
         state.accepting.store(false);
+        {
+            QMutexLocker lock(&state.mutex);
+            state.metadataReady.wakeAll();
+        }
         if (thread) {
             thread->stop();
             thread.reset();
@@ -696,6 +730,17 @@ QGCWebRtcVideoSource::QGCWebRtcVideoSource(std::unique_ptr<Impl> impl)
 
 QGCWebRtcVideoSource::~QGCWebRtcVideoSource() = default;
 
+QJsonObject QGCWebRtcVideoStatistics::snapshot() const
+{
+    return {{"missing_packet_context", static_cast<qint64>(missingPacketContext.load())},
+            {"missing_metadata", static_cast<qint64>(missingMetadata.load())},
+            {"metadata_join_timeouts", static_cast<qint64>(metadataJoinTimeouts.load())},
+            {"keyframe_requests", static_cast<qint64>(keyframeRequests.load())},
+            {"rejected_dimensions", static_cast<qint64>(rejectedDimensions.load())},
+            {"corrupted_frames", static_cast<qint64>(corruptedFrames.load())},
+            {"associated_frames", static_cast<qint64>(associatedFrames.load())}};
+}
+
 bool QGCWebRtcVideoSource::available()
 {
     for (const auto* name : {"webrtcbin", "nicesrc", "nicesink", "dtlssrtpdec", "dtlssrtpenc", "rtph264depay",
@@ -711,7 +756,7 @@ bool QGCWebRtcVideoSource::available()
 
 GstElement* QGCWebRtcVideoSource::create(const QUrl& signalingUrl, std::shared_ptr<const QGCWebRtcVideoOptions> options)
 {
-    if (!available() || !options || !options->frameContexts || signalingUrl.host().isEmpty() ||
+    if (!available() || !options || !options->frameContexts || !options->statistics || signalingUrl.host().isEmpty() ||
         (signalingUrl.scheme() != QLatin1String("ws") && signalingUrl.scheme() != QLatin1String("wss")) ||
         !signalingUrl.userInfo().isEmpty() || options->cookie.contains('\r') || options->cookie.contains('\n') ||
         options->origin.contains('\r') || options->origin.contains('\n')) {
@@ -727,6 +772,8 @@ GstElement* QGCWebRtcVideoSource::create(const QUrl& signalingUrl, std::shared_p
         gst_clear_object(&bin);
         return nullptr;
     }
+    GStreamer::SourceFactory::configureParseBin(impl->state.parser);
+    g_signal_connect(impl->state.parser, "deep-element-added", G_CALLBACK(configureLossRecovery), nullptr);
     impl->url = signalingUrl;
     g_object_set(impl->state.peer, "bundle-policy", GST_WEBRTC_BUNDLE_POLICY_MAX_BUNDLE, "latency", 80u, nullptr);
     gst_bin_add_many(GST_BIN(bin), impl->state.peer, impl->state.parser, nullptr);
@@ -763,6 +810,22 @@ void QGCWebRtcVideoSource::deactivate(GstElement* source)
     }
 }
 
+void QGCWebRtcVideoSource::configureDecoder(GstElement* source, GstElement* decoder)
+{
+    if (!source || !decoder || !g_object_get_data(G_OBJECT(source), CONTEXT_KEY)) {
+        return;
+    }
+    // Concealed pixels cannot establish interactive frame identity after packet loss.
+    for (const auto* property : {"discard-corrupted-frames", "automatic-request-sync-points"}) {
+        if (g_object_class_find_property(G_OBJECT_GET_CLASS(decoder), property)) {
+            g_object_set(decoder, property, TRUE, nullptr);
+        }
+    }
+    if (g_object_class_find_property(G_OBJECT_GET_CLASS(decoder), "output-corrupt")) {
+        g_object_set(decoder, "output-corrupt", FALSE, nullptr);
+    }
+}
+
 void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* pad, GstPadProbeInfo* info)
 {
     auto* context = static_cast<QGCWebRtcVideoSource*>(g_object_get_data(G_OBJECT(source), CONTEXT_KEY));
@@ -786,6 +849,17 @@ void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* 
         gst_event_unref(event);
     }
     qint64 timestamp = -1;
+    bool requestKeyframe = false;
+    int width = 0;
+    int height = 0;
+    if (GstCaps* caps = gst_pad_get_current_caps(pad)) {
+        if (!gst_caps_is_empty(caps)) {
+            const GstStructure* format = gst_caps_get_structure(caps, 0);
+            gst_structure_get_int(format, "width", &width);
+            gst_structure_get_int(format, "height", &height);
+        }
+        gst_caps_unref(caps);
+    }
     {
         QMutexLocker lock(&state.mutex);
         const auto now = QGCVideoFrameContextStore::monotonicMs();
@@ -794,14 +868,52 @@ void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* 
         if (state.accepting.load() && packet != state.packets.end() && packet->valid) {
             const auto identity = packet->identity;
             state.packets.erase(packet);
+            if (!state.consumed.contains(identity) && !state.metadata.contains(identity)) {
+                // Metadata and RTP travel independently. Hold this exact decoded buffer briefly;
+                // never authorize an image retroactively after it has been presented.
+                const QDeadlineTimer deadline(METADATA_JOIN_BUDGET_MS);
+                while (state.accepting.load() && !state.metadata.contains(identity) &&
+                       !state.consumed.contains(identity) && !deadline.hasExpired()) {
+                    state.metadataReady.wait(&state.mutex, deadline);
+                }
+                if (state.accepting.load() && !state.metadata.contains(identity)) {
+                    ++state.options->statistics->metadataJoinTimeouts;
+                }
+            }
             auto metadata = state.metadata.find(identity);
-            if (!state.consumed.contains(identity) && metadata != state.metadata.end()) {
-                timestamp =
-                    state.options->frameContexts->insert(state.epoch, metadata->metadata, metadata->challengeMs);
+            if (state.accepting.load() && !state.consumed.contains(identity) && metadata != state.metadata.end()) {
+                const auto provenance = metadata->metadata.value("provenance").toObject();
+                // A lost resize keyframe can leave a decoder concealing at its previous size.
+                if (GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_CORRUPTED)) {
+                    ++state.options->statistics->corruptedFrames;
+                } else if (width <= 0 || height <= 0 || provenance.value("encoded_width").toInt() != width ||
+                           provenance.value("encoded_height").toInt() != height) {
+                    ++state.options->statistics->rejectedDimensions;
+                    const QSize expected(provenance.value("encoded_width").toInt(),
+                                         provenance.value("encoded_height").toInt());
+                    if (!expected.isEmpty() && state.requestedGeometry != expected) {
+                        state.requestedGeometry = expected;
+                        requestKeyframe = true;
+                    }
+                } else {
+                    state.requestedGeometry = {};
+                    timestamp =
+                        state.options->frameContexts->insert(state.epoch, metadata->metadata, metadata->challengeMs);
+                    ++state.options->statistics->associatedFrames;
+                }
                 state.metadata.erase(metadata);
+            } else {
+                ++state.options->statistics->missingMetadata;
             }
             state.consumed.insert(identity, now);
+        } else {
+            ++state.options->statistics->missingPacketContext;
         }
+    }
+    if (requestKeyframe && state.accepting.load()) {
+        ++state.options->statistics->keyframeRequests;
+        // Ask through negotiated RTCP feedback once per unresolved resize, not on every delta frame.
+        gst_pad_push_event(pad, gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
     }
     buffer = gst_buffer_make_writable(buffer);
     GST_PAD_PROBE_INFO_DATA(info) = buffer;

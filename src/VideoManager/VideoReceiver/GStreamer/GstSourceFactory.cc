@@ -945,16 +945,8 @@ GstElement* create(const QString& uri, const Config& config)
     } else {
         // parsebin creates the depayloader and codec parser only after it sees the stream caps. Configure them
         // as soon as they are autoplugged, before data flows.
-        (void) g_signal_connect(parser.get(), "deep-element-added", G_CALLBACK(configureAutopluggedElement), nullptr);
+        configureParseBin(parser.get());
     }
-
-    // Older Linux/system GStreamer misnegotiates parser->decoder caps; force avc/hvc1 there only.
-    // Bundled 1.28+ SDKs do not need it, and the forced caps break byte-stream HW decoders.
-#if defined(QGC_GST_ENABLE_LEGACY_PARSEBIN_CAPS_FILTER)
-    if (!isUdpH265) {
-        (void) g_signal_connect(parser.get(), "autoplug-query", G_CALLBACK(filterParserCaps), nullptr);
-    }
-#endif
 
     // From here on the bin owns every element; the borrowed pointers stay valid while bin is alive.
     GstElement* upstream = addToBin(bin.get(), std::move(source), "source");
@@ -1011,6 +1003,17 @@ GstElement* create(const QString& uri, const Config& config)
     }
 
     return bin.release();
+}
+
+void configureParseBin(GstElement* parser)
+{
+    if (!parser) {
+        return;
+    }
+    (void) g_signal_connect(parser, "deep-element-added", G_CALLBACK(configureAutopluggedElement), nullptr);
+#if defined(QGC_GST_ENABLE_LEGACY_PARSEBIN_CAPS_FILTER)
+    (void) g_signal_connect(parser, "autoplug-query", G_CALLBACK(filterParserCaps), nullptr);
+#endif
 }
 
 void gateOnParameterSets(GstPad* depayloaderSrc, bool h265)

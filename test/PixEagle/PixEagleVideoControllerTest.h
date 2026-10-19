@@ -10,6 +10,7 @@ private slots:
     void _preEnabledVideoPublishesControllerBeforeView();
     void _videoEnabledAfterInitialization();
     void _initializationIsIdempotent();
+    void _cleanupRetiresVideoBeforeApplicationDestruction();
     void _externalVideoDoesNotRequireStockStreamSetting();
     void _nativeCapabilityRequiresEveryPrerequisite();
     void _mediaFallbackResetsOnlyWithMediaIdentity();

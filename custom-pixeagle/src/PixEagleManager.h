@@ -36,6 +36,7 @@ public:
     QUrl dashboardUrl() const;
     QString dashboardUrlOverride() const;
     void initializeVideo();
+    void cleanupVideo();
 
     PixEagleVideoController* video() const { return _video; }
 
@@ -62,4 +63,5 @@ private:
     QHash<Vehicle*, QString> _provisionalEndpoints;
     PixEagleClient* _companion = nullptr;
     PixEagleVideoController* _video = nullptr;
+    bool _videoShutdown = false;
 };

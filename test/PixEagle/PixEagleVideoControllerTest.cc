@@ -1,9 +1,13 @@
 #include "PixEagleVideoControllerTest.h"
 
+#include <gst/gst.h>
+
 #include <QtCore/QJsonArray>
 #include <QtCore/QScopeGuard>
 #include <QtTest/QSignalSpy>
 
+#include "GStreamer.h"
+#include "GstVideoReceiver.h"
 #include "PixEagleManager.h"
 #include "PixEaglePlugin.h"
 #include "PixEagleSettings.h"
@@ -60,6 +64,30 @@ private:
     QString _endpoint;
 };
 }  // namespace
+
+void PixEagleVideoControllerTest::_cleanupRetiresVideoBeforeApplicationDestruction()
+{
+    if (!gst_is_initialized()) {
+        GStreamer::prepareEnvironment();
+        gst_init(nullptr, nullptr);
+    }
+    QVERIFY(GStreamer::completeInit());
+    VideoFixture test;
+    QVERIFY(test.valid());
+    PixEagleManager manager(test.settings);
+    manager.initializeVideo();
+    QPointer<PixEagleVideoController> video = manager.video();
+    QVERIFY(video);
+    QTRY_VERIFY_WITH_TIMEOUT(video->_createReceiver(), TestTimeout::mediumMs());
+    QPointer<GstVideoReceiver> receiver = video->_receiver;
+    QVERIFY(receiver);
+    manager.cleanupVideo();
+    QVERIFY(!video);
+    QVERIFY(!receiver);
+    manager.cleanupVideo();
+    manager.initializeVideo();
+    QVERIFY(!manager.video());
+}
 
 void PixEagleVideoControllerTest::_preEnabledVideoPublishesControllerBeforeView()
 {

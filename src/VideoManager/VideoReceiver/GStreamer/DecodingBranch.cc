@@ -314,6 +314,11 @@ void DecodingBranch::_onDecoderElementAdded(GstBin* /*decodebin*/, GstBin* /*sub
         return;
     }
 
+    auto* self = static_cast<DecodingBranch*>(data);
+#if defined(QGC_GST_WEBRTC)
+    QGCWebRtcVideoSource::configureDecoder(self->_receiver._source, element);
+#endif
+
     // Live streams: once a frame is late, the videodecoder base class advances earliest_time and drops every frame
     // after it. Turned off here, before the decoder sees data, for each decoder decodebin3 plugs, later swaps included.
     if (g_object_class_find_property(G_OBJECT_GET_CLASS(element), "qos")) {
@@ -324,7 +329,6 @@ void DecodingBranch::_onDecoderElementAdded(GstBin* /*decodebin*/, GstBin* /*sub
         << "Decodebin3 selected" << GStreamer::describeDecoderFactory(factory) << "- QoS disabled";
     const QString decoderName = QString::fromUtf8(gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)));
 
-    auto* self = static_cast<DecodingBranch*>(data);
     self->_receiver._runOnWorkerForPipeline([self, decoderName]() {
         {
             QMutexLocker locker(&self->_decoderNameMutex);

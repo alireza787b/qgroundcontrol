@@ -52,6 +52,9 @@ bool activate(GstElement* source);
 /// Stop source-specific network clients before their GStreamer bin is released.
 /// No-op for source families whose lifetime is managed entirely by GStreamer.
 void deactivate(GstElement* source);
+/// Apply the shared codec/parameter-set policy to elements autoplugged by parsebin.
+void configureParseBin(GstElement* parser);
+
 /// Holds an RTP H.264/H.265 depayloader's byte-stream output back until a full parameter set (SPS and PPS, plus VPS
 /// for H.265) has arrived, then emits the parameter sets together with the first slice and removes itself. create()
 /// applies it to every depayloader it builds or parsebin plugs; length-prefixed output is left alone.

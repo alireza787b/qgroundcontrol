@@ -92,6 +92,9 @@ components. Its fresh build, repeated native presentation tests and all 471
 Unit/Integration suites pass with the standard exclusions. The checkpoint records
 the initial failures and their resolutions separately.
 
+The next [constrained-network checkpoint](NATIVE-WEBRTC-NETWORK.md) records
+real namespace-shaped traffic and the outstanding low-bandwidth repairs.
+
 ## Remaining gates
 
 1. End-to-end automatic transport/fallback tests through the custom controller,

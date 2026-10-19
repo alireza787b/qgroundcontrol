@@ -2,6 +2,7 @@
 
 #include <gst/gst.h>
 
+#include <QtCore/QElapsedTimer>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
@@ -23,6 +24,41 @@
 #if defined(QGC_CUSTOM_BUILD)
 #include "PixEagleVideoItem.h"
 #endif
+
+void QGCWebRtcVideoSourceTest::_nativeDecoderRecoveryPreservesStockPolicy()
+{
+    if (!gst_is_initialized()) {
+        GStreamer::prepareEnvironment();
+        gst_init(nullptr, nullptr);
+    }
+    GstElement* decoder = gst_element_factory_make("avdec_h264", nullptr);
+    if (!decoder) {
+        QSKIP("libav decoder is not installed on this platform");
+    }
+    const auto releaseDecoder = qScopeGuard([&] { gst_object_unref(decoder); });
+    gboolean original = FALSE;
+    g_object_get(decoder, "output-corrupt", &original, nullptr);
+    GstElement* stockSource = gst_bin_new(nullptr);
+    const auto releaseStock = qScopeGuard([&] { gst_object_unref(stockSource); });
+    QGCWebRtcVideoSource::configureDecoder(stockSource, decoder);
+    gboolean actual = FALSE;
+    g_object_get(decoder, "output-corrupt", &actual, nullptr);
+    QCOMPARE(actual, original);
+
+    auto options = std::make_shared<QGCWebRtcVideoOptions>();
+    options->frameContexts = std::make_shared<QGCVideoFrameContextStore>();
+    options->origin = QStringLiteral("http://127.0.0.1:8197");
+    GstElement* nativeSource = QGCWebRtcVideoSource::create(QUrl(QStringLiteral("ws://127.0.0.1:8197/ws")), options);
+    QVERIFY(nativeSource);
+    const auto releaseNative = qScopeGuard([&] { gst_object_unref(nativeSource); });
+    QGCWebRtcVideoSource::configureDecoder(nativeSource, decoder);
+    g_object_get(decoder, "output-corrupt", &actual, nullptr);
+    QVERIFY(!actual);
+    g_object_get(decoder, "discard-corrupted-frames", &actual, nullptr);
+    QVERIFY(actual);
+    g_object_get(decoder, "automatic-request-sync-points", &actual, nullptr);
+    QVERIFY(actual);
+}
 
 void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext_data()
 {
@@ -56,6 +92,7 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
 
     GstVideoReceiver receiver;
     receiver.setAutoReconnect(false);
+    receiver.setLowLatency(true);
     QSize expectedSize(160, 120);
     QVideoSink standaloneSink;
     QVideoSink* videoSink = &standaloneSink;
@@ -98,6 +135,13 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
     int verified = 0;
     int missing = 0;
     QString failure;
+    QElapsedTimer observation;
+    observation.start();
+    qint64 lastFrameMs = 0;
+    qint64 firstFrameMs = -1;
+    qint64 largestGapMs = 0;
+    QSize smallestFrame;
+    QSize largestFrame;
     connect(videoSink, &QVideoSink::videoFrameChanged, this, [&](const QVideoFrame& frame) {
         if (!frame.isValid()) {
             return;
@@ -108,22 +152,52 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
             return;
         }
         const QImage image = frame.toImage();
-        if (image.size() != expectedSize) {
-            failure = QStringLiteral("Unexpected presented dimensions");
+        const auto provenance = context->metadata.value("provenance").toObject();
+        const QSize encodedSize(provenance.value("encoded_width").toInt(), provenance.value("encoded_height").toInt());
+        if (image.size() != encodedSize) {
+            failure = QStringLiteral("Presented %1x%2 differs from context %3x%4 (capture %5)")
+                          .arg(image.width())
+                          .arg(image.height())
+                          .arg(encodedSize.width())
+                          .arg(encodedSize.height())
+                          .arg(provenance.value("capture_id").toString());
             return;
         }
         int captureId = 0;
         for (int bit = 0; bit < 16; ++bit) {
-            if (qGray(image.pixel(bit * 8 + 4, 16)) > 128) {
+            const int x = (bit * 8 + 4) * image.width() / expectedSize.width();
+            const int y = 16 * image.height() / expectedSize.height();
+            if (qGray(image.pixel(x, y)) > 128) {
                 captureId |= 1 << bit;
             }
         }
-        if (context->metadata.value("provenance").toObject().value("capture_id").toString() !=
-            QString::number(captureId)) {
-            failure = QStringLiteral("Presented barcode differs from its exact frame context");
+        if (provenance.value("capture_id").toString() != QString::number(captureId)) {
+            const QString expected = provenance.value("capture_id").toString();
+            failure = QStringLiteral("Presented barcode %1 differs from context %2 at Qt timestamp %3")
+                          .arg(captureId)
+                          .arg(expected)
+                          .arg(frame.startTime());
+            const QString imagePrefix = qEnvironmentVariable("QGC_WEBRTC_FAILURE_IMAGE");
+            if (!imagePrefix.isEmpty()) {
+                image.save(imagePrefix + QLatin1Char('-') + codec.toLower() + QStringLiteral(".png"));
+            }
             return;
         }
         ++verified;
+        const qint64 now = observation.elapsed();
+        if (firstFrameMs < 0) {
+            firstFrameMs = now;
+        }
+        if (lastFrameMs) {
+            largestGapMs = std::max(largestGapMs, now - lastFrameMs);
+        }
+        lastFrameMs = now;
+        if (smallestFrame.isEmpty() || image.width() < smallestFrame.width()) {
+            smallestFrame = image.size();
+        }
+        if (image.width() > largestFrame.width()) {
+            largestFrame = image.size();
+        }
     });
     QSignalSpy started(&receiver, &VideoReceiver::onStartComplete);
     QSignalSpy stopped(&receiver, &VideoReceiver::onStopComplete);
@@ -134,12 +208,26 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
     receiver.startDecoding(sink);
     QTRY_VERIFY_WITH_TIMEOUT(!decoding.isEmpty(), 5000);
     QCOMPARE(decoding.first().first().value<VideoReceiver::STATUS>(), VideoReceiver::STATUS_OK);
-    QTRY_VERIFY2_WITH_TIMEOUT(verified >= 12 || !failure.isEmpty() || !stopped.isEmpty(),
-                              qPrintable(QStringLiteral("%1 verified, %2 without metadata").arg(verified).arg(missing)),
-                              15000);
+    QTRY_VERIFY2_WITH_TIMEOUT(
+        verified >= 12 || !failure.isEmpty() || !stopped.isEmpty(),
+        qPrintable(
+            QStringLiteral("%1 verified, %2 without metadata; %3")
+                .arg(verified)
+                .arg(missing)
+                .arg(QString::fromUtf8(QJsonDocument(options->statistics->snapshot()).toJson(QJsonDocument::Compact)))),
+        15000);
     QVERIFY2(failure.isEmpty(), qPrintable(failure));
     QVERIFY2(verified >= 12,
              qPrintable(QStringLiteral("Only %1 verified frames; %2 without metadata").arg(verified).arg(missing)));
+    const int minimumDuration = std::clamp(qEnvironmentVariableIntValue("QGC_WEBRTC_TEST_DURATION_MS"), 0, 120000);
+    QTRY_VERIFY_WITH_TIMEOUT(
+        observation.elapsed() - firstFrameMs >= minimumDuration || !failure.isEmpty() || !stopped.isEmpty(),
+        minimumDuration + 2000);
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    QVERIFY(stopped.isEmpty());
+    QVERIFY2(
+        observation.elapsed() - lastFrameMs < 1500,
+        qPrintable(QString::fromUtf8(QJsonDocument(options->statistics->snapshot()).toJson(QJsonDocument::Compact))));
 #if defined(QGC_CUSTOM_BUILD)
     QTRY_VERIFY2_WITH_TIMEOUT(widget.selectionReady(), qPrintable(widget.selectionError()), 5000);
     const auto presented = widget.capturePresentedContext();
@@ -163,6 +251,12 @@ void QGCWebRtcVideoSourceTest::_presentedFrameMatchesExactRtpContext()
     receiver.stop();
     QTRY_VERIFY_WITH_TIMEOUT(!stopped.isEmpty(), 10000);
     QVERIFY(!options->frameContexts->lookup(videoSink->videoFrame().startTime()));
+    QVERIFY2(failure.isEmpty(), qPrintable(failure));
+    expectLogMessage("default", QtInfoMsg, QRegularExpression(QStringLiteral(".*verified frames.*")));
+    qInfo() << codec << "verified frames" << verified << "missing context" << missing << "observation ms"
+            << observation.elapsed() << "largest verified-frame gap ms" << largestGapMs << "smallest frame"
+            << smallestFrame << "largest frame" << largestFrame << "association" << options->statistics->snapshot();
+    verifyExpectedLogMessage();
 }
 
 UT_REGISTER_TEST_STANDALONE(QGCWebRtcVideoSourceTest, TestLabel::Integration, TestLabel::Network)

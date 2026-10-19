@@ -14,6 +14,7 @@ public:
 
     static QGCCorePlugin* instance();
     void registerCustomSettings(SettingsManager* settingsManager) override;
+    void cleanup() override;
     const QVariantList& toolBarIndicators() override;
 
     PixEagleManager* pixeagle() const { return _pixeagle; }

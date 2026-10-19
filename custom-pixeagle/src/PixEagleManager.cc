@@ -1,5 +1,7 @@
 #include "PixEagleManager.h"
 
+#include <utility>
+
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QSettings>
 
@@ -223,11 +225,18 @@ bool PixEagleManager::setDashboardUrlOverride(const QString& address)
 
 void PixEagleManager::initializeVideo()
 {
-    if (!_video) {
+    if (!_video && !_videoShutdown) {
         _video = new PixEagleVideoController(this, _settings);
         emit videoChanged();
         _video->initialize();
     }
+}
+
+void PixEagleManager::cleanupVideo()
+{
+    _videoShutdown = true;
+    auto* video = std::exchange(_video, nullptr);
+    delete video;
 }
 
 QStringList PixEagleManager::vehicleLabels() const
