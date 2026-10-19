@@ -4,6 +4,7 @@
 
 #include <QtCore/QJsonArray>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QSaveFile>
 #include <QtCore/QScopeGuard>
 #include <QtQuick/QQuickWindow>
 #include <QtTest/QSignalSpy>
@@ -332,14 +333,13 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
     test.manager->initializeVideo();
     auto* controller = test.manager->video();
     QVERIFY(controller);
-    PixEagleClient client(nullptr, true);
+    auto& client = *test.manager->activeClient();
     client.setEndpoint(endpoint.toString());
     client.setEnabled(true);
     client.signIn(QStringLiteral("operator"), QStringLiteral("fixture-only"));
     QTRY_VERIFY2_WITH_TIMEOUT(client.authenticated() && !client.busy(), qPrintable(client.statusText()), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), 5000);
-    controller->_client = &client;
-    const auto restore = qScopeGuard([controller]() { controller->_bindClient(); });
+    const auto signOut = qScopeGuard([&]() { client.signOut(); });
     QQuickWindow window;
     window.resize(640, 480);
     PixEagleVideoItem surface(window.contentItem());
@@ -378,6 +378,50 @@ void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
     QCOMPARE(controller->_runningKey, mediaIdentity);
     const auto receipt = controller->_contexts->presentationStatistics();
     QVERIFY(receipt.value("presented_frames").toInteger() > 0);
+    const QString mediaControl = qEnvironmentVariable("QGC_PIXEAGLE_TEST_MEDIA_CONTROL_FILE");
+    if (!mediaControl.isEmpty()) {
+        QVERIFY(!expectFallback);
+        const auto writeControl = [&](const QJsonObject& value) {
+            QSaveFile file(mediaControl);
+            const auto payload = QJsonDocument(value).toJson(QJsonDocument::Compact);
+            return file.open(QIODevice::WriteOnly) && file.write(payload) == payload.size() && file.commit();
+        };
+        const auto sourceAttempt = controller->_attemptGeneration;
+        const QJsonObject live{{"source", "recovery-camera"}, {"mode", "live"}};
+        // Status refresh may retire the old receiver before its remote-error callback arrives.
+        ignoreLogMessage("Video.GStreamer.WebRtcVideoSource", QtWarningMsg,
+                         QRegularExpression(QStringLiteral("WebRTC failed at stage remote_media")));
+        ignoreLogMessage("Video.GStreamer.GstVideoReceiver", QtWarningMsg,
+                         QRegularExpression(QStringLiteral("GStreamer error.*remote_media")));
+        QVERIFY(writeControl(live));
+        QTRY_VERIFY_WITH_TIMEOUT(controller->_desiredKey != mediaIdentity && !controller->_desiredKey.isEmpty(), 8000);
+        QTRY_VERIFY2_WITH_TIMEOUT(
+            surface.frameFresh() && surface.selectionReady() && controller->_runningKey == controller->_desiredKey,
+            qPrintable(controller->statusText()), 15000);
+        QVERIFY(controller->_attemptGeneration > sourceAttempt);
+        QVERIFY(controller->_usingWebRtc);
+        const QString recoveredIdentity = controller->_desiredKey;
+        const auto recoveredAttempt = controller->_attemptGeneration;
+        QVERIFY(writeControl({{"source", "recovery-camera"}, {"mode", "freeze"}}));
+        QTRY_VERIFY_WITH_TIMEOUT(!surface.frameFresh() && !surface.selectionReady(), 6000);
+        QVERIFY(writeControl(live));
+        QTRY_VERIFY_WITH_TIMEOUT(surface.frameFresh() && surface.selectionReady(), 6000);
+        QCOMPARE(controller->_desiredKey, recoveredIdentity);
+        QCOMPARE(controller->_attemptGeneration, recoveredAttempt);
+
+        client.signOut();
+        QTRY_VERIFY_WITH_TIMEOUT(controller->_state == PixEagleVideoController::State::Idle && !controller->_receiver,
+                                 10000);
+        QVERIFY(controller->_desiredKey.isEmpty());
+        QVERIFY(!surface.presentationKnown());
+        QVERIFY(!controller->_retryTimer.isActive());
+        QTRY_VERIFY_WITH_TIMEOUT(!client.busy(), 5000);
+        client.signIn(QStringLiteral("operator"), QStringLiteral("fixture-only"));
+        QTRY_VERIFY2_WITH_TIMEOUT(client.authenticated() && !client.busy(), qPrintable(client.statusText()), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(surface.frameFresh() && surface.selectionReady(), 15000);
+        QVERIFY(controller->_desiredKey != recoveredIdentity);
+        QVERIFY(controller->_usingWebRtc);
+    }
     const auto attempt = controller->_attemptGeneration;
     test.settings->videoEnabled()->setRawValue(false);
     QTRY_VERIFY_WITH_TIMEOUT(controller->_state == PixEagleVideoController::State::Idle, 10000);

@@ -72,7 +72,7 @@ struct MediaState
     QString providerEpoch;
     quint64 epoch = 0;
     QGCRtpReferenceState references;
-    quint64 requestedReferenceGeneration = 0;
+    bool syncRequested = false;
 
     void fail(const char* stage)
     {
@@ -175,13 +175,14 @@ GstPadProbeReturn observeAccessUnit(GstPad* pad, GstPadProbeInfo* info, gpointer
         if (event) {
             gst_event_unref(event);
         }
-        return GST_PAD_PROBE_OK;
+        return GST_PAD_PROBE_DROP;
     }
     const GstSegment* segment = nullptr;
     gst_event_parse_segment(event, &segment);
     const auto running = gst_segment_to_running_time(segment, GST_FORMAT_TIME, GST_BUFFER_PTS(buffer));
     gst_event_unref(event);
     bool requestSync = false;
+    bool admitted = false;
     {
         QMutexLocker lock(&state->mutex);
         auto packet = state->packets.find(running);
@@ -189,17 +190,21 @@ GstPadProbeReturn observeAccessUnit(GstPad* pad, GstPadProbeInfo* info, gpointer
             packet->accessUnitVerified = state->references.observeAccessUnit(
                 packet->reference, !GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_DELTA_UNIT),
                 GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_CORRUPTED));
-            if (!packet->accessUnitVerified && state->requestedReferenceGeneration != state->references.generation()) {
-                state->requestedReferenceGeneration = state->references.generation();
-                requestSync = true;
-            }
+            admitted = packet->accessUnitVerified;
+        }
+        if (admitted) {
+            state->syncRequested = false;
+        } else {
+            ++state->options->statistics->unsafeReferenceFrames;
+            requestSync = !state->syncRequested;
+            state->syncRequested = true;
         }
     }
     if (requestSync && state->accepting.load()) {
         ++state->options->statistics->keyframeRequests;
         gst_pad_send_event(pad, gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
     }
-    return GST_PAD_PROBE_OK;
+    return admitted ? GST_PAD_PROBE_OK : GST_PAD_PROBE_DROP;
 }
 
 void configureLossRecovery(GstBin*, GstBin*, GstElement* element, gpointer)
@@ -241,7 +246,6 @@ void exposeParsedPad(GstElement* parser, GstPad* pad, gpointer data)
     }
     GstObject* parent = gst_object_get_parent(GST_OBJECT(parser));
     if (parent) {
-        gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, observeAccessUnit, state, nullptr);
         GstPad* ghost = gst_ghost_pad_new("src", pad);
         if (ghost) {
             gst_pad_set_active(ghost, TRUE);
@@ -897,6 +901,12 @@ void QGCWebRtcVideoSource::configureDecoder(GstElement* source, GstElement* deco
     if (g_object_class_find_property(G_OBJECT_GET_CLASS(decoder), "output-corrupt")) {
         g_object_set(decoder, "output-corrupt", FALSE, nullptr);
     }
+}
+
+bool QGCWebRtcVideoSource::prepareDecoderBuffer(GstElement* source, GstPad* pad, GstPadProbeInfo* info)
+{
+    auto* context = static_cast<QGCWebRtcVideoSource*>(g_object_get_data(G_OBJECT(source), CONTEXT_KEY));
+    return !context || observeAccessUnit(pad, info, &context->_impl->state) == GST_PAD_PROBE_OK;
 }
 
 void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* pad, GstPadProbeInfo* info)

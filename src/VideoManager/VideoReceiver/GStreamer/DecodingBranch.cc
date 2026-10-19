@@ -208,6 +208,16 @@ bool DecodingBranch::_addDecoder()
         _decoder.reset();
         return false;
     }
+#if defined(QGC_GST_WEBRTC)
+    if (_receiver._config.webRtcOptions) {
+        const GStreamer::GstPadPtr input = GStreamer::adoptPad(gst_element_get_static_pad(_valve, "src"));
+        // Verify prediction references after the leaky encoded queue, immediately before decoding.
+        if (!input || !_encodedFrameProbe.add(input.get(), GST_PAD_PROBE_TYPE_BUFFER, _decoderInputProbe, this)) {
+            qCWarning(GstVideoReceiverLog) << "Unable to verify native decoder input";
+            return false;
+        }
+    }
+#endif
 
     if (const GStreamer::GstPadPtr srcPad = GStreamer::firstSrcPad(_decoder.get())) {
         onDecoderPad(srcPad.get());
@@ -270,6 +280,7 @@ void DecodingBranch::_onFirstFrame()
 
 void DecodingBranch::_shutdown()
 {
+    _encodedFrameProbe.remove();
     if (_decoder) {
         GStreamer::disposeChild(_decoder.get());
         _decoder.reset();
@@ -340,6 +351,22 @@ void DecodingBranch::_onDecoderElementAdded(GstBin* /*decodebin*/, GstBin* /*sub
         (void) QMetaObject::invokeMethod(
             &self->_receiver, [self]() { emit self->_receiver.decoderNameChanged(); }, Qt::QueuedConnection);
     });
+}
+
+GstPadProbeReturn DecodingBranch::_decoderInputProbe(GstPad* pad, GstPadProbeInfo* info, gpointer user_data)
+{
+#if defined(QGC_GST_WEBRTC)
+    auto* self = static_cast<DecodingBranch*>(user_data);
+    if (self && self->_receiver._source &&
+        !QGCWebRtcVideoSource::prepareDecoderBuffer(self->_receiver._source, pad, info)) {
+        return GST_PAD_PROBE_DROP;
+    }
+#else
+    Q_UNUSED(pad);
+    Q_UNUSED(info);
+    Q_UNUSED(user_data);
+#endif
+    return GST_PAD_PROBE_OK;
 }
 
 GstPadProbeReturn DecodingBranch::_sinkProbe(GstPad* pad, GstPadProbeInfo* info, gpointer user_data)

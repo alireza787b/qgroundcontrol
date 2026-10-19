@@ -69,6 +69,7 @@ private:
 
     static void _onDecoderElementAdded(GstBin* decodebin, GstBin* subBin, GstElement* element, gpointer data);
     static GstPadProbeReturn _sinkProbe(GstPad* pad, GstPadProbeInfo* info, gpointer user_data);
+    static GstPadProbeReturn _decoderInputProbe(GstPad* pad, GstPadProbeInfo* info, gpointer user_data);
 
     GstVideoReceiver& _receiver;
     // Borrowed: the receiver owns the pipeline, the pipeline the valve.
@@ -80,6 +81,7 @@ private:
     // The sink's "frame-stats" when start() took it: the sink outlives sessions and its counters don't restart.
     GStreamer::GstStructurePtr _sinkStatsAtStart;
     GStreamer::PadProbe _sinkFrameProbe;
+    GStreamer::PadProbe _encodedFrameProbe;
     std::atomic<bool> _decoding = false;  ///< Read by the receiver's tee probe log.
 
     mutable QMutex _decoderNameMutex;     // Written on the worker, read from any thread.

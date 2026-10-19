@@ -6,6 +6,11 @@ branch `integration/native-webrtc-upstream-2026-10-19`. Its merge uses QGC upstr
 `a6a1bb8a7814985436a734fb070cd89e0ce0fbbd`. The previously tested
 branch can advance by fast-forward to this reviewed merge.
 
+The subsequent integration merge `badb1441e887c753a72a2128362739ec8fd81544`
+includes fetched upstream `c535d1dea7f5ea24dd5a0818c2aa768ab0ddbd0d`
+(receiver cleanup). The active loss/recovery work and its separate regression
+results are recorded in the [network checkpoint](NATIVE-WEBRTC-NETWORK.md).
+
 ## Changes
 
 - Use upstream's `DecodingBranch`, `RecordingBranch`, pipeline generations and

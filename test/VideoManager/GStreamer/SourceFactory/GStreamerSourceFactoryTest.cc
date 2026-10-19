@@ -76,6 +76,12 @@ void GStreamerTest::_testRtpReferenceLossRequiresCompleteSync()
     QVERIFY(!references.observeAccessUnit(afterDuplicate, true, false));
     const auto finalSync = references.observe(18, 25, 1300, true, false);
     QVERIFY(references.observeAccessUnit(finalSync, true, false));
+    // Network continuity alone is insufficient: the display queue may shed a reference frame.
+    references.observe(18, 26, 1400, true, false);
+    const auto afterQueueDrop = references.observe(18, 27, 1500, true, false);
+    QVERIFY(!references.observeAccessUnit(afterQueueDrop, false, false));
+    const auto afterQueueSync = references.observe(18, 28, 1600, true, false);
+    QVERIFY(references.observeAccessUnit(afterQueueSync, true, false));
 }
 namespace {
 

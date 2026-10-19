@@ -5,7 +5,7 @@ set -euo pipefail
 usage() {
     cat <<'USAGE'
 Usage: qualify-native-webrtc-link.sh --backend DIR --qgc-build DIR --output DIR
-       (--video FILE | --controller-mode normal|reject|missing_metadata|wrong_dimensions)
+       (--video FILE | --controller-mode normal|reject|missing_metadata|wrong_dimensions|recovery)
        [--python FILE] [--ctest FILE] [--mbps 0.5|1|2|5|10] [--loss-percent N]
        [--delay-ms N] [--jitter-ms N] [--duration-ms N] [--metadata-delay-ms N]
 
@@ -16,6 +16,8 @@ Pi, camera, aircraft, deployment credentials or external network is used.
 The rate limits aggregate media and signaling in both directions. Qdisc
 counters include congestion drops in addition to configured random loss.
 The output directory must be new so failed evidence cannot be overwritten.
+Recorded duration is an integer, 0..40000 ms per codec, within the existing
+120-second integration-test budget. Longer soaks use the operator workflow.
 USAGE
 }
 
@@ -44,7 +46,7 @@ done
 [[ -d $backend && -f $build/CTestTestfile.cmake && -n $output ]] || { usage >&2; exit 2; }
 case "$controller_mode" in
     off) [[ -f $video ]] || { usage >&2; exit 2; } ;;
-    normal|reject|missing_metadata|wrong_dimensions)
+    normal|reject|missing_metadata|wrong_dimensions|recovery)
         [[ -z $video && $metadata_delay == 0 ]] || { usage >&2; exit 2; } ;;
     *) usage >&2; exit 2 ;;
 esac
@@ -66,7 +68,7 @@ import math, sys
 rate, loss, delay, jitter, duration, metadata_delay = map(float, sys.argv[1:])
 if not (all(map(math.isfinite, (rate, loss, delay, jitter, duration, metadata_delay)))
         and rate in (0.5, 1, 2, 5, 10) and 0 <= loss <= 20
-        and 0 <= jitter <= delay <= 1000 and 0 <= duration <= 120000
+        and 0 <= jitter <= delay <= 1000 and duration.is_integer() and 0 <= duration <= 40000
         and metadata_delay.is_integer() and 0 <= metadata_delay <= 250):
     raise SystemExit('Invalid shaping/test limits')
 PY
@@ -129,7 +131,14 @@ if [[ $controller_mode == off ]]; then
     ready_path=/qualification/context
 else
     fixture=tools/native_integration_fixture.py
-    fixture_args=(--port 8197 --no-aircraft --instance-id isolated-controller-check --native-webrtc "$controller_mode")
+    native_mode=$controller_mode
+    if [[ $controller_mode == recovery ]]; then native_mode=normal; fi
+    fixture_args=(--port 8197 --no-aircraft --instance-id isolated-controller-check --native-webrtc "$native_mode")
+    if [[ $controller_mode == recovery ]]; then
+        export QGC_PIXEAGLE_TEST_MEDIA_CONTROL_FILE="$output/controller-media.json"
+        printf '{}\n' > "$QGC_PIXEAGLE_TEST_MEDIA_CONTROL_FILE"
+        fixture_args+=(--media-control-file "$QGC_PIXEAGLE_TEST_MEDIA_CONTROL_FILE")
+    fi
     ready_path=/api/v1/auth/session
 fi
 "$python" -c 'import logging,runpy,sys; logging.basicConfig(level=logging.INFO); path=sys.argv.pop(1); runpy.run_path(path,run_name="__main__")' \
@@ -163,7 +172,7 @@ else
     export QGC_PIXEAGLE_WEBRTC_FIXTURE_URL=http://127.0.0.1:8197
     export QGC_PIXEAGLE_EXPECT_FALLBACK=1
     export QGC_PIXEAGLE_EXPECT_FAILURE_STAGE=''
-    if [[ $controller_mode == normal ]]; then QGC_PIXEAGLE_EXPECT_FALLBACK=0; fi
+    if [[ $controller_mode == normal || $controller_mode == recovery ]]; then QGC_PIXEAGLE_EXPECT_FALLBACK=0; fi
     if [[ $controller_mode == reject ]]; then QGC_PIXEAGLE_EXPECT_FAILURE_STAGE=remote_media; fi
     if [[ $controller_mode == wrong_dimensions ]]; then QGC_PIXEAGLE_EXPECT_FAILURE_STAGE=decoded_geometry; fi
     test_name=PixEagleVideoControllerTest

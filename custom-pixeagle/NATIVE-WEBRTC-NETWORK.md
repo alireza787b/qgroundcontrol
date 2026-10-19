@@ -286,7 +286,9 @@ Fresh guarded probes passed:
 
 VA-API VP8 still emits sticky-event ordering warnings. Keep them visible for
 platform qualification. Native operation at 0.5/1 Mbps remains unqualified;
-fallback success is separate evidence from sustained native quality.
+fallback success is separate evidence from sustained native quality. A later
+2 Mbps run also failed strict VP8 identity; the short passes above do not
+supersede that failure.
 
 The same isolated harness supports controller failure tests without a video:
 
@@ -300,3 +302,67 @@ bash custom-pixeagle/validation/qualify-native-webrtc-link.sh \
 Controller fixtures use synthetic pixels and production auth/media routes;
 their manifest distinguishes them from recorded-video evidence. No aircraft
 commands are available. Product native capability remains disabled.
+
+## Decoder-input continuity repair
+
+The subsequent `cadence-recorded-2mbps/` run failed VP8 identity (879 versus
+887), despite the RTP reference guard. A diagnostic copied plaintext encoded
+access units before transport: independent software decoding recovered all
+83 barcodes correctly, while QGC's received image failed (707 versus 715).
+Forcing a software receiver decoder also failed (644 versus 676). These
+observations do not justify attributing the defect only to VA-API or relaxing
+the barcode check.
+
+Inspection found that the display branch's bounded leaky queue can discard
+complete encoded reference frames **after** the RTP/parser guard. Verification
+now runs immediately before decoding, after that queue. Access-unit ordinals
+detect an internal queue drop even with continuous RTP sequence numbers.
+Dependent units are refused until a complete clean sync unit; they cannot
+pollute the decoder's reference state. The queue remains bounded and stock
+receiver policy is unchanged. An independent unit fixture drops a complete
+reference at this boundary and requires clean recovery.
+
+`--controller-mode recovery` additionally exercises the real manager's bound
+client, source replacement, brief cached capture, explicit sign-out and new
+session, followed by Stop. Its synthetic controls use an atomic local file;
+there is no deployment control API. The corrected lifecycle fixture passed in
+`controller-recovery-v3-10mbps/` (8.2 seconds). It waits for logout completion
+before requesting a new session, just as the operator UI's busy state requires.
+Source replacement may retire by status refresh or the sanitized `remote_media`
+error; only those expected lifecycle warnings are allowed in this test.
+
+The fresh `decoder-input-link-10mbps/` probe passed both codecs for 20 seconds
+each without a barcode mismatch. H.264's largest verified gap was 2,320 ms and
+VP8's 871 ms. The 2 Mbps run passed VP8 identity (213 frames / 892 ms largest
+gap) but failed H.264's ending freshness check. Keep the overall 2 Mbps result
+failed: a successful association cannot be described as uninterrupted video.
+No freshness or watchdog limit was extended.
+
+`decoder-input-fallback-1mbps/` passed the deliberately wrong-dimension failure
+and automatic selectable-JPEG recovery through the actual manager-bound client.
+Focused GStreamer/receiver/component suites and native-disabled DecodingBranch
+syntax passed. The full QGC regression renewal is recorded below.
+
+The matching backend measures completed associated access units over one-second
+windows. Its optional `associated_encoded_fps` is distinct from the requested
+policy FPS and actual Qt presentations. Stale, idle and changed-profile samples
+expire. This avoids lowering detail for frames slow analysis never produced,
+while retaining the requested-cadence pipeline-overload guard. Backend revision
+`902a59b` passes 3,798 unit/route tests (seven optional skips), 196 integration
+tests and 81 focused streaming tests with the optional runtime; schema and
+changed-file lint pass. This does not close platform or Pi performance gates.
+
+Final renewal for the decoder-input repair passed all **471 QGC suites** with
+standard exclusions in 209 seconds (`decoder-input-final-qgc.log`). The native
+build, changed-file lint and native-disabled decoder-branch syntax pass.
+The harness rejects fractional durations and caps its per-codec observation
+at 40 seconds to fit the existing 120-second integration-test budget. This
+execution limit changes no media freshness, Stop or recovery deadline.
+
+The next hardware checkpoint uses the cooled Pi and a long recorded file,
+with the camera and Pixhawk off. Back up and preserve its custom profile;
+compare Core/JPEG and optional GStreamer in an isolated test deployment.
+This is development qualification, not enabling native capability in ordinary
+installations. Low-bandwidth freshness, browser/provider parity and clean
+Windows/Android runtime qualification remain open. No release build, public
+QGC PR or Pi deployment was performed by these local tests.

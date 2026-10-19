@@ -51,6 +51,7 @@ public:
     static bool activate(GstElement* source, GstBus* bus);
     static void deactivate(GstElement* source);
     static void configureDecoder(GstElement* source, GstElement* decoder);
+    static bool prepareDecoderBuffer(GstElement* source, GstPad* pad, GstPadProbeInfo* info);
     static void associatePresentedBuffer(GstElement* source, GstPad* pad, GstPadProbeInfo* info);
 
     ~QGCWebRtcVideoSource();
