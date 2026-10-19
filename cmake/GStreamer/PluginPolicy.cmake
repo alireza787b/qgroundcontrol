@@ -27,6 +27,17 @@ set(GSTREAMER_PLUGIN_ALTERNATES
 # opengl supplies glupload/glcolorconvert (GL zero-copy video path);
 # multifile (splitmuxsink), isomp4 (qtmux/mp4mux), and matroska (matroskamux)
 # are load-bearing for video recording (GstVideoReceiver _kFileMux).
+# Native authenticated WebRTC is opt-in at configure time. These plugins are
+# added to the platform allowlist only when QGC_ENABLE_NATIVE_WEBRTC is ON.
+# Keeping them separate preserves the ordinary QGC media footprint.
+set(GSTREAMER_NATIVE_WEBRTC_PLUGINS
+    webrtc
+    nice
+    srtp
+    dtls
+    sctp
+)
+
 set(GSTREAMER_RUNTIME_REQUIRED_PLUGINS
     coreelements
     isomp4

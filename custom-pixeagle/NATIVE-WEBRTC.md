@@ -104,3 +104,14 @@ backend venv, including services. The QGC receiver runtime is a separate bundled
 application dependency; operators must not install development GStreamer on
 Windows. Native automatic adoption remains gated until these platform packages
 and congestion/failure tests pass.
+
+
+## Platform bundle policy
+
+QGC's existing GStreamer Orchestrator remains the only package owner. When the
+native WebRTC build option is off, no WebRTC/ICE/DTLS/SRTP/SCTP plugin is added
+to the QGC bundle. When it is on, the same platform SDK allowlist adds
+`webrtc`, `nice`, `srtp`, `dtls` and `sctp`, and configure/install verification
+requires the complete runtime. Missing components stop that build clearly;
+normal JPEG/QGC builds remain available. The option is still developer-gated
+until Windows, Linux and Android clean-runtime probes pass.

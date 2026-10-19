@@ -162,6 +162,10 @@ gstreamer_build_apis_and_deps(GSTREAMER_APIS GSTREAMER_EXTRA_DEPS ${QGCGStreamer
 gstreamer_current_platform_key(_qgc_gst_plat_key)
 gstreamer_plugins_for(PLATFORM "${_qgc_gst_plat_key}" OUT_VAR GSTREAMER_PLUGINS)
 unset(_qgc_gst_plat_key)
+if(QGC_ENABLE_NATIVE_WEBRTC)
+    list(APPEND GSTREAMER_PLUGINS ${GSTREAMER_NATIVE_WEBRTC_PLUGINS})
+    list(REMOVE_DUPLICATES GSTREAMER_PLUGINS)
+endif()
 
 # Android has no filesystem plugin scan — only statically registered plugins exist at
 # runtime. Add the encode-side plugins the Debug-only MockLink video stream server
