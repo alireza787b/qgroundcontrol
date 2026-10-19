@@ -575,3 +575,23 @@ identity, lowest-bandwidth fallback, thermal operating range, browser/provider
 parity and platform runtime packages remain open. The installed Pi service,
 saved geometry/gains/safety policy and main checkout are not updated by these
 isolated candidates. No release/Actions build was triggered from this evidence.
+
+### Live-camera operator review, v12
+
+After the operator improved cooling, a fresh isolated datalink session started
+at 41.9°C. The operator accepted the picture as clear/smooth after several
+initial waiting interruptions. The logs contain one receiver start and one
+native peer, so repeated stream reconnects are not established as their cause.
+Startup presentation needs its own timing evidence; do not label the cause
+resolved or extend freshness checks to suppress the symptom.
+
+The retained 119.12-second media-health window has 112 native samples, no stale
+source, and delivery rising from 960×540 to 1280×720. The last receiver feedback
+reports 18.41 presented FPS without pressure and no metadata drops. Raw user
+feedback is separate in `pi/native-camera-review-v12/operator-feedback-raw.md`.
+The full workload still hit 75.45°C after 203.47 seconds and the guard stopped
+it cleanly. Its test filter was removed and verified. QGC waiting after that
+deliberate stop is expected; the early startup interruptions remain a separate
+open issue. Visual acceptance does not close thermal, impaired-link, provenance
+or platform qualification. No implementation/default change accompanied this
+review.
