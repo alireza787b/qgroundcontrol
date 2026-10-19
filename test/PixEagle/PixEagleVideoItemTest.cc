@@ -217,8 +217,10 @@ void PixEagleVideoItemTest::_renderedPixelsMatchContextAfterCoalescing()
     QVERIFY(surface.expose());
     surface.submit(1, Qt::red);
     QVERIFY(surface.item.capturePresentedContext().isEmpty());
+    QCOMPARE(surface.store->presentationStatistics().value("presented_frames").toInteger(), qint64(0));
     QTRY_COMPARE_WITH_TIMEOUT(surface.presentedNumber(), QStringLiteral("1"), TestTimeout::mediumMs());
     QCOMPARE(surface.pixel(), QColor(Qt::red));
+    QCOMPARE(surface.store->presentationStatistics().value("presented_frames").toInteger(), qint64(1));
 
     QMutex mutex;
     QVariantMap directCapture;
@@ -240,6 +242,9 @@ void PixEagleVideoItemTest::_renderedPixelsMatchContextAfterCoalescing()
     }
     QTRY_COMPARE_WITH_TIMEOUT(surface.presentedNumber(), QStringLiteral("20"), TestTimeout::mediumMs());
     QCOMPARE(surface.pixel(), QColor(Qt::green));
+    const auto presentation = surface.store->presentationStatistics();
+    QVERIFY(presentation.value("presented_frames").toInteger() >= 2);
+    QVERIFY(presentation.value("presented_frames").toInteger() < presentation.value("verified_frames").toInteger());
     {
         const QMutexLocker lock(&mutex);
         QCOMPARE(directCapture.value(QStringLiteral("frame_id")).toString(), QStringLiteral("20"));

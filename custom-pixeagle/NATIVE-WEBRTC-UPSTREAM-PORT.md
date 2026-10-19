@@ -70,8 +70,9 @@ The standard CI helper runs the final gate from the native build directory:
   --exclude-labels 'Flaky|Network'
 ```
 
-Next qualify automatic controller-level fallback, production selection and
-revocation/restart behavior, then measured constrained-link adaptation. Package
+Controller-level playback and injected negotiation/missing-metadata fallback
+now pass; the [network checkpoint](NATIVE-WEBRTC-NETWORK.md) records the evidence.
+Next qualify production selection, revocation/restart and constrained-link adaptation. Package
 and probe complete platform runtimes before requesting the Pi/camera checkpoint.
 
 Native transport remains developer-gated. Constrained-link adaptation,

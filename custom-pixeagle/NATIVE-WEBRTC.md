@@ -97,8 +97,9 @@ real namespace-shaped traffic and the outstanding low-bandwidth repairs.
 
 ## Remaining gates
 
-1. End-to-end automatic transport/fallback tests through the custom controller,
-   beyond the independent capability/endpoint/authentication regression checks.
+1. Extend the passing loopback controller transport/fallback tests to constrained
+   links, outages and interface changes. Healthy native playback, negotiation
+   refusal and missing-metadata JPEG fallback now pass with real session auth.
 2. Production selection/retarget actions, missing metadata, restart/revocation
    and failure/recovery tests; the retained-fixture selection is a prerequisite.
 3. Measured congestion feedback, shared automatic per-client/aggregate policy,

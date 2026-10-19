@@ -89,8 +89,10 @@ The sender now reuses `AdaptiveQualityEngine` for startup cadence/scale,
 profile bounds and hysteresis, with GCC's bitrate target and measured
 submission-to-payloader time as inputs. GCC remains the network estimator and
 pacer. Native diagnostics distinguish this pipeline duration from encoder-only
-service, network time and presentation. Per-peer encoder targets still share
-the canonical aggregate budget. JPEG policy/ACK semantics remain unchanged.
+service, network time and presentation. Per-peer encoder ceilings and JPEG
+pacing now use the same canonical payload budget. JPEG ACK semantics remain
+unchanged. The transitional aiortc browser sender remains outside that
+allocation; aggregate browser/native parity is still an open rollout gate.
 
 QGC and the sender explicitly negotiate NACK/PLI feedback; setting the receiver
 transceiver property alone did not establish negotiated packet recovery.
@@ -153,8 +155,83 @@ The new cleanup regression verifies that the custom receiver dies during the
 plugin cleanup hook and cannot be recreated by a delayed initialization.
 
 Before enabling native capability, close the remaining weak-link behavior and
-exercise real automatic JPEG fallback. Add actual presentation feedback (not
-just decoder/encoder counters) and reconcile aggregate budgets across native
-and JPEG consumers through the existing budget owner. Do not treat separate
-per-transport ceilings as a global guarantee. No additional GitHub build has
+exercise real automatic JPEG fallback. Do not treat configured payload ceilings
+as a wire-rate or measured-capacity guarantee. No additional GitHub build has
 been dispatched during this checkpoint.
+
+## Presentation and access-unit repair
+
+An additional 20-second-per-codec test using the longer test11 recording
+exposed an H.264 barcode mismatch under loss at 10 Mbps. The retained image
+contains concealed horizontal slices. GStreamer 1.24's H.264 depayloader defaults
+to NAL output, where `wait-for-keyframe` is ineffective. Native parsebin now
+negotiates complete AVC access units before the shared stock parser hooks run.
+A query regression verifies AU negotiation; stock receivers keep their policy.
+The renewed 10 Mbps test passed both codecs without mismatched contexts.
+The 1 Mbps test still exposes VP8 resize-recovery/selection failures, and H.264
+has multi-second verified-frame gaps. Neither rate is a released operating claim.
+
+QGC now sends optional presentation observations on the existing authenticated
+frame-challenge message. Only distinct Qt surface swaps count as presentations;
+decode/queue admission is separate. Immutable receipts preserve identity across
+cache eviction. The sender requires fresh healthy receiver evidence before
+raising its workload, and sustained slow-renderer evidence reduces cadence.
+No new route, setting, credential store or selection authority is introduced.
+
+Native admission and JPEG pacing share the existing payload-budget owner.
+Encoder reservations survive timed-out teardown and leave a JPEG share; earlier
+JPEG reservations drain before a native sender begins. This bounds configured
+payload targets, not protocol overhead or measured link capacity. The temporary
+aiortc browser provider remains outside that accounting until its migration.
+
+## Authenticated controller fallback checkpoint
+
+The existing loopback-only `tools/native_integration_fixture.py` now accepts
+`--native-webrtc normal|reject|missing_metadata` for this qualification only.
+Its default remains disabled; the product capability remains disabled too.
+The fixture has no aircraft command path. It uses the production session auth,
+capability response, signaling manager, sender, publisher and JPEG route.
+Native qualification modes retain real analysis/selection geometry.
+
+Run the fixture from the backend repository with its optional runtime loaded:
+
+```bash
+PYTHONPATH=src .venv/bin/python tools/native_integration_fixture.py \
+  --port 8198 --no-aircraft --instance-id native-controller-check \
+  --native-webrtc missing_metadata
+```
+
+From the QGC repository, using its complete native runtime:
+
+```bash
+QGC_PIXEAGLE_WEBRTC_FIXTURE_URL=http://127.0.0.1:8198 \
+QGC_PIXEAGLE_EXPECT_FALLBACK=1 \
+tools/.venv/bin/ctest --test-dir build/native-webrtc-port \
+  -R '^PixEagleVideoControllerTest$' -V
+```
+
+Use `normal` with `QGC_PIXEAGLE_EXPECT_FALLBACK=0` to verify native playback.
+For `reject`, also set `QGC_PIXEAGLE_EXPECT_FAILURE_STAGE=remote_media`; the
+intentional source/bus warnings must be captured and verified, not hidden.
+Stop only this owned fixture with Ctrl-C afterwards. No hardware is involved.
+
+All three cases passed. QGC selected WebRTC automatically; refusal recovered to
+fresh selectable JPEG in about two seconds. Missing metadata recovered through
+the unchanged presentation watchdog in about twelve seconds. These durations
+are local test totals, not field latency guarantees. The test checks unchanged
+media identity, actual swap observations, fresh geometry and explicit Stop with
+no retry. Initial fixture omissions (selection geometry and scoped signal
+cleanup) failed and were corrected; their logs remain in the evidence.
+
+The renewed full QGC gate passed 471 suites in 210 seconds; backend unit plus
+route-inventory passed 3,793 tests with seven optional-runtime skips. The full
+backend integration gate passed 196 tests. The subsequent focused streaming,
+media-health, route and configuration run passed 422 tests with seven skips;
+36 actual encrypted-media/presentation tests passed with the optional runtime.
+Schema remains current at 43 groups / 612 parameters.
+Dashboard regression passed 64 suites / 493 tests, production build and lint.
+
+Next extend fallback/restart/revocation tests across constrained links and close
+VP8 resize recovery. Finish browser/native aggregate parity and clean platform
+runtime probes before ordinary native capability is enabled. Request the Pi
+for recorded-video qualification only after that local checkpoint is ready.

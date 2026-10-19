@@ -26,6 +26,9 @@ public:
     qint64 insert(quint64 epoch, const QJsonObject& metadata, qint64 receivedMonotonicMs = -1);
     std::optional<Entry> lookup(qint64 ptsUs) const;
     bool isCurrentEpoch(quint64 epoch) const;
+    /// Report a distinct frame only after the rendering surface confirms its swap.
+    void markPresented(qint64 ptsUs, const Entry& receipt);
+    QJsonObject presentationStatistics() const;
     static qint64 monotonicMs();
 
 private:
@@ -34,4 +37,10 @@ private:
     QMap<qint64, Entry> _entries;
     quint64 _nextEpoch = 0;
     quint64 _epoch = 0;
+    quint64 _verifiedFrames = 0;
+    quint64 _presentedFrames = 0;
+    qint64 _epochStartedMs = 0;
+    qint64 _lastPresentedPts = -1;
+    qint64 _lastPresentedMs = -1;
+    double _lastPresentedAgeBoundMs = -1;
 };

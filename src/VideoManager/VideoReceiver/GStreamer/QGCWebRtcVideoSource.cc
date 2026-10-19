@@ -170,6 +170,24 @@ void configureLossRecovery(GstBin*, GstBin*, GstElement* element, gpointer)
     }
 }
 
+gboolean requireAccessUnits(GstElement*, GstPad*, GstElement* element, GstQuery* query, gpointer)
+{
+    GstElementFactory* factory = gst_element_get_factory(element);
+    if (GST_QUERY_TYPE(query) != GST_QUERY_CAPS || !factory ||
+        g_strcmp0(gst_plugin_feature_get_name(GST_PLUGIN_FEATURE(factory)), "rtph264depay") != 0) {
+        return FALSE;
+    }
+    // H.264's wait-for-keyframe guard has no effect when depayloading individual NAL units.
+    GstCaps* caps = gst_caps_from_string("video/x-h264,stream-format=avc,alignment=au");
+    GstCaps* filter = nullptr;
+    gst_query_parse_caps(query, &filter);
+    GstCaps* allowed = filter ? gst_caps_intersect_full(caps, filter, GST_CAPS_INTERSECT_FIRST) : gst_caps_ref(caps);
+    gst_query_set_caps_result(query, allowed);
+    gst_caps_unref(allowed);
+    gst_caps_unref(caps);
+    return TRUE;
+}
+
 void exposeParsedPad(GstElement* parser, GstPad* pad, gpointer data)
 {
     auto* state = static_cast<MediaState*>(data);
@@ -531,7 +549,9 @@ private:
         }
         const QString token = QUuid::createUuid().toString(QUuid::Id128);
         _challenges.insert(token, now);
-        _send({{"type", "frame-challenge"}, {"payload", QJsonObject{{"token", token}}}});
+        _send({{"type", "frame-challenge"},
+               {"payload", QJsonObject{{"token", token},
+                                       {"presentation", _state->options->frameContexts->presentationStatistics()}}}});
     }
 
     void _message(const QString& text)
@@ -772,6 +792,7 @@ GstElement* QGCWebRtcVideoSource::create(const QUrl& signalingUrl, std::shared_p
         gst_clear_object(&bin);
         return nullptr;
     }
+    g_signal_connect(impl->state.parser, "autoplug-query", G_CALLBACK(requireAccessUnits), nullptr);
     GStreamer::SourceFactory::configureParseBin(impl->state.parser);
     g_signal_connect(impl->state.parser, "deep-element-added", G_CALLBACK(configureLossRecovery), nullptr);
     impl->url = signalingUrl;

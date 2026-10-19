@@ -15,4 +15,5 @@ private slots:
     void _nativeCapabilityRequiresEveryPrerequisite();
     void _mediaFallbackResetsOnlyWithMediaIdentity();
     void _mediaDiscoveryDoesNotBlockVerificationOrSurviveEndpointChange();
+    void _nativePlaybackAndAutomaticFallback();
 };

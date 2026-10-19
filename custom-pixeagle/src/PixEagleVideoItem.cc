@@ -29,10 +29,9 @@ struct Frame
     QImage image;
     QVariantMap context;
     std::shared_ptr<QGCVideoFrameContextStore> store;
-    quint64 storeEpoch = 0;
+    QGCVideoFrameContextStore::Entry receipt;
     quint64 streamGeneration = 0;
     quint64 surfaceGeneration = 0;
-    qint64 receivedMonotonicMs = 0;
     QTransform displayToEncoded;
     QJsonObject selectionGeometry;
 };
@@ -88,7 +87,7 @@ RenderGeometry renderGeometry(const QQuickItem* item)
 bool freshFrame(const Frame& frame)
 {
     const auto& context = frame.context;
-    const qint64 elapsed = QGCVideoFrameContextStore::monotonicMs() - frame.receivedMonotonicMs;
+    const qint64 elapsed = QGCVideoFrameContextStore::monotonicMs() - frame.receipt.receivedMonotonicMs;
     const auto captureAge = context.value(QStringLiteral("capture_age_ms"));
     return context.value(QStringLiteral("capture_state")).toString() == "fresh" &&
            !context.value(QStringLiteral("capture_id")).isNull() &&
@@ -329,7 +328,7 @@ struct PixEagleVideoItem::State
     {
         return active && frame && frame->streamGeneration == streamGeneration &&
                frame->surfaceGeneration == surfaceGeneration && frame->store &&
-               frame->store->isCurrentEpoch(frame->storeEpoch);
+               frame->store->isCurrentEpoch(frame->receipt.epoch);
     }
 
     void invalidate()
@@ -485,8 +484,7 @@ void PixEagleVideoItem::_consumeFrame(quint64 streamGeneration)
         frame->image = presentationImage(incoming->video);
     }
     frame->store = incoming->store;
-    frame->storeEpoch = incoming->entry ? incoming->entry->epoch : 0;
-    frame->receivedMonotonicMs = incoming->entry ? incoming->entry->receivedMonotonicMs : 0;
+    frame->receipt = incoming->entry.value_or(QGCVideoFrameContextStore::Entry{});
     frame->streamGeneration = incoming->streamGeneration;
     frame->surfaceGeneration = incoming->surfaceGeneration;
     frame->displayToEncoded = displayToEncoded(incoming->video);
@@ -678,6 +676,11 @@ void PixEagleVideoItem::_attachWindow(QQuickWindow* surface)
                 }
                 _state->presented = _state->current(_state->swapping) ? _state->swapping : nullptr;
                 _state->presentedGeometry = _state->swappingGeometry;
+                if (_state->presented && !_state->presented->image.isNull()) {
+                    _state->presented->store->markPresented(
+                        _state->presented->context.value(QStringLiteral("pts_us")).toString().toLongLong(),
+                        _state->presented->receipt);
+                }
             }
             QMetaObject::invokeMethod(this, &PixEagleVideoItem::_publishProperties, Qt::QueuedConnection);
         },

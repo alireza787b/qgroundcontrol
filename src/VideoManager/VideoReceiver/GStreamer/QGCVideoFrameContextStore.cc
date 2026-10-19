@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <atomic>
 #include <chrono>
+#include <cmath>
 #include <limits>
 
 #include <QtCore/QMutexLocker>
@@ -38,6 +39,10 @@ quint64 QGCVideoFrameContextStore::beginEpoch()
     QMutexLocker lock(&_mutex);
     _entries.clear();
     _epoch = ++_nextEpoch;
+    _verifiedFrames = _presentedFrames = 0;
+    _epochStartedMs = monotonicMs();
+    _lastPresentedPts = _lastPresentedMs = -1;
+    _lastPresentedAgeBoundMs = -1;
     return _epoch;
 }
 
@@ -63,6 +68,7 @@ qint64 QGCVideoFrameContextStore::insert(quint64 epoch, const QJsonObject& metad
     const qint64 now = monotonicMs();
     const qint64 received = receivedMonotonicMs < 0 ? now : std::min(receivedMonotonicMs, now);
     _entries.insert(ptsUs, Entry{epoch, received, metadata});
+    ++_verifiedFrames;
     while (_entries.size() > _capacity) {
         _entries.erase(_entries.begin());
     }
@@ -83,6 +89,39 @@ bool QGCVideoFrameContextStore::isCurrentEpoch(quint64 epoch) const
 {
     QMutexLocker lock(&_mutex);
     return epoch && _epoch == epoch;
+}
+
+void QGCVideoFrameContextStore::markPresented(qint64 ptsUs, const Entry& receipt)
+{
+    QMutexLocker lock(&_mutex);
+    if (!_epoch || ptsUs < 0 || ptsUs <= _lastPresentedPts || receipt.epoch != _epoch) {
+        return;
+    }
+    _lastPresentedPts = ptsUs;
+    _lastPresentedMs = monotonicMs();
+    ++_presentedFrames;
+    const auto age = receipt.metadata.value("provenance").toObject().value("capture_age_ms");
+    _lastPresentedAgeBoundMs =
+        age.isDouble() && std::isfinite(age.toDouble()) && age.toDouble() >= 0
+            ? age.toDouble() + std::max<qint64>(0, _lastPresentedMs - receipt.receivedMonotonicMs)
+            : -1;
+}
+
+QJsonObject QGCVideoFrameContextStore::presentationStatistics() const
+{
+    QMutexLocker lock(&_mutex);
+    if (!_epoch) {
+        return {};
+    }
+    const auto now = monotonicMs();
+    return {{"version", 1},
+            {"epoch", QString::number(_epoch)},
+            {"elapsed_ms", now - _epochStartedMs},
+            {"verified_frames", static_cast<qint64>(_verifiedFrames)},
+            {"presented_frames", static_cast<qint64>(_presentedFrames)},
+            {"last_presented_age_bound_ms",
+             _lastPresentedAgeBoundMs < 0 ? QJsonValue() : QJsonValue(_lastPresentedAgeBoundMs)},
+            {"since_last_presentation_ms", _lastPresentedMs < 0 ? QJsonValue() : QJsonValue(now - _lastPresentedMs)}};
 }
 
 qint64 QGCVideoFrameContextStore::monotonicMs()

@@ -1054,17 +1054,32 @@ void GStreamerTest::_testWebSocketFrameContextEvictionAndEpochs()
     QGCVideoFrameContextStore store(2);
     const quint64 firstEpoch = store.beginEpoch();
     const qint64 first = store.insert(firstEpoch, {{"frame_id", "1"}});
+    const auto firstReceipt = store.lookup(first);
+    QVERIFY(firstReceipt);
     const qint64 second = store.insert(firstEpoch, {{"frame_id", "2"}});
     const qint64 earlierArrival = QGCVideoFrameContextStore::monotonicMs() - 37;
-    const qint64 third = store.insert(firstEpoch, {{"frame_id", "3"}}, earlierArrival);
+    const qint64 third = store.insert(
+        firstEpoch, {{"frame_id", "3"}, {"provenance", QJsonObject{{"capture_age_ms", 25}}}}, earlierArrival);
     QVERIFY(first >= 0 && first < second && second < third);
     QVERIFY(!store.lookup(first));
     QVERIFY(store.lookup(second));
     QCOMPARE(store.lookup(third)->metadata.value("frame_id").toString(), QStringLiteral("3"));
     QCOMPARE(store.lookup(third)->receivedMonotonicMs, earlierArrival);
+    QCOMPARE(store.presentationStatistics().value("verified_frames").toInteger(), qint64(3));
+    QCOMPARE(store.presentationStatistics().value("presented_frames").toInteger(), qint64(0));
+    store.markPresented(first, *firstReceipt);
+    store.markPresented(first, *firstReceipt);
+    QCOMPARE(store.presentationStatistics().value("presented_frames").toInteger(), qint64(1));
+    store.markPresented(third, *store.lookup(third));
+    store.markPresented(second, *store.lookup(second));
+    QCOMPARE(store.presentationStatistics().value("presented_frames").toInteger(), qint64(2));
+    QVERIFY(store.presentationStatistics().value("last_presented_age_bound_ms").toDouble() >= 62);
 
     const quint64 secondEpoch = store.beginEpoch();
     QVERIFY(!store.lookup(third));
+    store.markPresented(first, *firstReceipt);
+    QCOMPARE(store.presentationStatistics().value("presented_frames").toInteger(), qint64(0));
+    QCOMPARE(store.presentationStatistics().value("verified_frames").toInteger(), qint64(0));
     QCOMPARE(store.insert(firstEpoch, {{"frame_id", "late"}}), qint64(-1));
     const qint64 restarted = store.insert(secondEpoch, {{"frame_id", "1"}});
     store.endEpoch(firstEpoch);
@@ -1076,6 +1091,7 @@ void GStreamerTest::_testWebSocketFrameContextEvictionAndEpochs()
     QVERIFY(!store.lookup(other));
     store.endEpoch(secondEpoch);
     QVERIFY(!store.lookup(restarted));
+    QVERIFY(store.presentationStatistics().isEmpty());
 }
 
 void GStreamerTest::_testWebSocketNativeFramesSurviveDrops()

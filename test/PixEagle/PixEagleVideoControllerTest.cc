@@ -3,7 +3,9 @@
 #include <gst/gst.h>
 
 #include <QtCore/QJsonArray>
+#include <QtCore/QRegularExpression>
 #include <QtCore/QScopeGuard>
+#include <QtQuick/QQuickWindow>
 #include <QtTest/QSignalSpy>
 
 #include "GStreamer.h"
@@ -13,6 +15,7 @@
 #include "PixEagleSettings.h"
 #include "PixEagleTestServer.h"
 #include "PixEagleVideoController.h"
+#include "QGCVideoFrameContextStore.h"
 #include "SettingsManager.h"
 #include "VideoManager.h"
 #include "VideoSettings.h"
@@ -307,6 +310,81 @@ void PixEagleVideoControllerTest::_mediaDiscoveryDoesNotBlockVerificationOrSurvi
     QVERIFY(!controller->_mediaConfigReply);
     QVERIFY(controller->_mediaConfig.isEmpty());
     QVERIFY(controller->_desiredKey.isEmpty());
+}
+
+void PixEagleVideoControllerTest::_nativePlaybackAndAutomaticFallback()
+{
+    const QUrl endpoint(qEnvironmentVariable("QGC_PIXEAGLE_WEBRTC_FIXTURE_URL"));
+    if (endpoint.isEmpty()) {
+        QSKIP("Start the isolated native integration fixture and provide its loopback endpoint");
+    }
+    QVERIFY(endpoint.scheme() == QStringLiteral("http") && endpoint.host() == QStringLiteral("127.0.0.1"));
+    if (!gst_is_initialized()) {
+        GStreamer::prepareEnvironment();
+        gst_init(nullptr, nullptr);
+    }
+    QVERIFY(GStreamer::completeInit());
+    ignoreLogMessage("default", QtWarningMsg,
+                     QRegularExpression(QStringLiteral("No RHI backend\\. Using CPU conversion\\.")));
+    VideoFixture test;
+    QVERIFY(test.valid());
+    test.restorePreferences(true);
+    test.manager->initializeVideo();
+    auto* controller = test.manager->video();
+    QVERIFY(controller);
+    PixEagleClient client(nullptr, true);
+    client.setEndpoint(endpoint.toString());
+    client.setEnabled(true);
+    client.signIn(QStringLiteral("operator"), QStringLiteral("fixture-only"));
+    QTRY_VERIFY2_WITH_TIMEOUT(client.authenticated() && !client.busy(), qPrintable(client.statusText()), 5000);
+    QTRY_VERIFY_WITH_TIMEOUT(client.mediaAvailable(), 5000);
+    controller->_client = &client;
+    const auto restore = qScopeGuard([controller]() { controller->_bindClient(); });
+    QQuickWindow window;
+    window.resize(640, 480);
+    PixEagleVideoItem surface(window.contentItem());
+    surface.setSize(QSizeF(640, 480));
+    window.show();
+    QVERIFY(QTest::qWaitForWindowExposed(&window, TestTimeout::mediumMs()));
+    bool attemptedNative = false;
+    const auto observed = connect(controller, &PixEagleVideoController::changed, this,
+                                  [&]() { attemptedNative = attemptedNative || controller->_usingWebRtc; });
+    const auto stopObserving = qScopeGuard([&]() { disconnect(observed); });
+    const QString expectedFailure = qEnvironmentVariable("QGC_PIXEAGLE_EXPECT_FAILURE_STAGE");
+    if (!expectedFailure.isEmpty()) {
+        expectLogMessage(
+            "Video.GStreamer.WebRtcVideoSource", QtWarningMsg,
+            QRegularExpression(
+                QStringLiteral("WebRTC failed at stage %1").arg(QRegularExpression::escape(expectedFailure))));
+        expectLogMessage(
+            "Video.GStreamer.GstVideoReceiver", QtWarningMsg,
+            QRegularExpression(QStringLiteral("GStreamer error.*%1").arg(QRegularExpression::escape(expectedFailure))));
+    }
+    controller->attachSurface(&surface);
+    const auto cleanup = qScopeGuard([&]() { controller->detachSurface(&surface); });
+    QTRY_VERIFY_WITH_TIMEOUT(attemptedNative, 5000);
+    const QString mediaIdentity = controller->_desiredKey;
+    QVERIFY(!mediaIdentity.isEmpty());
+    QTRY_VERIFY2_WITH_TIMEOUT(surface.frameFresh(), qPrintable(controller->statusText()), 25000);
+    if (!expectedFailure.isEmpty()) {
+        verifyExpectedLogMessage();
+        verifyExpectedLogMessage();
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(surface.selectionReady(), 5000);
+    const bool expectFallback = qEnvironmentVariableIntValue("QGC_PIXEAGLE_EXPECT_FALLBACK") != 0;
+    QCOMPARE(controller->_webRtcFailed, expectFallback);
+    QCOMPARE(controller->_usingWebRtc, !expectFallback);
+    QCOMPARE(controller->_desiredKey, mediaIdentity);
+    QCOMPARE(controller->_runningKey, mediaIdentity);
+    const auto receipt = controller->_contexts->presentationStatistics();
+    QVERIFY(receipt.value("presented_frames").toInteger() > 0);
+    const auto attempt = controller->_attemptGeneration;
+    test.settings->videoEnabled()->setRawValue(false);
+    QTRY_VERIFY_WITH_TIMEOUT(controller->_state == PixEagleVideoController::State::Idle, 10000);
+    QVERIFY(!controller->_receiver);
+    QVERIFY(!controller->_retryTimer.isActive());
+    QVERIFY(!surface.presentationKnown());
+    QCOMPARE(controller->_attemptGeneration, attempt);
 }
 
 UT_REGISTER_TEST(PixEagleVideoControllerTest, TestLabel::Integration)
