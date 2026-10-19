@@ -70,6 +70,7 @@ private:
     void _cancelMediaConfig();
     void _failVideo(const QString& stage, const QString& message);
     static bool _nativeConfigEligible(const QJsonObject& config);
+    static bool _nativeTransportAllowed(const QJsonObject& config, bool runtimeAvailable, bool previousFailure);
 
     PixEagleManager* _manager = nullptr;
     PixEagleTargetController* _targets = nullptr;

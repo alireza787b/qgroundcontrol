@@ -267,6 +267,12 @@ void PixEagleVideoController::_retireReceiver()
     }
 }
 
+bool PixEagleVideoController::_nativeTransportAllowed(const QJsonObject& config, bool runtimeAvailable,
+                                                      bool previousFailure)
+{
+    return runtimeAvailable && !previousFailure && _nativeConfigEligible(config);
+}
+
 bool PixEagleVideoController::_nativeConfigEligible(const QJsonObject& config)
 {
     const auto native = config.value("native_webrtc").toObject();
@@ -390,7 +396,7 @@ void PixEagleVideoController::_start()
     }
     _usingWebRtc = false;
 #if defined(QGC_GST_WEBRTC)
-    _usingWebRtc = !_webRtcFailed && _nativeConfigEligible(_mediaConfig) && QGCWebRtcVideoSource::available();
+    _usingWebRtc = _nativeTransportAllowed(_mediaConfig, QGCWebRtcVideoSource::available(), _webRtcFailed);
     if (_usingWebRtc) {
         auto options = std::make_shared<QGCWebRtcVideoOptions>();
         options->cookie = cookie;

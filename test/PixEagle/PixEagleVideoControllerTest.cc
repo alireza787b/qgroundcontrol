@@ -168,6 +168,9 @@ void PixEagleVideoControllerTest::_nativeCapabilityRequiresEveryPrerequisite()
         {"schema_version", 1},        {"source", "streaming_client_config"},         {"streaming_enabled", true},
         {"default_protocol", "auto"}, {"transports", QJsonObject{{"webrtc", true}}}, {"native_webrtc", native}};
     QVERIFY(PixEagleVideoController::_nativeConfigEligible(qualified));
+    QVERIFY(PixEagleVideoController::_nativeTransportAllowed(qualified, true, false));
+    QVERIFY(!PixEagleVideoController::_nativeTransportAllowed(qualified, false, false));
+    QVERIFY(!PixEagleVideoController::_nativeTransportAllowed(qualified, true, true));
     for (auto it = native.begin(); it != native.end(); ++it) {
         auto incomplete = native;
         incomplete.remove(it.key());
