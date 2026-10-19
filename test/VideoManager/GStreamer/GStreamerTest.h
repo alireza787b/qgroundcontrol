@@ -153,6 +153,7 @@ private slots:
     void _testSourceFactoryWebSocketJpegWssRejectsUntrusted();
     void _testSourceFactoryWebSocketJpegWssRejectsUntrusted_data();
     void _testWebSocketFrameContextEvictionAndEpochs();
+    void _testRtpReferenceLossRequiresCompleteSync();
     void _testWebSocketNativeFramesSurviveDrops();
     void _testWebSocketNativeRejectsAmbiguousFrames_data();
     void _testWebSocketNativeRejectsAmbiguousFrames();

@@ -36,9 +36,47 @@
 #include "GstSourceFactory.h"
 #include "LocalHttpTestServer.h"
 #include "QGCNetworkHelper.h"
+#include "QGCRtpReferenceState.h"
 #include "QGCVideoFrameContextStore.h"
 #include "QGCWebSocketVideoSource.h"
 
+void GStreamerTest::_testRtpReferenceLossRequiresCompleteSync()
+{
+    QGCRtpReferenceState references;
+    const auto joined = references.observe(17, 65534, 100, true, true);
+    QVERIFY(!references.observeAccessUnit(joined, true, false));
+    const auto sync = references.observe(17, 65535, 200, true, false);
+    QVERIFY(references.observeAccessUnit(sync, true, false));
+    const auto wrapped = references.observe(17, 0, 300, true, false);
+    QVERIFY(references.observeAccessUnit(wrapped, false, false));
+    references.observe(17, 1, 400, false, false);
+    // The missing middle fragment makes even an apparent sync frame unsafe.
+    const auto damagedSync = references.observe(17, 3, 400, true, false);
+    QVERIFY(!references.verified(sync));
+    QVERIFY(!references.observeAccessUnit(damagedSync, true, false));
+    const auto predicted = references.observe(17, 4, 500, true, false);
+    QVERIFY(!references.observeAccessUnit(predicted, false, false));
+    const auto recovered = references.observe(17, 5, 600, true, false);
+    QVERIFY(references.observeAccessUnit(recovered, true, false));
+    const auto corrupted = references.observe(17, 6, 700, true, false);
+    QVERIFY(!references.observeAccessUnit(corrupted, false, true));
+    QVERIFY(!references.verified(recovered));
+    const auto otherSource = references.observe(18, 20, 800, true, false);
+    QVERIFY(!references.observeAccessUnit(otherSource, true, false));
+    const auto nextSync = references.observe(18, 21, 900, true, false);
+    QVERIFY(references.observeAccessUnit(nextSync, true, false));
+    const auto duplicate = references.observe(18, 21, 900, true, false);
+    QVERIFY(!references.observeAccessUnit(duplicate, true, false));
+    QVERIFY(!references.verified(nextSync));
+    const auto afterDuplicate = references.observe(18, 22, 1000, true, false);
+    QVERIFY(references.observeAccessUnit(afterDuplicate, true, false));
+    // A wholly missing access unit must retire prediction references too.
+    const auto afterMissingFrame = references.observe(18, 24, 1200, true, false);
+    QVERIFY(!references.observeAccessUnit(afterMissingFrame, true, false));
+    QVERIFY(!references.observeAccessUnit(afterDuplicate, true, false));
+    const auto finalSync = references.observe(18, 25, 1300, true, false);
+    QVERIFY(references.observeAccessUnit(finalSync, true, false));
+}
 namespace {
 
 /// SourceFactory::create() hands out a floating bin; this sinks it.

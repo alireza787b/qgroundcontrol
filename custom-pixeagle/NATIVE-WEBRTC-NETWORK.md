@@ -15,7 +15,7 @@ host's management interface. Retain the caller's non-root UID with
 The namespace contains loopback and a disposable dummy ICE interface only.
 Destroying the namespace removes its interfaces and qdiscs.
 
-The development probe runs the real recorded test9 sender and QGC receiver with
+The development probe runs the recorded test11 sender and QGC receiver with
 40 ms delay, 5 ms jitter and 0.5% configured random loss. The loopback rate is an
 aggregate shaping budget for media and signaling in both directions. Queue
 capacity approximates 150 ms at that rate, with an eight-packet minimum. The
@@ -32,7 +32,7 @@ reads deployment credentials or changes the host interface. For example:
 ```bash
 bash custom-pixeagle/validation/qualify-native-webrtc-link.sh \
   --backend ../PixEagle --qgc-build build/native-webrtc-port \
-  --video ../PixEagle/resources/test9.mp4 --output /tmp/native-link-1mbps \
+  --video ../PixEagle/resources/test11.mp4 --output /tmp/native-link-1mbps \
   --ctest tools/.venv/bin/ctest --mbps 1
 ```
 
@@ -148,9 +148,10 @@ roughly one per short run; geometry recovery remains a separate limitation.
 A 50 ms intentionally delayed-metadata probe passed both codecs at 10 Mbps.
 These are short controlled runs, not sustained Pi or field qualification.
 
-The receiver requests a keyframe through the negotiated upstream/RTCP path once
-per unresolved dimension change, avoiding per-delta-frame request storms.
-This request is not proof of remote receipt or successful decoder recovery.
+The current receiver requests a keyframe through the negotiated upstream/RTCP
+path once per interrupted prediction-reference generation. A verified decoded
+dimension mismatch fails with `decoded_geometry` and invokes the controller's
+JPEG fallback. Neither a request nor its transmission proves decoder recovery.
 The new cleanup regression verifies that the custom receiver dies during the
 plugin cleanup hook and cannot be recreated by a delayed initialization.
 
@@ -187,7 +188,7 @@ aiortc browser provider remains outside that accounting until its migration.
 ## Authenticated controller fallback checkpoint
 
 The existing loopback-only `tools/native_integration_fixture.py` now accepts
-`--native-webrtc normal|reject|missing_metadata` for this qualification only.
+`--native-webrtc normal|reject|missing_metadata|wrong_dimensions` for qualification only.
 Its default remains disabled; the product capability remains disabled too.
 The fixture has no aircraft command path. It uses the production session auth,
 capability response, signaling manager, sender, publisher and JPEG route.
@@ -235,3 +236,67 @@ Next extend fallback/restart/revocation tests across constrained links and close
 VP8 resize recovery. Finish browser/native aggregate parity and clean platform
 runtime probes before ordinary native capability is enabled. Request the Pi
 for recorded-video qualification only after that local checkpoint is ready.
+
+## Packet-loss integrity and decoder fallback
+
+An additional weak-link probe retained a VP8 image with a damaged barcode:
+its pixels read 741 while the exact RTP metadata identified 749. The receiver
+was using the Linux VA-API decoder, which did not flag all concealed output.
+The barcode comparison remains unchanged. A passing metadata association alone
+cannot establish intact pixels after prediction-reference loss.
+
+Native reception now observes packet continuity before depayloading. An
+incomplete access unit, source change or discontinuity invalidates dependent
+selection provenance until a complete clean sync frame is observed. A keyframe
+with a missing fragment cannot reestablish the reference. The guard also checks
+the generation after waiting for metadata, so concurrent loss cannot authorize
+an obsolete reference. It neither retransmits packets nor replaces GStreamer's
+congestion control. Unit fixtures cover sequence wrap, missing fragments/frames,
+late and duplicate packets, corruption, source changes and clean recovery.
+
+The standard upstream keyframe request uses the parsed source pad's
+`gst_pad_send_event` direction. An earlier test used the wrong direction; its
+warnings remain in the logs. If verified metadata dimensions differ from the
+decoded image, QGC reports `decoded_geometry` and switches automatically to
+JPEG. Diagnostics retain expected/decoded sizes and unsafe-reference counts.
+
+The sender/receiver use the framework's default 200 ms jitter latency. Encoder
+rate-control buffers follow the pinned GStreamer webrtcsink recipe: x264 VBV
+120 ms and VP8 CBR buffers 100/120/150 ms, with 15-bit VP8 picture IDs. These
+are media defaults, not longer selection or watchdog deadlines. The H.264
+zero-latency aggregation experiment was reverted because it introduced
+ambiguous association; the failed actual-media run remains evidence.
+
+Fresh guarded probes passed:
+
+- `reference-recovery-10mbps-loss/`: both codecs, 20 seconds each, test11,
+  40 ms delay / 5 ms jitter / 0.5% configured random loss. H.264 verified 246
+  presented frames with a largest 962 ms gap; VP8 verified 261 with a 476 ms
+  gap. No barcode mismatch occurred. These are short development observations.
+- `reference-controller-normal-2mbps/`: authenticated automatic native playback.
+- `reference-geometry-fallback-1mbps/`: deliberately wrong metadata dimensions
+  caused the named decode failure and recovered to fresh selectable JPEG.
+- `reference-metadata-fallback-1mbps/`: connected native transport without exact
+  metadata recovered to JPEG; total test runtime 13.4 seconds.
+- `reference-metadata-fallback-05mbps/`: startup fallback passed in 10.4 seconds.
+  Native never connected; this is not evidence of metadata-loss recovery.
+- `reference-final-qgc.log`: all 471 Unit/Integration suites passed with the
+  standard `Flaky|Network` exclusions, 210 seconds. Changed-file lint and
+  native-disabled source factory/receiver syntax checks also passed.
+
+VA-API VP8 still emits sticky-event ordering warnings. Keep them visible for
+platform qualification. Native operation at 0.5/1 Mbps remains unqualified;
+fallback success is separate evidence from sustained native quality.
+
+The same isolated harness supports controller failure tests without a video:
+
+```bash
+bash custom-pixeagle/validation/qualify-native-webrtc-link.sh \
+  --backend ../PixEagle --qgc-build build/native-webrtc-port \
+  --controller-mode wrong_dimensions --output /tmp/native-fallback-1mbps \
+  --ctest tools/.venv/bin/ctest --mbps 1
+```
+
+Controller fixtures use synthetic pixels and production auth/media routes;
+their manifest distinguishes them from recorded-video evidence. No aircraft
+commands are available. Product native capability remains disabled.

@@ -21,9 +21,12 @@ struct QGCWebRtcVideoStatistics
     std::atomic<quint64> missingMetadata{0};
     std::atomic<quint64> rejectedDimensions{0};
     std::atomic<quint64> corruptedFrames{0};
+    std::atomic<quint64> unsafeReferenceFrames{0};
     std::atomic<quint64> associatedFrames{0};
     std::atomic<quint64> metadataJoinTimeouts{0};
     std::atomic<quint64> keyframeRequests{0};
+    std::atomic<quint64> lastRejectedEncodedSize{0};
+    std::atomic<quint64> lastRejectedDecodedSize{0};
 
     QJsonObject snapshot() const;
 };

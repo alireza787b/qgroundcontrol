@@ -1,5 +1,6 @@
 #include "QGCWebRtcVideoSource.h"
 
+#include <algorithm>
 #include <atomic>
 #include <cmath>
 #include <functional>
@@ -27,6 +28,7 @@
 #include "GstSourceFactory.h"
 #include "QGCLoggingCategory.h"
 #include "QGCNetworkHelper.h"
+#include "QGCRtpReferenceState.h"
 #include "QGCVideoFrameContextStore.h"
 #include "gstqgc/GstQgcFrameContext.h"
 
@@ -44,6 +46,8 @@ struct PacketContext
     quint64 identity = 0;
     qint64 observedMs = 0;
     bool valid = true;
+    QGCRtpReferenceState::Frame reference;
+    bool accessUnitVerified = false;
 };
 
 struct FrameContext
@@ -67,7 +71,8 @@ struct MediaState
     QMap<quint64, qint64> consumed;
     QString providerEpoch;
     quint64 epoch = 0;
-    QSize requestedGeometry;
+    QGCRtpReferenceState references;
+    quint64 requestedReferenceGeneration = 0;
 
     void fail(const char* stage)
     {
@@ -130,6 +135,10 @@ GstPadProbeReturn observeRtp(GstPad* pad, GstPadProbeInfo* info, gpointer data)
     if (!buffer || !gst_rtp_buffer_map(buffer, GST_MAP_READ, &packet)) {
         return GST_PAD_PROBE_OK;
     }
+    QMutexLocker lock(&state->mutex);
+    const auto reference = state->references.observe(
+        gst_rtp_buffer_get_ssrc(&packet), gst_rtp_buffer_get_seq(&packet), gst_rtp_buffer_get_timestamp(&packet),
+        gst_rtp_buffer_get_marker(&packet), GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_DISCONT));
     if (gst_rtp_buffer_get_marker(&packet)) {
         GstEvent* event = gst_pad_get_sticky_event(pad, GST_EVENT_SEGMENT, 0);
         if (event) {
@@ -137,7 +146,6 @@ GstPadProbeReturn observeRtp(GstPad* pad, GstPadProbeInfo* info, gpointer data)
             gst_event_parse_segment(event, &segment);
             const auto running = gst_segment_to_running_time(segment, GST_FORMAT_TIME, GST_BUFFER_PTS(buffer));
             if (GST_CLOCK_TIME_IS_VALID(running)) {
-                QMutexLocker lock(&state->mutex);
                 const auto identity =
                     packetIdentity(gst_rtp_buffer_get_ssrc(&packet), gst_rtp_buffer_get_timestamp(&packet));
                 const auto now = QGCVideoFrameContextStore::monotonicMs();
@@ -147,13 +155,50 @@ GstPadProbeReturn observeRtp(GstPad* pad, GstPadProbeInfo* info, gpointer data)
                     state->consumed.insert(state->packets.value(running).identity, now);
                     state->packets[running].valid = false;
                 } else {
-                    state->packets.insert(running, PacketContext{identity, now});
+                    state->packets.insert(
+                        running, PacketContext{.identity = identity, .observedMs = now, .reference = reference});
                 }
             }
             gst_event_unref(event);
         }
     }
     gst_rtp_buffer_unmap(&packet);
+    return GST_PAD_PROBE_OK;
+}
+
+GstPadProbeReturn observeAccessUnit(GstPad* pad, GstPadProbeInfo* info, gpointer data)
+{
+    auto* state = static_cast<MediaState*>(data);
+    GstBuffer* buffer = gst_pad_probe_info_get_buffer(info);
+    GstEvent* event = gst_pad_get_sticky_event(pad, GST_EVENT_SEGMENT, 0);
+    if (!buffer || !event) {
+        if (event) {
+            gst_event_unref(event);
+        }
+        return GST_PAD_PROBE_OK;
+    }
+    const GstSegment* segment = nullptr;
+    gst_event_parse_segment(event, &segment);
+    const auto running = gst_segment_to_running_time(segment, GST_FORMAT_TIME, GST_BUFFER_PTS(buffer));
+    gst_event_unref(event);
+    bool requestSync = false;
+    {
+        QMutexLocker lock(&state->mutex);
+        auto packet = state->packets.find(running);
+        if (state->accepting.load() && packet != state->packets.end() && packet->valid) {
+            packet->accessUnitVerified = state->references.observeAccessUnit(
+                packet->reference, !GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_DELTA_UNIT),
+                GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_CORRUPTED));
+            if (!packet->accessUnitVerified && state->requestedReferenceGeneration != state->references.generation()) {
+                state->requestedReferenceGeneration = state->references.generation();
+                requestSync = true;
+            }
+        }
+    }
+    if (requestSync && state->accepting.load()) {
+        ++state->options->statistics->keyframeRequests;
+        gst_pad_send_event(pad, gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
+    }
     return GST_PAD_PROBE_OK;
 }
 
@@ -196,6 +241,7 @@ void exposeParsedPad(GstElement* parser, GstPad* pad, gpointer data)
     }
     GstObject* parent = gst_object_get_parent(GST_OBJECT(parser));
     if (parent) {
+        gst_pad_add_probe(pad, GST_PAD_PROBE_TYPE_BUFFER, observeAccessUnit, state, nullptr);
         GstPad* ghost = gst_ghost_pad_new("src", pad);
         if (ghost) {
             gst_pad_set_active(ghost, TRUE);
@@ -752,12 +798,18 @@ QGCWebRtcVideoSource::~QGCWebRtcVideoSource() = default;
 
 QJsonObject QGCWebRtcVideoStatistics::snapshot() const
 {
+    const auto size = [](quint64 packed) {
+        return QJsonArray{static_cast<qint64>(packed >> 32), static_cast<qint64>(packed & G_MAXUINT32)};
+    };
     return {{"missing_packet_context", static_cast<qint64>(missingPacketContext.load())},
             {"missing_metadata", static_cast<qint64>(missingMetadata.load())},
             {"metadata_join_timeouts", static_cast<qint64>(metadataJoinTimeouts.load())},
             {"keyframe_requests", static_cast<qint64>(keyframeRequests.load())},
             {"rejected_dimensions", static_cast<qint64>(rejectedDimensions.load())},
+            {"last_rejected_encoded_size", size(lastRejectedEncodedSize.load())},
+            {"last_rejected_decoded_size", size(lastRejectedDecodedSize.load())},
             {"corrupted_frames", static_cast<qint64>(corruptedFrames.load())},
+            {"unsafe_reference_frames", static_cast<qint64>(unsafeReferenceFrames.load())},
             {"associated_frames", static_cast<qint64>(associatedFrames.load())}};
 }
 
@@ -796,7 +848,7 @@ GstElement* QGCWebRtcVideoSource::create(const QUrl& signalingUrl, std::shared_p
     GStreamer::SourceFactory::configureParseBin(impl->state.parser);
     g_signal_connect(impl->state.parser, "deep-element-added", G_CALLBACK(configureLossRecovery), nullptr);
     impl->url = signalingUrl;
-    g_object_set(impl->state.peer, "bundle-policy", GST_WEBRTC_BUNDLE_POLICY_MAX_BUNDLE, "latency", 80u, nullptr);
+    g_object_set(impl->state.peer, "bundle-policy", GST_WEBRTC_BUNDLE_POLICY_MAX_BUNDLE, nullptr);
     gst_bin_add_many(GST_BIN(bin), impl->state.peer, impl->state.parser, nullptr);
     gst_object_ref(impl->state.peer);
     gst_object_ref(impl->state.parser);
@@ -870,7 +922,7 @@ void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* 
         gst_event_unref(event);
     }
     qint64 timestamp = -1;
-    bool requestKeyframe = false;
+    bool invalidDecodedGeometry = false;
     int width = 0;
     int height = 0;
     if (GstCaps* caps = gst_pad_get_current_caps(pad)) {
@@ -886,8 +938,10 @@ void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* 
         const auto now = QGCVideoFrameContextStore::monotonicMs();
         state.prune(now);
         auto packet = state.packets.find(running);
-        if (state.accepting.load() && packet != state.packets.end() && packet->valid) {
+        if (state.accepting.load() && packet != state.packets.end() && packet->valid && packet->accessUnitVerified &&
+            state.references.verified(packet->reference)) {
             const auto identity = packet->identity;
+            const auto reference = packet->reference;
             state.packets.erase(packet);
             if (!state.consumed.contains(identity) && !state.metadata.contains(identity)) {
                 // Metadata and RTP travel independently. Hold this exact decoded buffer briefly;
@@ -902,39 +956,53 @@ void QGCWebRtcVideoSource::associatePresentedBuffer(GstElement* source, GstPad* 
                 }
             }
             auto metadata = state.metadata.find(identity);
-            if (state.accepting.load() && !state.consumed.contains(identity) && metadata != state.metadata.end()) {
+            if (state.accepting.load() && state.references.verified(reference) && !state.consumed.contains(identity) &&
+                metadata != state.metadata.end()) {
                 const auto provenance = metadata->metadata.value("provenance").toObject();
                 // A lost resize keyframe can leave a decoder concealing at its previous size.
                 if (GST_BUFFER_FLAG_IS_SET(buffer, GST_BUFFER_FLAG_CORRUPTED)) {
                     ++state.options->statistics->corruptedFrames;
+                    state.references.invalidate();
                 } else if (width <= 0 || height <= 0 || provenance.value("encoded_width").toInt() != width ||
                            provenance.value("encoded_height").toInt() != height) {
                     ++state.options->statistics->rejectedDimensions;
                     const QSize expected(provenance.value("encoded_width").toInt(),
                                          provenance.value("encoded_height").toInt());
-                    if (!expected.isEmpty() && state.requestedGeometry != expected) {
-                        state.requestedGeometry = expected;
-                        requestKeyframe = true;
-                    }
+                    const auto packedSize = [](int w, int h) {
+                        return (quint64(std::max(w, 0)) << 32) | quint64(std::max(h, 0));
+                    };
+                    state.options->statistics->lastRejectedEncodedSize.store(
+                        packedSize(expected.width(), expected.height()));
+                    state.options->statistics->lastRejectedDecodedSize.store(packedSize(width, height));
+                    invalidDecodedGeometry = true;
                 } else {
-                    state.requestedGeometry = {};
                     timestamp =
                         state.options->frameContexts->insert(state.epoch, metadata->metadata, metadata->challengeMs);
                     ++state.options->statistics->associatedFrames;
                 }
                 state.metadata.erase(metadata);
+            } else if (!state.references.verified(reference)) {
+                ++state.options->statistics->unsafeReferenceFrames;
             } else {
                 ++state.options->statistics->missingMetadata;
             }
+            state.metadata.remove(identity);
             state.consumed.insert(identity, now);
         } else {
-            ++state.options->statistics->missingPacketContext;
+            if (packet != state.packets.end()) {
+                ++state.options->statistics->unsafeReferenceFrames;
+                state.consumed.insert(packet->identity, now);
+                state.metadata.remove(packet->identity);
+                state.packets.erase(packet);
+            } else {
+                ++state.options->statistics->missingPacketContext;
+            }
         }
     }
-    if (requestKeyframe && state.accepting.load()) {
-        ++state.options->statistics->keyframeRequests;
-        // Ask through negotiated RTCP feedback once per unresolved resize, not on every delta frame.
-        gst_pad_push_event(pad, gst_video_event_new_upstream_force_key_unit(GST_CLOCK_TIME_NONE, TRUE, 0));
+    if (invalidDecodedGeometry) {
+        // Exact RTP/reference evidence cannot authorize a decoder's different-sized image.
+        // Let the receiver owner replace this failed transport with the qualified fallback.
+        state.fail("decoded_geometry");
     }
     buffer = gst_buffer_make_writable(buffer);
     GST_PAD_PROBE_INFO_DATA(info) = buffer;

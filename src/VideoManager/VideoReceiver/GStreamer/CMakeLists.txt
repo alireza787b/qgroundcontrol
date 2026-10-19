@@ -135,6 +135,7 @@ target_sources(
             DecodingBranch.h
             QGCVideoFrameContextStore.cc
             QGCVideoFrameContextStore.h
+            QGCRtpReferenceState.h
             QGCWebSocketVideoSource.cc
             QGCWebSocketVideoSource.h
 )
