@@ -5,7 +5,8 @@ The integration branch also merges upstream `c535d1dea7f5ea24dd5a0818c2aa768ab0d
 (receiver cleanup on exit) at `badb1441e887c753a72a2128362739ec8fd81544`.
 Its 471-suite regression result remains distinct from the changes below, which
 are still under verification. Native transport remains unavailable in product
-capabilities. No Pi or camera was used.
+capabilities. The initial probes used no Pi or camera; later isolated Pi replay
+results are recorded below.
 
 ## Isolated test method
 
@@ -400,3 +401,44 @@ the specific expired-NACK warning is allowed in that case and remains in logs.
 Other unexpected warnings, wrong pixels and unsafe selections still fail.
 Native product capability remains disabled; exact pixel provenance under loss,
 weak-link freshness, Pi performance and clean platform runtimes remain open.
+
+## Isolated Pi replay comparison after setup — 2026-10-19
+
+At the operator's request, work resumed without waiting for a fan. The standard
+optional-runtime reconciliation succeeded in a separate candidate environment
+under a temporary systemd CPU quota of 35%. The quota constrained compilation
+only and is no longer active. Installed OpenCV, the normal source revision
+`664171e00` and all 41 backed-up configuration files remain unchanged.
+The candidate source is PixEagle `9f90e28`; the tested QGC binary is `333f9773d`.
+
+The actual production replay worker served looping recorded test11, with camera
+and MAVLink disabled, circuit breaker enabled and command preview active. Core
+used the installed interpreter without GI; native used the candidate interpreter
+and explicit process-local experimental admission. The real QGC controller
+signed in and required fresh, selectable Qt presentations for 20 seconds:
+
+| Transport | Presented FPS | Largest presentation gap | Largest frame-age bound | Peak Pi temperature |
+| --- | ---: | ---: | ---: | ---: |
+| Core / JPEG | 6.37 | 363 ms | 455 ms | 61.15°C |
+| Native H.264 | 12.41 | 336 ms | 771 ms | 65.0°C |
+
+These are unshaped short tests on shared Wi-Fi. API, signaling and JPEG traversed
+an SSH loopback forward; native RTP used direct ICE connectivity. They are not
+equal-path bandwidth benchmarks, true camera-to-screen latency measurements or
+independent pixel-identity tests. Native diagnostics recorded active GCC/TWCC,
+960×540 delivery and adaptation from 12 to 15 requested FPS, with no metadata
+drops in the retained run. Measured presentation FPS is reported separately.
+
+Historical thermal flags remain `0xe0000`; current throttling bits were clear.
+Both workers stopped cleanly. A subsequent isolated operator replay has a
+75°C cutoff and a maximum ten-minute lifetime; it opens recorded video and CSRT
+in Linux QGC without enabling aircraft commands. The normal field service stays
+stopped during these tests. No saved field profile is replaced.
+
+Evidence is retained under the private `pi/` directory: `core-idle-controller.log`,
+`native-idle-controller.log`, each replay's `thermal-run.json`, and
+`qgc-desktop/native-qgc.log`. All 471 QGC Unit/Integration suites passed with
+standard exclusions in the preceding final renewal (`post-pi-final-qgc.log`).
+The earlier installation-load failure and rejected reference-order experiment
+remain failed evidence. Short Pi success does not close provenance under loss,
+weak-link freshness, browser parity, sustained performance or platform gates.

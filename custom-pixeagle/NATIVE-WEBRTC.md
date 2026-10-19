@@ -131,6 +131,15 @@ or native-media result. Repeat after setup load clears. Preserve the installed
 field configuration and keep the isolated replay's camera/MAVLink disabled,
 circuit breaker enabled, and command preview active.
 
+The subsequent isolated Pi comparison passed 20-second fresh/selectable
+presentation checks: Core/JPEG at 6.37 FPS and native H.264 at 12.41 FPS, with
+largest presentation gaps of 363 ms and 336 ms respectively. Peak temperatures
+were 61.15°C and 65°C. The optional runtime was built in a separate candidate
+environment; installed source/configuration stayed unchanged. See the
+[network qualification notes](NATIVE-WEBRTC-NETWORK.md#isolated-pi-replay-comparison-after-setup--2026-10-19)
+for test paths, limits and remaining loss/provenance gates. These short results
+do not enable product capability or qualify a field release.
+
 ## Remaining gates
 
 1. Extend the passing loopback controller transport/fallback tests to constrained
