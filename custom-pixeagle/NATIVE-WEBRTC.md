@@ -82,6 +82,12 @@ the pinned runtime manifest. The matching QGC revision is
 `919bfc82fb1e2fbc24583f5ea56939ca8eefbdca` and the matching PixEagle revision
 is `7d9fed9987fb7cd74019050c31a1ffefca2f873d`.
 
+The feature branch is intentionally based on the verified QGC integration
+baseline. QGC upstream has since refactored the GStreamer receiver and related
+build modules; a mechanical merge is not valid because it mixes two receiver
+architectures. Port that refactor as a dedicated integration step, with a
+fresh build and receiver tests, before rebasing this feature for publication.
+
 ## Remaining gates
 
 1. End-to-end automatic transport/fallback tests through the custom controller,
