@@ -1,4 +1,4 @@
-# Native WebRTC development checkpoint — 2026-10-18
+# Native WebRTC development checkpoint — 2026-10-19
 
 Native WebRTC is under qualification. The normal application continues to
 use authenticated WebSocket JPEG. No Pi configuration, operator setting or
@@ -70,11 +70,17 @@ The fixture has no aircraft or tracking routes. It reuses local-compat
 authorization and explicitly admits the experimental provider for this test;
 it does not establish remote browser-session security or production readiness.
 
-Local evidence: `~/.cache/pixeagle-qgc-baseline/native-webrtc-2026-10-18/`.
+Local evidence: `~/.cache/pixeagle-qgc-baseline/native-webrtc-2026-10-19/`.
 The development runtime is Linux GStreamer 1.24.2 with gst-plugins-rs 0.13.7
 (`cdec77cad2d9b7348d800507bc6eeec5039717eb`). QGC's release SDK remains pinned
 at 1.28.4. The extra development dependencies were installed in a user cache;
 no Pi service or system installation was changed.
+
+The current Linux evidence also contains the 30-case GStreamer policy and
+orchestrator test run, the repeated recorded-video native receiver run, and
+the pinned runtime manifest. The matching QGC revision is
+`919bfc82fb1e2fbc24583f5ea56939ca8eefbdca` and the matching PixEagle revision
+is `7d9fed9987fb7cd74019050c31a1ffefca2f873d`.
 
 ## Remaining gates
 
