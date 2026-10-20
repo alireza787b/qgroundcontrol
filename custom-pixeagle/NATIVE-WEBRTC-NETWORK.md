@@ -537,7 +537,7 @@ UDP path exclusion to establish actual Ethernet media delivery. TCP SSH/API
 management stayed on Wi-Fi. No persistent network workaround was deployed.
 
 | Test | Result and scope |
-|---|---|
+| --- | --- |
 | Recorded datalink, repaired sender, 20 s | Passed: 13.51 presented FPS, largest gap 263 ms, maximum conservative frame-age bound 631 ms |
 | Recorded datalink, visible 119 s observation | No stale source samples; dimensions moved between 640×360/960×540 and reached 1280×720. Operator: “yes it loosk perfect smoothand quality good.” This does not establish uninterrupted 720p/20 FPS. |
 | Recorded Wi-Fi, repaired sender, 20 s | Passed: 12.11 presented FPS, largest gap 336 ms, maximum age bound 631 ms. A longer GUI observation was incomplete; do not call it sustained Wi-Fi acceptance. |
@@ -633,7 +633,7 @@ This Linux software-decoder result does not qualify packaged hardware decoders,
 Windows or Android. Backend sender revision: `a83ea19`.
 
 | Camera/Pi/datalink trial | Actual delivered size | Encoder target ceiling | Median presented FPS in about 120 seconds |
-|---|---|---:|---:|
+| --- | --- | ---: | ---: |
 | Saved balanced 720p candidate | 540p startup, then 1280×720 | 2 Mbps | 14.41 |
 | 1080p ceiling, unchanged budget | 1440×810 | 2 Mbps | 11.60 |
 | 1080p ceiling, single-peer headroom | 1920×1080 | 4 Mbps | 14.40 |
@@ -654,6 +654,16 @@ image-quality parity or an optimum compression setting. The test window is
 1280 pixels wide, so it downsamples 1080p on screen. Weak-link independent
 pixel identity, browser parity, shared-client allocation, startup and platform
 qualification remain gates; native capability is not enabled by these results.
+
+### October 20 source checkpoint
+
+The frozen public and installation baselines live in PixEagle's
+`docs/video/06-configuration/qualified-profile-baselines.md`; the source/test
+recap is `2026-10-20-video-profile-freeze.md` in its modernization checkpoints.
+Publish this integration branch with an annotated qualification tag, without
+a public QGC PR or custom public release. The best measured single-viewer
+1080p/4 Mbps demonstration remains separate from the saved 720p/three-peer
+installation. Native product capability and platform acceptance remain gated.
 
 Validation: local incremental build and changed-C++ pre-commit checks passed.
 470/471 Unit/Integration tests initially passed; the sole Ninja Multi-Config
