@@ -595,3 +595,30 @@ deliberate stop is expected; the early startup interruptions remain a separate
 open issue. Visual acceptance does not close thermal, impaired-link, provenance
 or platform qualification. No implementation/default change accompanied this
 review.
+
+### October 20 applied-profile retest
+
+Backend candidate `8d16dad` retains canonical quality limits in the inhibited
+RTSP harness; factory behavior is unchanged. The installed Pi profile was saved
+through `ConfigService` with backup: maximum delivery15 FPS, startup10 FPS,
+explicit8000 kbps payload allocation, preprocessing/blur/CLAHE disabled. Its
+vertical mount, camera engine, flight gains and field safety choices were
+preserved. Only video settings were applied; native source upgrade remains in
+the separate qualification worktree, not the installed service.
+
+With actual datalink media, v15 passed the20-second controller check at12.04
+presented FPS during ramp, largest gap115 ms and maximum conservative age589 ms.
+The connected GUI119.78-second sample contains115 observations, no stale source,
+delivery reaching1280×720, final14 presented FPS and no metadata drops or receiver
+pressure. Pi58.95°C/no throttling at handoff. It is not yet a finished soak.
+Earlier v14 completed10 minutes but had a viewer only for its short controller
+test; retain it as a thermal runtime observation, not sustained media acceptance.
+
+Core Pi with optional Python GI unavailable also passed QGC JPEG playback and
+selection20 seconds (5.04 FPS); this is fallback compatibility, not WebRTC
+performance parity. Backend122 harness/API/config tests and109 focused factory/
+adaptation tests pass; no QGC implementation or binary changed. Saved laptop
+NetworkManager profile now retains192.168.0.203/24, keeping Wi-Fi default routes.
+The private Desktop/PixEagle-video-test-2026-10-20 handoff contains the applied
+config, rollback, diff and results. Native/product/platform and startup gates
+remain open; no new release or Actions run follows from these short results.
