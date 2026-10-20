@@ -285,7 +285,7 @@ Item {
                         }
 
                         QGCButton {
-                            enabled: root._client && !root._client.busy
+                            enabled: root._client && root._client.enabled
                             objectName: "pixeagleSignOut"
                             text: qsTr("Sign out")
 

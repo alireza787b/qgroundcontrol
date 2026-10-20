@@ -889,6 +889,52 @@ void PixEagleClientTest::_cancelPendingRequest_data()
     QTest::newRow("verification-vehicle-offline") << VERIFY_PATH << QStringLiteral("offline");
 }
 
+void PixEagleClientTest::_signOutCancelsPendingRequest_data()
+{
+    QTest::addColumn<QByteArray>("pendingPath");
+    QTest::newRow("login") << LOGIN_PATH;
+    QTest::newRow("context") << CONTEXT_PATH;
+    QTest::newRow("verification") << VERIFY_PATH;
+}
+
+void PixEagleClientTest::_signOutCancelsPendingRequest()
+{
+    QFETCH(QByteArray, pendingPath);
+    CompanionServer server;
+    QVERIFY(server.start());
+    PixEagleClient client;
+    configure(client, server);
+    const bool wasAuthenticated = pendingPath != LOGIN_PATH;
+    if (wasAuthenticated) {
+        QVERIFY(signIn(client));
+    }
+    server.deferredPath = pendingPath;
+    const qsizetype requestCount = server.requests.size();
+    if (pendingPath == LOGIN_PATH) {
+        client.signIn("pilot", "test-password");
+    } else if (pendingPath == VERIFY_PATH) {
+        client.verifyVehicle();
+    } else {
+        client.refresh();
+    }
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(pendingPath) >= requestCount && client.busy(),
+                             TestTimeout::mediumMs());
+    const qsizetype pendingIndex = server.lastRequestIndex(pendingPath);
+    client.signOut();
+    client.signOut();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.authenticated() && !client.busy(), TestTimeout::mediumMs());
+    QVERIFY(!client.associationVerified());
+    QVERIFY(client.connectionContext().isEmpty());
+    QCOMPARE(client.endpoint(), server.endpoint());
+    QTRY_VERIFY_WITH_TIMEOUT(!server.requests[pendingIndex].socket ||
+                                 server.requests[pendingIndex].socket->state() == QAbstractSocket::UnconnectedState,
+                             TestTimeout::mediumMs());
+    QVERIFY(!server.respond(pendingIndex, server.responseFor(server.requests[pendingIndex])));
+    const auto logoutCount = std::count_if(server.requests.cbegin(), server.requests.cend(),
+                                           [](const auto& request) { return request.target == LOGOUT_PATH; });
+    QCOMPARE(logoutCount, wasAuthenticated ? 1 : 0);
+}
+
 void PixEagleClientTest::_cancelPendingRequest()
 {
     QFETCH(QByteArray, pendingPath);

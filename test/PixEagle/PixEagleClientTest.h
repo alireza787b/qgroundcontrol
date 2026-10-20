@@ -33,6 +33,8 @@ private slots:
     void _endpointPrefixPreserved();
     void _cancelPendingRequest_data();
     void _cancelPendingRequest();
+    void _signOutCancelsPendingRequest_data();
+    void _signOutCancelsPendingRequest();
     void _redirectDoesNotForwardCredentials();
     void _tlsCertificateRejected();
     void _contextRecoversAfterTransientFailure_data();

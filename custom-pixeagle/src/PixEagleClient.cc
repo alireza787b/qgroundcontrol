@@ -552,7 +552,7 @@ void PixEagleClient::signInAtRemembered(const QString& endpoint, const QString& 
 
 void PixEagleClient::signOut()
 {
-    if (!_enabled || busy()) {
+    if (!_enabled || (busy() && _requestKind == Request::Logout)) {
         return;
     }
     _restartAge.invalidate();
@@ -563,6 +563,12 @@ void PixEagleClient::signOut()
     _recoveryPassword.clear();
     _authenticationRetryTimer.stop();
     QSettings().setValue(QStringLiteral("PixEagle/AutoSignInSuppressed/") + _credentialKey(), true);
+    if (_reply) {
+        ++_generation;
+        QNetworkReply* reply = _reply;
+        _reply = nullptr;
+        reply->abort();
+    }
     if (_authenticated) {
         _pollTimer.stop();
         _clearContext();
