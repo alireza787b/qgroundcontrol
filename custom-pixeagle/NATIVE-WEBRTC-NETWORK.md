@@ -622,3 +622,44 @@ NetworkManager profile now retains192.168.0.203/24, keeping Wi-Fi default routes
 The private Desktop/PixEagle-video-test-2026-10-20 handoff contains the applied
 config, rollback, diff and results. Native/product/platform and startup gates
 remain open; no new release or Actions run follows from these short results.
+
+### October 20 explicit 1080p comparison
+
+The native H.264 development receiver now offers constrained-baseline through
+level 4.2. The backend constrains encoded level/frame size/macroblock rate to
+the receiver offer; a 720p-level-only receiver cannot silently receive 1080p
+H.264. Unsupported intersection uses the established codec/fallback policy.
+This Linux software-decoder result does not qualify packaged hardware decoders,
+Windows or Android. Backend sender revision: `a83ea19`.
+
+| Camera/Pi/datalink trial | Actual delivered size | Encoder target ceiling | Median presented FPS in about 120 seconds |
+|---|---|---:|---:|
+| Saved balanced 720p candidate | 540p startup, then 1280×720 | 2 Mbps | 14.41 |
+| 1080p ceiling, unchanged budget | 1440×810 | 2 Mbps | 11.60 |
+| 1080p ceiling, single-peer headroom | 1920×1080 | 4 Mbps | 14.40 |
+
+All three sampled windows have no stale source or native peer errors. JPEG
+quality does not affect H.264. The 4 Mbps window contains 115 samples/119.72
+seconds, final 15 presented FPS, final encode pipeline 33.07 ms; connected CPU
+sample averages 210.1% of one core. Its full guarded runtime stopped on request
+at 494.65 seconds, peak 62.8°C. This is not an eight-minute connected-viewer
+soak. Historical undervoltage/throttling flags were present later; the cause
+and timing remain unqualified. Owned media filters are removed, original field
+service remains paused, and no commands were sent to camera or aircraft.
+
+The test changed the allowed peer count to one to obtain its larger encoder
+share; the saved installation retains its 720p/15 FPS and three-peer settings.
+Do not present the static indoor fan scene as aerial identification, native-app
+image-quality parity or an optimum compression setting. The test window is
+1280 pixels wide, so it downsamples 1080p on screen. Weak-link independent
+pixel identity, browser parity, shared-client allocation, startup and platform
+qualification remain gates; native capability is not enabled by these results.
+
+Validation: local incremental build and changed-C++ pre-commit checks passed.
+470/471 Unit/Integration tests initially passed; the sole Ninja Multi-Config
+fixture failed on the host tools path and passed with the installed Ninja path.
+Both full-size encrypted pixel checks and real Pi-to-QGC playback are separate
+evidence. The intermittent 1 Mbps 1080p luminance mismatch remains recorded;
+passing the 4 Mbps fixture does not relax selection provenance. Evidence is
+retained in `pi/quality-comparison-results.json`, v15/v16/v18 directories and
+`1080-qgc-*` logs. No public PR, release build or Actions run was started.

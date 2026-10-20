@@ -475,7 +475,7 @@ private:
                 gst_caps_append(
                     caps,
                     gst_caps_from_string("application/x-rtp,media=video,encoding-name=H264,clock-rate=90000,payload=96,"
-                                         "packetization-mode=(string)1,profile-level-id=(string)42e01f"));
+                                         "packetization-mode=(string)1,profile-level-id=(string)42e02a"));
             } else if (codec == QLatin1String("VP8")) {
                 gst_caps_append(caps,
                                 gst_caps_from_string(
