@@ -2037,7 +2037,7 @@ void PixEagleClientTest::_sessionSpeedControlsRenderAtTouchSize()
     QQmlComponent component(&engine, QUrl("qrc:/qml/PixEagle/PixEagleSessionControls.qml"));
     QVERIFY2(component.isReady(), qPrintable(component.errorString()));
     QScopedPointer<QObject> object(
-        component.createWithInitialProperties({{"client", QVariant::fromValue(&client)}, {"width", 360}}));
+        component.createWithInitialProperties({{"client", QVariant::fromValue(&client)}, {"width", 258}}));
     QVERIFY2(object, qPrintable(component.errorString()));
     auto* rootItem = qobject_cast<QQuickItem*>(object.data());
     QVERIFY(rootItem);
@@ -2059,45 +2059,56 @@ void PixEagleClientTest::_sessionSpeedControlsRenderAtTouchSize()
         QCOMPARE(button->property("focusPolicy").toInt(), static_cast<int>(Qt::StrongFocus));
         const auto origin = button->mapToItem(rootItem, QPointF{});
         QVERIFY(origin.x() >= 0 && origin.x() + button->width() <= rootItem->width() + .1);
+        if (button->objectName() == "pixeagleSessionRestore") {
+            QVERIFY(button->property("checked").toBool());
+        }
     }
 }
 
 void PixEagleClientTest::_sessionSpeedOverrideAndRestoreUseTheSameAction()
 {
-    for (const auto direction : {1, 0}) {
+    for (const auto direction : {1, 0, 2, -1}) {
         CompanionServer server;
         QVERIFY(server.start());
         advertiseTargets(server.context);
         advertiseFollowing(server.context);
         server.followingSnapshot = nativeFollowingStatus(server.context, true, true);
-        server.followingSnapshot.insert("session_controls", QJsonArray{QJsonObject{{"control_id", "requested_speed"},
-                                                                                   {"label", "Requested speed"},
-                                                                                   {"unit", "m/s"},
-                                                                                   {"minimum", 0},
-                                                                                   {"maximum", QJsonValue::Null},
-                                                                                   {"step", .5},
-                                                                                   {"value", 5},
-                                                                                   {"revision", 2},
-                                                                                   {"available", true},
-                                                                                   {"increase_allowed", true},
-                                                                                   {"configured_maximum", 3},
-                                                                                   {"reset_supported", true},
-                                                                                   {"override_active", true}}});
+        server.followingSnapshot.insert("session_controls",
+                                        QJsonArray{QJsonObject{{"control_id", "requested_speed"},
+                                                               {"label", "Requested speed"},
+                                                               {"unit", "m/s"},
+                                                               {"minimum", 0},
+                                                               {"maximum", QJsonValue::Null},
+                                                               {"step", .5},
+                                                               {"value", 5},
+                                                               {"revision", 2},
+                                                               {"available", true},
+                                                               {"increase_allowed", direction != -1},
+                                                               {"configured_maximum", 3},
+                                                               {"reset_supported", true},
+                                                               {"override_active", true}}});
         PixEagleClient client;
         configure(client, server);
         QVERIFY(signIn(client));
         QVERIFY(verify(client));
         QTRY_VERIFY_WITH_TIMEOUT(!client.captureSessionControl("requested_speed").isEmpty(), TestTimeout::mediumMs());
         server.deferredPath = "/api/v1/actions/following-control";
-        QVERIFY(
-            client.adjustSessionControl("requested_speed", direction, client.captureSessionControl("requested_speed")));
+        const auto context = client.captureSessionControl("requested_speed");
+        QVERIFY(!client.setSessionControlValue("requested_speed", -1, context));
+        QVERIFY(!client.setSessionControlValue("requested_speed", qInf(), context));
+        QVERIFY(!client.setSessionControlValue("requested_speed", 7.25, context + "stale"));
+        if (direction == -1) {
+            QVERIFY(!client.setSessionControlValue("requested_speed", 7.25, context));
+        }
+        QVERIFY(direction == 2 ? client.setSessionControlValue("requested_speed", 7.25, context)
+                               : client.adjustSessionControl("requested_speed", direction, context));
         QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(server.deferredPath) >= 0, TestTimeout::mediumMs());
         const auto body = QJsonDocument::fromJson(server.lastRequest(server.deferredPath).body).object();
         QCOMPARE(body.value("expected_revision").toInt(), 2);
         if (direction == 0) {
             QVERIFY(body.value("value").isNull());
         } else {
-            QCOMPARE(body.value("value").toDouble(), 5.5);
+            QCOMPARE(body.value("value").toDouble(), direction == 2 ? 7.25 : direction == -1 ? 4.5 : 5.5);
         }
         QVERIFY(client.canStopFollowing());
     }

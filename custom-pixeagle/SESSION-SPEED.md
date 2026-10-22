@@ -5,6 +5,14 @@ status. The first implementation is GM Velocity Vector; clients use backend
 capabilities and do not infer support from a follower name. Older backends and
 unsupported followers show no row. No QGC Settings value is added.
 
+The compact row uses a speedometer, minus, an acknowledged numeric readout, plus
+and restore. Tap the readout for an inline exact-speed entry and Apply/Cancel;
+Stop remains outside the scrollable content and reachable while editing. A
+changed session/revision or panel gesture invalidates the captured edit. Pending
+requests retain the acknowledged value. The Options dialog uses measured layout
+dimensions and font/control sizing at the panel scale, rather than an unmeasured
+visual transform, so its scrolling and Close remain aligned.
+
 Each minus/plus activation requests one backend-advertised step. It sets a
 temporary total 3D speed and replaces PixEagle's saved total and per-axis velocity
 caps for that session. There is no additional QGC speed ceiling. Altitude

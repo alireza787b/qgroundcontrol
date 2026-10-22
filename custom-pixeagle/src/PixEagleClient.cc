@@ -1521,12 +1521,38 @@ bool PixEagleClient::adjustSessionControl(const QString& controlId, int directio
         if (!reset && (!std::isfinite(value) || value == control.value("value").toDouble())) {
             return false;
         }
-        auto body = QJsonDocument::fromJson(context.toUtf8()).object();
-        body.remove("client_generation");
-        body.insert("value", reset ? QJsonValue(QJsonValue::Null) : QJsonValue(value));
-        return _postFollowingAction(QStringLiteral("following_control_set"), body, 5000);
+        return reset ? _postSessionControlValue(QJsonValue(QJsonValue::Null), context)
+                     : setSessionControlValue(controlId, value, context);
     }
     return false;
+}
+
+bool PixEagleClient::setSessionControlValue(const QString& controlId, double value, const QString& context)
+{
+    if (!std::isfinite(value) || context.isEmpty() || context != captureSessionControl(controlId)) {
+        return false;
+    }
+    for (const auto& entry : _followingStatus.value("session_controls").toArray()) {
+        const auto control = entry.toObject();
+        if (control.value("control_id").toString() != controlId) {
+            continue;
+        }
+        if (value < control.value("minimum").toDouble() || value == control.value("value").toDouble() ||
+            (!control.value("maximum").isNull() && value > control.value("maximum").toDouble()) ||
+            (value > control.value("value").toDouble() && !control.value("increase_allowed").toBool())) {
+            return false;
+        }
+        return _postSessionControlValue(QJsonValue(value), context);
+    }
+    return false;
+}
+
+bool PixEagleClient::_postSessionControlValue(const QJsonValue& value, const QString& context)
+{
+    auto body = QJsonDocument::fromJson(context.toUtf8()).object();
+    body.remove("client_generation");
+    body.insert("value", value);
+    return _postFollowingAction(QStringLiteral("following_control_set"), body, 5000);
 }
 
 bool PixEagleClient::_acceptFollowing(const QJsonObject& data)

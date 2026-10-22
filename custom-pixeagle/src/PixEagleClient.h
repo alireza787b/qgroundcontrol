@@ -159,6 +159,7 @@ public:
     QVariantList followingSessionControls() const;
     Q_INVOKABLE QString captureSessionControl(const QString& controlId) const;
     Q_INVOKABLE bool adjustSessionControl(const QString& controlId, int direction, const QString& context);
+    Q_INVOKABLE bool setSessionControlValue(const QString& controlId, double value, const QString& context);
 
     QUrl mediaUrl() const;
     QByteArray mediaCookie() const;
@@ -323,6 +324,7 @@ private:
     void _clearFollowingState();
     QJsonObject _lastFollowingHandoff() const;
     bool _postFollowingAction(const QString& action, QJsonObject body, int timeoutMs);
+    bool _postSessionControlValue(const QJsonValue& value, const QString& context);
     void _clearConfigState();
     void _clearSafetyState();
     bool _acceptConfigState(const QJsonObject& data);
