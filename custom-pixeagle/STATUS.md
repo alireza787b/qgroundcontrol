@@ -1,5 +1,10 @@
 # PixEagle–QGC status — 2026-10-04
 
+October 22 software checkpoint: [session speed override](SESSION-SPEED.md) adds
+capability-driven temporary 3D speed and restore controls. This is a test
+candidate; new operator and aircraft acceptance remain separate. Historical
+acceptance below is retained for its original revisions.
+
 Latest: the operator accepted the vertical **camera-final-v28** workflow.
 Logs record 796 successful Offboard publications, 10 successful target actions,
 81 successful camera actions and the automatic discovery request. The recorded
@@ -97,7 +102,7 @@ PixEagle main and release artifacts are not updated. Tested changes are being
 committed in reviewable groups on both integration branches; remaining source
 edits are uncommitted and nothing is published. Backend commits `e083f71` and
 `a1724a8` record sustained-link qualification and release boundaries. QGC
-commits `9d9e5f275`, `04ba98b5b`, `dd917e5ef`, `6ca249720`, and `2f4599db8`
+commits `9d9e5f275`, `04ba98b5b2ec743128fcc417ee07d3bbb498f5d5`, `dd917e5ef`, `6ca249720`, and `2f4599db8`
 record the native overlay, validation harness, qualification evidence, package
 identity, and deployment/publication documentation. The renewed
 focused gate passed 142 backend tests, an additional 226-test recovery/transport

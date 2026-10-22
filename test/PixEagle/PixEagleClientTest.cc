@@ -11,6 +11,9 @@
 #include <QtNetwork/QSslKey>
 #include <QtNetwork/QSslServer>
 #include <QtNetwork/QSslSocket>
+#include <QtQml/QQmlComponent>
+#include <QtQml/QQmlEngine>
+#include <QtQuick/QQuickItem>
 #include <QtTest/QSignalSpy>
 
 #include "GPS/NTRIP/Support/NTRIPTlsTestFixtures.h"
@@ -1923,6 +1926,181 @@ void PixEagleClientTest::_followerPreviewIsNotAircraftFollowing()
     QTRY_VERIFY_WITH_TIMEOUT(client.followerTestActive(), TestTimeout::mediumMs());
     QCOMPARE(client.followingState(), QStringLiteral("preview"));
     QVERIFY(client.followingStatusText().contains("no aircraft commands"));
+}
+
+void PixEagleClientTest::_sessionSpeedUsesCapturedRevisionAndKeepsStopAvailable()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseTargets(server.context);
+    advertiseFollowing(server.context);
+    server.followingSnapshot = nativeFollowingStatus(server.context, true, true);
+    server.followingSnapshot.insert("follow_connection_generation", "command-1");
+    const QJsonObject control{{"control_id", "requested_speed"},
+                              {"label", "Requested speed"},
+                              {"unit", "m/s"},
+                              {"minimum", 0},
+                              {"maximum", 5},
+                              {"step", 0.5},
+                              {"value", 3},
+                              {"revision", 0},
+                              {"available", true},
+                              {"increase_allowed", true}};
+    server.followingSnapshot.insert("session_controls", QJsonArray{control});
+    PixEagleClient client;
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QVERIFY(verify(client));
+    QTRY_COMPARE_WITH_TIMEOUT(client.followingSessionControls().size(), 1, TestTimeout::mediumMs());
+    const auto captured = client.captureSessionControl("requested_speed");
+    QVERIFY(!captured.isEmpty());
+    server.deferredPath = "/api/v1/actions/following-control";
+    QVERIFY(client.adjustSessionControl("requested_speed", 1, captured));
+    QVERIFY(!client.adjustSessionControl("requested_speed", 1, captured));
+    QVERIFY(client.canStopFollowing());
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(server.deferredPath) >= 0, TestTimeout::mediumMs());
+    const auto body = QJsonDocument::fromJson(server.lastRequest(server.deferredPath).body).object();
+    QCOMPARE(body.value("value").toDouble(), 3.5);
+    QCOMPARE(body.value("expected_revision").toInt(), 0);
+    QCOMPARE(body.value("connection_generation").toString(), QStringLiteral("command-1"));
+    QVERIFY(!body.contains("native_context"));
+    QCOMPARE(client.followingSessionControls().first().toMap().value("value").toDouble(), 3.0);
+    QVERIFY(client.stopFollowing(client.captureFollowingStop()));
+    QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex("/api/v1/actions/native-follow-stop") >= 0,
+                             TestTimeout::mediumMs());
+}
+
+void PixEagleClientTest::_sessionSpeedRejectsStaleAndUnsupportedControls()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseTargets(server.context);
+    advertiseFollowing(server.context);
+    server.followingSnapshot = nativeFollowingStatus(server.context, true, true);
+    PixEagleClient client;
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QVERIFY(verify(client));
+    QTRY_VERIFY_WITH_TIMEOUT(client.followingActive(), TestTimeout::mediumMs());
+    QVERIFY(client.followingSessionControls().isEmpty());
+    QVERIFY(client.captureSessionControl("requested_speed").isEmpty());
+    auto control = QJsonObject{{"control_id", "requested_speed"},
+                               {"label", "Requested speed"},
+                               {"unit", "m/s"},
+                               {"minimum", 0},
+                               {"maximum", 5},
+                               {"step", 0.5},
+                               {"value", 3},
+                               {"revision", 0},
+                               {"available", true},
+                               {"increase_allowed", false}};
+    server.followingSnapshot.insert("session_controls", QJsonArray{control});
+    client.refreshFollowing();
+    QTRY_VERIFY_WITH_TIMEOUT(!client.captureSessionControl("requested_speed").isEmpty(), TestTimeout::mediumMs());
+    const auto captured = client.captureSessionControl("requested_speed");
+    QVERIFY(!client.adjustSessionControl("requested_speed", 1, captured));
+    control.insert("revision", 1);
+    server.followingSnapshot.insert("session_controls", QJsonArray{control});
+    client.refreshFollowing();
+    QTRY_VERIFY_WITH_TIMEOUT(client.captureSessionControl("requested_speed") != captured, TestTimeout::mediumMs());
+    QVERIFY(!client.adjustSessionControl("requested_speed", -1, captured));
+    client.signOut();
+    QVERIFY(client.captureSessionControl("requested_speed").isEmpty());
+}
+
+void PixEagleClientTest::_sessionSpeedControlsRenderAtTouchSize()
+{
+    CompanionServer server;
+    QVERIFY(server.start());
+    advertiseTargets(server.context);
+    advertiseFollowing(server.context);
+    server.followingSnapshot = nativeFollowingStatus(server.context, true, true);
+    server.followingSnapshot.insert("session_controls", QJsonArray{QJsonObject{{"control_id", "requested_speed"},
+                                                                               {"label", "Requested speed"},
+                                                                               {"unit", "m/s"},
+                                                                               {"minimum", 0},
+                                                                               {"maximum", QJsonValue::Null},
+                                                                               {"configured_maximum", 3},
+                                                                               {"reset_supported", true},
+                                                                               {"override_active", true},
+                                                                               {"step", 0.5},
+                                                                               {"value", 3.25},
+                                                                               {"revision", 0},
+                                                                               {"available", true},
+                                                                               {"increase_allowed", true}}});
+    PixEagleClient client;
+    configure(client, server);
+    QVERIFY(signIn(client));
+    QVERIFY(verify(client));
+    QTRY_COMPARE_WITH_TIMEOUT(client.followingSessionControls().size(), 1, TestTimeout::mediumMs());
+    QQmlEngine engine;
+    QQmlComponent component(&engine, QUrl("qrc:/qml/PixEagle/PixEagleSessionControls.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(
+        component.createWithInitialProperties({{"client", QVariant::fromValue(&client)}, {"width", 360}}));
+    QVERIFY2(object, qPrintable(component.errorString()));
+    auto* rootItem = qobject_cast<QQuickItem*>(object.data());
+    QVERIFY(rootItem);
+    QTRY_VERIFY_WITH_TIMEOUT(rootItem->implicitHeight() > 0, TestTimeout::mediumMs());
+    for (const auto* name :
+         {"pixeagleSessionDecrease", "pixeagleSessionValue", "pixeagleSessionIncrease", "pixeagleSessionRestore"}) {
+        QQuickItem* button = nullptr;
+        const auto visit = [&button, name](auto&& self, QQuickItem* parent) -> void {
+            for (auto* child : parent->childItems()) {
+                if (child->objectName() == name) {
+                    button = child;
+                }
+                self(self, child);
+            }
+        };
+        visit(visit, rootItem);
+        QVERIFY(button);
+        QTRY_VERIFY_WITH_TIMEOUT(button->width() >= 44 && button->height() >= 44, TestTimeout::mediumMs());
+        QCOMPARE(button->property("focusPolicy").toInt(), static_cast<int>(Qt::StrongFocus));
+        const auto origin = button->mapToItem(rootItem, QPointF{});
+        QVERIFY(origin.x() >= 0 && origin.x() + button->width() <= rootItem->width() + .1);
+    }
+}
+
+void PixEagleClientTest::_sessionSpeedOverrideAndRestoreUseTheSameAction()
+{
+    for (const auto direction : {1, 0}) {
+        CompanionServer server;
+        QVERIFY(server.start());
+        advertiseTargets(server.context);
+        advertiseFollowing(server.context);
+        server.followingSnapshot = nativeFollowingStatus(server.context, true, true);
+        server.followingSnapshot.insert("session_controls", QJsonArray{QJsonObject{{"control_id", "requested_speed"},
+                                                                                   {"label", "Requested speed"},
+                                                                                   {"unit", "m/s"},
+                                                                                   {"minimum", 0},
+                                                                                   {"maximum", QJsonValue::Null},
+                                                                                   {"step", .5},
+                                                                                   {"value", 5},
+                                                                                   {"revision", 2},
+                                                                                   {"available", true},
+                                                                                   {"increase_allowed", true},
+                                                                                   {"configured_maximum", 3},
+                                                                                   {"reset_supported", true},
+                                                                                   {"override_active", true}}});
+        PixEagleClient client;
+        configure(client, server);
+        QVERIFY(signIn(client));
+        QVERIFY(verify(client));
+        QTRY_VERIFY_WITH_TIMEOUT(!client.captureSessionControl("requested_speed").isEmpty(), TestTimeout::mediumMs());
+        server.deferredPath = "/api/v1/actions/following-control";
+        QVERIFY(
+            client.adjustSessionControl("requested_speed", direction, client.captureSessionControl("requested_speed")));
+        QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(server.deferredPath) >= 0, TestTimeout::mediumMs());
+        const auto body = QJsonDocument::fromJson(server.lastRequest(server.deferredPath).body).object();
+        QCOMPARE(body.value("expected_revision").toInt(), 2);
+        if (direction == 0) {
+            QVERIFY(body.value("value").isNull());
+        } else {
+            QCOMPARE(body.value("value").toDouble(), 5.5);
+        }
+        QVERIFY(client.canStopFollowing());
+    }
 }
 
 UT_REGISTER_TEST_LIGHTWEIGHT(PixEagleClientTest, TestLabel::Unit)

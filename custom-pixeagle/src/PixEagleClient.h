@@ -49,6 +49,7 @@ class PixEagleClient : public QObject
     Q_PROPERTY(bool canStopFollowing READ canStopFollowing NOTIFY followingChanged)
     Q_PROPERTY(bool canSelectFollower READ canSelectFollower NOTIFY followingChanged)
     Q_PROPERTY(bool followingActionPending READ followingActionPending NOTIFY followingChanged)
+    Q_PROPERTY(QVariantList followingSessionControls READ followingSessionControls NOTIFY followingChanged)
     Q_PROPERTY(bool configAvailable READ configAvailable NOTIFY configChanged)
     Q_PROPERTY(bool configFresh READ configFresh NOTIFY configChanged)
     Q_PROPERTY(bool configBusy READ configBusy NOTIFY configChanged)
@@ -155,6 +156,9 @@ public:
     Q_INVOKABLE bool selectFollower(const QString& mode, const QString& context);
     Q_INVOKABLE bool startFollowing(const QString& context);
     Q_INVOKABLE bool stopFollowing(const QString& context);
+    QVariantList followingSessionControls() const;
+    Q_INVOKABLE QString captureSessionControl(const QString& controlId) const;
+    Q_INVOKABLE bool adjustSessionControl(const QString& controlId, int direction, const QString& context);
 
     QUrl mediaUrl() const;
     QByteArray mediaCookie() const;

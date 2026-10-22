@@ -16,6 +16,8 @@ the [slice-2 checkpoint](SLICE-2.md) preserves the completed video baseline.
 See the [operator coverage plan](OPERATOR-COVERAGE.md) for the explicit Smart
 model, external-camera, gimbal movement, following and administration boundaries.
 The [current status](STATUS.md) records accepted workflows and remaining gates.
+See [session speed override](SESSION-SPEED.md) for supported followers, temporary
+3D adjustments, restore behavior and the separate bench/aircraft acceptance gates.
 The [publication status](PUBLICATION-STATUS.md) explains that this customized
 QGC branch is not a public release; the public PixEagle project and its Apache
 2.0 notice remain separate.

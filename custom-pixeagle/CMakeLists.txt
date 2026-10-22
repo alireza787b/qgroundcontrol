@@ -48,6 +48,7 @@ qgc_configure_target(PixEagleModule)
 set_source_files_properties(src/PixEagleSettings.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleSettings.qml)
 set_source_files_properties(src/PixEagleConfigSection.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleConfigSection.qml)
 set_source_files_properties(src/PixEagleVideoView.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleVideoView.qml)
+set_source_files_properties(src/PixEagleSessionControls.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleSessionControls.qml)
 set_source_files_properties(src/PixEagleModelDialog.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleModelDialog.qml)
 set_source_files_properties(src/PixEagleIndicator.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleIndicator.qml)
 set_source_files_properties(src/PixEagleOptionsDialog.qml PROPERTIES QT_RESOURCE_ALIAS PixEagleOptionsDialog.qml)
@@ -60,6 +61,7 @@ qt_add_qml_module(
     RESOURCE_PREFIX /qml
     QML_FILES src/PixEagleSettings.qml
               src/PixEagleVideoView.qml
+              src/PixEagleSessionControls.qml
               src/PixEagleModelDialog.qml
               src/PixEagleIndicator.qml
               src/PixEagleOptionsDialog.qml

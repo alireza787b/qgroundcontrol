@@ -8,6 +8,7 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    property int _sessionControlGestureGeneration: 0
 
     property bool compactView: false
     property rect panelViewport: Qt.rect(0, 0, width, height)
@@ -210,7 +211,7 @@ Item {
         dragHandle: connectionGrip
         resizable: false
         uiScale: root._connectionPanelScale
-        onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
+        onDragStarted: { root.captureControl(); startFollowing.clearIntent(); root._sessionControlGestureGeneration++ }
 
         ColumnLayout {
             id: connectionDetails
@@ -261,20 +262,22 @@ Item {
         initialX: (root.width - width) / 2
         initialY: root.height - height - ScreenTools.defaultFontPixelHeight
         width: Math.min(root.width - edgeMargin * 2, ScreenTools.defaultFontPixelWidth * 45)
-        height: controls.implicitHeight + ScreenTools.defaultFontPixelHeight + resizeFooterHeight
+        height: Math.min(controls.implicitHeight + ScreenTools.defaultFontPixelHeight + resizeFooterHeight,
+                         Math.max(0, bottomBound - minimumY) / uiScale)
         visible: !root._compact && !!root.trackingController && !!root._client
                  && ((root._connectionReady && root._controller && root._controller.live) || root._client.canStopFollowing)
         dragHandle: panelGrip
         uiScale: root._trackingPanelScale
         onUiScaleChanged: root._trackingPanelScale = uiScale
         objectName: "pixeagleOperatorPanel"
-        onDragStarted: { root.captureControl(); startFollowing.clearIntent() }
+        onDragStarted: { root.captureControl(); startFollowing.clearIntent(); root._sessionControlGestureGeneration++ }
 
         ColumnLayout {
             id: controls
             anchors.centerIn: parent
             anchors.verticalCenterOffset: -targetPanel.resizeFooterHeight / 2
             width: parent.width - ScreenTools.defaultFontPixelWidth * 2
+            height: parent.height - ScreenTools.defaultFontPixelHeight - targetPanel.resizeFooterHeight
             spacing: ScreenTools.defaultFontPixelHeight / 3
             Item {
                 id: panelGrip
@@ -290,108 +293,127 @@ Item {
                 }
                 Rectangle { anchors.centerIn: parent; width: ScreenTools.defaultFontPixelWidth * 3; height: 3; radius: 1.5; color: qgcPal.text }
             }
-            RowLayout {
+            QGCFlickable {
                 Layout.fillWidth: true
-                Repeater {
-                    model: root.trackingController ? root.trackingController.selectionModes : []
-                    QGCButton {
-                        required property int index
-                        required property var modelData
-                        property string contextToken: ""
+                Layout.fillHeight: true
+                Layout.minimumHeight: 0
+                implicitHeight: scrollingControls.implicitHeight
+                contentHeight: scrollingControls.implicitHeight
+                flickableDirection: Flickable.VerticalFlick
+                clip: true
+                ColumnLayout {
+                    id: scrollingControls
+                    width: parent.width
+                    spacing: controls.spacing
+                    RowLayout {
                         Layout.fillWidth: true
-                        Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
-                        checked: !!root.trackingController && root.trackingController.selectedSelectionMode === modelData.id
-                        enabled: !!root.trackingController && (checked || (root.trackingController.canChangeMode && modelData.available))
-                        text: modelData.label
-                        objectName: modelData.id === "classic" ? "pixeagleClassicMode" : "pixeagleSmartMode"
-                        focusPolicy: Qt.StrongFocus
-                        onPressed: contextToken = root.captureControl()
-                        onCanceled: contextToken = ""
-                        onClicked: {
-                            if (!checked) root.trackingController.selectSelectionMode(modelData.id, contextToken)
-                            contextToken = ""
+                        Repeater {
+                            model: root.trackingController ? root.trackingController.selectionModes : []
+                            QGCButton {
+                                required property int index
+                                required property var modelData
+                                property string contextToken: ""
+                                Layout.fillWidth: true
+                                Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
+                                checked: !!root.trackingController && root.trackingController.selectedSelectionMode === modelData.id
+                                enabled: !!root.trackingController && (checked || (root.trackingController.canChangeMode && modelData.available))
+                                text: modelData.label
+                                objectName: modelData.id === "classic" ? "pixeagleClassicMode" : "pixeagleSmartMode"
+                                focusPolicy: Qt.StrongFocus
+                                onPressed: contextToken = root.captureControl()
+                                onCanceled: contextToken = ""
+                                onClicked: {
+                                    if (!checked) root.trackingController.selectSelectionMode(modelData.id, contextToken)
+                                    contextToken = ""
+                                }
+                                FocusOutline { }
+                            }
                         }
-                        FocusOutline { }
+                        QGCButton {
+                            Layout.preferredWidth: implicitHeight
+                            Layout.maximumWidth: implicitHeight
+                            Layout.minimumWidth: Math.max(ScreenTools.minTouchPixels, 44)
+                            Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
+                            leftPadding: ScreenTools.defaultFontPixelWidth / 2
+                            rightPadding: ScreenTools.defaultFontPixelWidth / 2
+                            objectName: "pixeagleTrackingOptions"
+                            iconSource: "qrc:/InstrumentValueIcons/cog.svg"
+                            Accessible.name: qsTr("Tracking options")
+                            ToolTip.visible: hovered
+                            ToolTip.text: qsTr("Options")
+                            onClicked: root.openOptions()
+                            focusPolicy: Qt.StrongFocus
+                            FocusOutline { }
+                        }
                     }
-                }
-                QGCButton {
-                    Layout.preferredWidth: implicitHeight
-                    Layout.maximumWidth: implicitHeight
-                    Layout.minimumWidth: Math.max(ScreenTools.minTouchPixels, 44)
-                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
-                    leftPadding: ScreenTools.defaultFontPixelWidth / 2
-                    rightPadding: ScreenTools.defaultFontPixelWidth / 2
-                    objectName: "pixeagleTrackingOptions"
-                    iconSource: "qrc:/InstrumentValueIcons/cog.svg"
-                    Accessible.name: qsTr("Tracking options")
-                    ToolTip.visible: hovered
-                    ToolTip.text: qsTr("Options")
-                    onClicked: root.openOptions()
-                    focusPolicy: Qt.StrongFocus
-                    FocusOutline { }
-                }
-            }
-            StatusRow {
-                Layout.fillWidth: true
-                objectName: "pixeagleTrackerSummary"
-                icon: "qrc:/InstrumentValueIcons/target.svg"
-                name: root._trackerName
-                state: root._trackingState
-                stateText: state === "tracking" ? qsTr("Tracking") : state === "lost" ? qsTr("Lost")
-                    : state === "acquiring" ? qsTr("Acquiring") : state === "updating" ? qsTr("Updating…")
-                    : state === "unknown" ? qsTr("Checking…") : qsTr("No target")
-                detail: root.trackingController ? root.trackingController.statusText : ""
-            }
-            StatusRow {
-                Layout.fillWidth: true
-                objectName: "pixeagleFollowerSummary"
-                visible: !!root._client && root._client.selectedFollower.length > 0
-                icon: "qrc:/InstrumentValueIcons/airplane.svg"
-                name: root._followerIndex >= 0 ? root._followers[root._followerIndex].label : qsTr("Follower")
-                state: root._followingState
-                stateText: root._client ? root._client.followingSummaryText : qsTr("Unknown")
-                detail: root._client ? root._client.followingStatusText : ""
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                visible: !!root._client && root._client.safetyFresh
-                         && (root._client.safetyActive || root._client.safetyFollowerTest)
-                spacing: ScreenTools.defaultFontPixelWidth / 2
-                QGCColoredImage {
-                    Layout.preferredWidth: ScreenTools.defaultFontPixelHeight
-                    Layout.preferredHeight: width
-                    source: "qrc:/InstrumentValueIcons/airplane.svg"
-                    color: qgcPal.text
-                }
-                QGCLabel {
-                    font.pointSize: ScreenTools.smallFontPointSize
-                    text: root._client && root._client.safetyFollowerTest ? qsTr("Follower test")
-                          : qsTr("Commands blocked")
-                }
-            }
-            RowLayout {
-                Layout.fillWidth: true
-                visible: !root._tapFact.rawValue || (root.trackingController && root.trackingController.canCancel)
-                QGCButton {
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
-                    visible: !root._tapFact.rawValue
-                    enabled: !!root.trackingController && (root.trackingController.canSelect || root.trackingController.selectionArmed)
-                    checked: !!root.trackingController && root.trackingController.selectionArmed
-                    text: checked ? qsTr("Cancel selection") : root.trackingController && root.trackingController.trackingActive ? qsTr("Retarget") : qsTr("Select target")
-                    objectName: "pixeagleSelectTarget"
-                    onClicked: root.trackingController.armSelection()
-                }
-                QGCButton {
-                    property string contextToken: ""
-                    Layout.fillWidth: true
-                    Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
-                    visible: !!root.trackingController && root.trackingController.canCancel
-                    text: qsTr("Clear target")
-                    objectName: "pixeagleCancelTracking"
-                    onPressed: contextToken = root.captureControl()
-                    onCanceled: contextToken = ""
-                    onClicked: { root.trackingController.cancelTracking(contextToken); contextToken = "" }
+                    StatusRow {
+                        Layout.fillWidth: true
+                        objectName: "pixeagleTrackerSummary"
+                        icon: "qrc:/InstrumentValueIcons/target.svg"
+                        name: root._trackerName
+                        state: root._trackingState
+                        stateText: state === "tracking" ? qsTr("Tracking") : state === "lost" ? qsTr("Lost")
+                            : state === "acquiring" ? qsTr("Acquiring") : state === "updating" ? qsTr("Updating…")
+                            : state === "unknown" ? qsTr("Checking…") : qsTr("No target")
+                        detail: root.trackingController ? root.trackingController.statusText : ""
+                    }
+                    StatusRow {
+                        Layout.fillWidth: true
+                        objectName: "pixeagleFollowerSummary"
+                        visible: !!root._client && root._client.selectedFollower.length > 0
+                        icon: "qrc:/InstrumentValueIcons/airplane.svg"
+                        name: root._followerIndex >= 0 ? root._followers[root._followerIndex].label : qsTr("Follower")
+                        state: root._followingState
+                        stateText: root._client ? root._client.followingSummaryText : qsTr("Unknown")
+                        detail: root._client ? root._client.followingStatusText : ""
+                    }
+                    PixEagleSessionControls {
+                        Layout.fillWidth: true
+                        client: root._client
+                        gestureGeneration: root._sessionControlGestureGeneration
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !!root._client && root._client.safetyFresh
+                                 && (root._client.safetyActive || root._client.safetyFollowerTest)
+                        spacing: ScreenTools.defaultFontPixelWidth / 2
+                        QGCColoredImage {
+                            Layout.preferredWidth: ScreenTools.defaultFontPixelHeight
+                            Layout.preferredHeight: width
+                            source: "qrc:/InstrumentValueIcons/airplane.svg"
+                            color: qgcPal.text
+                        }
+                        QGCLabel {
+                            font.pointSize: ScreenTools.smallFontPointSize
+                            text: root._client && root._client.safetyFollowerTest ? qsTr("Follower test")
+                                  : qsTr("Commands blocked")
+                        }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        visible: !root._tapFact.rawValue || (root.trackingController && root.trackingController.canCancel)
+                        QGCButton {
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
+                            visible: !root._tapFact.rawValue
+                            enabled: !!root.trackingController && (root.trackingController.canSelect || root.trackingController.selectionArmed)
+                            checked: !!root.trackingController && root.trackingController.selectionArmed
+                            text: checked ? qsTr("Cancel selection") : root.trackingController && root.trackingController.trackingActive ? qsTr("Retarget") : qsTr("Select target")
+                            objectName: "pixeagleSelectTarget"
+                            onClicked: root.trackingController.armSelection()
+                        }
+                        QGCButton {
+                            property string contextToken: ""
+                            Layout.fillWidth: true
+                            Layout.minimumHeight: Math.max(ScreenTools.minTouchPixels, 44)
+                            visible: !!root.trackingController && root.trackingController.canCancel
+                            text: qsTr("Clear target")
+                            objectName: "pixeagleCancelTracking"
+                            onPressed: contextToken = root.captureControl()
+                            onCanceled: contextToken = ""
+                            onClicked: { root.trackingController.cancelTracking(contextToken); contextToken = "" }
+                        }
+                    }
                 }
             }
             QGCDelayButton {

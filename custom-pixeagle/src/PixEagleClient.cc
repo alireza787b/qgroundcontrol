@@ -1,11 +1,14 @@
 #include "PixEagleClient.h"
 
+#include <algorithm>
+#include <cmath>
 #include <utility>
 
 #include <QtCore/QCryptographicHash>
 #include <QtCore/QJsonArray>
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QSet>
 #include <QtCore/QSettings>
 #include <QtCore/QUuid>
 #include <QtNetwork/QNetworkAccessManager>
@@ -1162,7 +1165,7 @@ bool PixEagleClient::followerTestActive() const
 
 QString PixEagleClient::followingState() const
 {
-    if (followingActionPending()) {
+    if (followingActionPending() && _followingActionName != "following_control_set") {
         return _followingActionName == "native_follow_start" ? QStringLiteral("starting") : QStringLiteral("updating");
     }
     if (!_followingFresh()) {
@@ -1421,7 +1424,8 @@ bool PixEagleClient::canStopFollowing() const
     const bool pendingStart = !followingActive() && _followingStatus.value("follow_session_id").toString().isEmpty();
     return _enabled && _authenticated && !_companionOnly && !_identityConflict && !_duplicateAssociation &&
            _followingStatus.value("stop_allowed").toBool() &&
-           (!followingActionPending() || (pendingStart && _followingActionName == "native_follow_start")) &&
+           (!followingActionPending() || _followingActionName == "following_control_set" ||
+            (pendingStart && _followingActionName == "native_follow_start")) &&
            !sessionId.isEmpty() && uid == _aircraftUid;
 }
 
@@ -1444,6 +1448,85 @@ void PixEagleClient::_clearFollowingState()
     _followingAge.invalidate();
     _followingExpiryTimer.stop();
     emit followingChanged();
+}
+
+QVariantList PixEagleClient::followingSessionControls() const
+{
+    QVariantList result;
+    if (!_followingStatus.value("following_active").toBool()) {
+        return result;
+    }
+    for (const auto& value : _followingStatus.value("session_controls").toArray()) {
+        auto control = value.toObject();
+        const bool available = !captureSessionControl(control.value("control_id").toString()).isEmpty();
+        control.insert("available", available);
+        if (!_followingFresh()) {
+            control.insert("reason_code", "status_stale");
+        }
+        result.append(control.toVariantMap());
+    }
+    return result;
+}
+
+QString PixEagleClient::captureSessionControl(const QString& controlId) const
+{
+    if (!_followingFresh() || followingActionPending() || !followingActive() ||
+        !_context.value("permissions").toObject().value("scopes").toArray().contains("actions:execute")) {
+        return {};
+    }
+    if (_followingStatus.value("execution_mode").toString() == "PX4" &&
+        (_companionOnly || _followingStatus.value("follow_aircraft_uid").toString() != _aircraftUid)) {
+        return {};
+    }
+    for (const auto& value : _followingStatus.value("session_controls").toArray()) {
+        const auto control = value.toObject();
+        if (control.value("control_id").toString() == controlId && control.value("available").toBool()) {
+            const QJsonObject context{{"client_generation", static_cast<qint64>(_generation)},
+                                      {"instance_id", _followingStatus.value("instance_id")},
+                                      {"runtime_id", _followingStatus.value("runtime_id")},
+                                      {"follow_session_id", _followingStatus.value("follow_session_id")},
+                                      {"aircraft_uid", _followingStatus.value("follow_aircraft_uid")},
+                                      {"connection_generation", _followingStatus.value("follow_connection_generation")},
+                                      {"control_id", controlId},
+                                      {"expected_revision", control.value("revision")}};
+            return QString::fromUtf8(QJsonDocument(context).toJson(QJsonDocument::Compact));
+        }
+    }
+    return {};
+}
+
+bool PixEagleClient::adjustSessionControl(const QString& controlId, int direction, const QString& context)
+{
+    if ((direction != -1 && direction != 0 && direction != 1) || context.isEmpty() ||
+        context != captureSessionControl(controlId)) {
+        return false;
+    }
+    for (const auto& entry : _followingStatus.value("session_controls").toArray()) {
+        const auto control = entry.toObject();
+        if (control.value("control_id").toString() != controlId) {
+            continue;
+        }
+        if (direction > 0 && !control.value("increase_allowed").toBool()) {
+            return false;
+        }
+        const bool reset = direction == 0;
+        if (reset && (!control.value("reset_supported").toBool() || !control.value("override_active").toBool())) {
+            return false;
+        }
+        double value = std::max(control.value("minimum").toDouble(),
+                                control.value("value").toDouble() + direction * control.value("step").toDouble());
+        if (!control.value("maximum").isNull()) {
+            value = std::min(value, control.value("maximum").toDouble());
+        }
+        if (!reset && (!std::isfinite(value) || value == control.value("value").toDouble())) {
+            return false;
+        }
+        auto body = QJsonDocument::fromJson(context.toUtf8()).object();
+        body.remove("client_generation");
+        body.insert("value", reset ? QJsonValue(QJsonValue::Null) : QJsonValue(value));
+        return _postFollowingAction(QStringLiteral("following_control_set"), body, 5000);
+    }
+    return false;
 }
 
 bool PixEagleClient::_acceptFollowing(const QJsonObject& data)
@@ -1482,6 +1565,39 @@ bool PixEagleClient::_acceptFollowing(const QJsonObject& data)
             return false;
         }
     }
+    const auto controls = data.value("session_controls").toArray();
+    if ((!data.value("session_controls").isUndefined() && !data.value("session_controls").isArray()) ||
+        controls.size() > 8) {
+        return false;
+    }
+    QSet<QString> controlIds;
+    for (const auto& value : controls) {
+        const auto control = value.toObject();
+        const auto id = control.value("control_id").toString();
+        if (id.isEmpty() || controlIds.contains(id) || control.value("label").toString().isEmpty() ||
+            control.value("unit").toString().isEmpty() || !control.value("available").isBool() ||
+            !control.value("increase_allowed").isBool()) {
+            return false;
+        }
+        controlIds.insert(id);
+        if (!control.value("maximum").isNull() &&
+            (!control.value("maximum").isDouble() || !std::isfinite(control.value("maximum").toDouble()))) {
+            return false;
+        }
+        for (const auto* field : {"minimum", "step", "value", "revision"}) {
+            if (!control.value(field).isDouble() || !std::isfinite(control.value(field).toDouble())) {
+                return false;
+            }
+        }
+        if (control.value("step").toDouble() <= 0 || control.value("minimum").toDouble() < 0 ||
+            control.value("value").toDouble() < control.value("minimum").toDouble() ||
+            (!control.value("maximum").isNull() &&
+             control.value("value").toDouble() > control.value("maximum").toDouble()) ||
+            control.value("revision").toDouble() < 0 ||
+            control.value("revision").toDouble() != std::floor(control.value("revision").toDouble())) {
+            return false;
+        }
+    }
     _followingStatus = data;
     _followingAge.start();
     _followingExpiryTimer.start(TARGET_STATE_MAX_AGE_MS);
@@ -1491,7 +1607,8 @@ bool PixEagleClient::_acceptFollowing(const QJsonObject& data)
 
 void PixEagleClient::refreshFollowing()
 {
-    if (!_followingReadReady() || _followingReply) {
+    if (!_followingReadReady() || _followingReply ||
+        (followingActionPending() && _followingActionName == "following_control_set")) {
         return;
     }
     QUrl url = _endpoint;
@@ -1625,7 +1742,8 @@ bool PixEagleClient::stopFollowing(const QString& context)
 
 bool PixEagleClient::_postFollowingAction(const QString& action, QJsonObject body, int timeoutMs)
 {
-    if (_followingActionReply && action == "native_follow_stop" && _followingActionName == "native_follow_start") {
+    if (_followingActionReply && action == "native_follow_stop" &&
+        (_followingActionName == "native_follow_start" || _followingActionName == "following_control_set")) {
         auto* startReply = _followingActionReply.data();
         _followingActionReply = nullptr;
         disconnect(startReply, nullptr, this, nullptr);
@@ -1635,8 +1753,18 @@ bool PixEagleClient::_postFollowingAction(const QString& action, QJsonObject bod
     if (_followingActionReply || _csrfHeader.isEmpty() || _csrfToken.isEmpty()) {
         return false;
     }
+    if (action == "following_control_set" && _followingReply) {
+        auto* reply = _followingReply.data();
+        _followingReply = nullptr;
+        disconnect(reply, nullptr, this, nullptr);
+        reply->abort();
+        reply->deleteLater();
+    }
     QString resource = action;
     resource.replace('_', '-');
+    if (action == "following_control_set") {
+        resource = "following-control";
+    }
     QUrl url = _endpoint;
     url.setPath(url.path() + "/api/v1/actions/" + resource);
     QNetworkRequest request(url);
@@ -1687,12 +1815,16 @@ bool PixEagleClient::_postFollowingAction(const QString& action, QJsonObject bod
                     bytes.size() <= MAX_RESPONSE_BYTES && data.value("action_type").toString() == action &&
                     data.value("idempotency_key").toString() == id && data.value("status").toString() == "success" &&
                     data.value("executed").toBool()) {
-                    _followingNotice = action == "native_follower_select"
+                    _followingNotice = action == "following_control_set"
+                                           ? tr("Speed request accepted; checking current status")
+                                       : action == "native_follower_select"
                                            ? tr("Follower choice saved; checking current status")
                                            : tr("Following request accepted; checking current status");
                     _followingActionError.clear();
                 } else if (status == 409) {
-                    _followingNotice = tr("Target, follower or aircraft changed. Review status and try again.");
+                    _followingNotice = action == "following_control_set"
+                                           ? tr("Speed or following session changed. Review status and try again.")
+                                           : tr("Target, follower or aircraft changed. Review status and try again.");
                     _followingActionError = _followingNotice;
                 } else if (status == 403 || status == 422) {
                     _followingNotice = tr("PixEagle refused this following action. Check permissions and readiness.");

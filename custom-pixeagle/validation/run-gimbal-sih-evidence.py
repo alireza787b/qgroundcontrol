@@ -18,6 +18,7 @@ import math
 import os
 import shlex
 import shutil
+import statistics
 import subprocess
 import threading
 import time
@@ -91,6 +92,8 @@ def host(args: argparse.Namespace, *, driver_path: Path | None = None, configure
     config["FOLLOWER_CIRCUIT_BREAKER"] = True
     if configure is not None:
         configure(config)
+    if getattr(args, "session_controls", False):
+        args.worker_extra_args = ["--session-controls"]
     (runtime / "configs/config.yaml").write_text(
         yaml.safe_dump(config, sort_keys=False), encoding="utf-8"
     )
@@ -145,7 +148,8 @@ def host(args: argparse.Namespace, *, driver_path: Path | None = None, configure
         'rest_pid=$!\n"$EVIDENCE_BIN/mavsdk_server_bin" -p 50051 udpin://127.0.0.1:14540 > /work/evidence/mavsdk.log 2>&1 &\n'
         'sdk_pid=$!\ntrap \'kill "$rest_pid" "$sdk_pid" 2>/dev/null || true\' EXIT\n'
         '"$EVIDENCE_PYTHON" /work/driver.py --worker --follower "$EVIDENCE_FOLLOWER" --mount "$EVIDENCE_MOUNT"'
-        + (f' {worker_extra}' if worker_extra else '') + '\n',
+        + (f" {worker_extra}" if worker_extra else "")
+        + "\n",
         encoding="utf-8",
     )
     try:
@@ -320,7 +324,9 @@ async def worker(args: argparse.Namespace) -> None:
             if predicate():
                 return
             await asyncio.sleep(0.1)
-        raise RuntimeError("Simulated aircraft readiness deadline expired")
+        raise RuntimeError(
+            f"Simulated aircraft readiness deadline expired: {app.mavlink_data_manager.get_flight_state()}"
+        )
 
     def target_for(position, quaternion, right, down):
         w, x, y, z = quaternion
@@ -386,7 +392,21 @@ async def worker(args: argparse.Namespace) -> None:
                 "px4_attitude": snapshot["vehicles"]["1"]["components"]["1"]["messages"][
                     "ATTITUDE"
                 ]["message"],
+                "flight_state": app.mavlink_data_manager.get_flight_state(),
             }
+            concrete = getattr(getattr(app, "follower", None), "follower", None)
+            getter = getattr(concrete, "session_controls", None)
+            record["session_controls"] = getter() if callable(getter) else []
+            local = (
+                snapshot["vehicles"]["1"]["components"]["1"]["messages"]
+                .get("LOCAL_POSITION_NED", {})
+                .get("message", {})
+            )
+            record["px4_speed_m_s"] = (
+                math.sqrt(sum(float(local[name]) ** 2 for name in ("vx", "vy", "vz")))
+                if all(name in local for name in ("vx", "vy", "vz"))
+                else None
+            )
             records.append(record)
             with (output / "observations.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(record) + "\n")
@@ -402,7 +422,28 @@ async def worker(args: argparse.Namespace) -> None:
         if not identity.get("autopilot_uid"):
             raise RuntimeError("The isolated simulated aircraft UID was not observed")
         app._following_session_aircraft_uid = identity["autopilot_uid"]
+        app._following_session_connection_generation = identity["connection_generation"]
         write_json(output / "identity.json", identity)
+
+        # Identity must be observed on the telemetry route as well as MAVSDK's
+        # separate command link. Request the real simulator message on that route.
+        def request_telemetry_identity():
+            url = "http://127.0.0.1:8088"
+            message = requests.get(url + "/v1/helper/mavlink?name=COMMAND_LONG", timeout=2).json()
+            message["message"].update(
+                param1=148.0,
+                command={"type": "MAV_CMD_REQUEST_MESSAGE"},
+                target_system=1,
+                target_component=1,
+            )
+            requests.post(url + "/v1/mavlink", json=message, timeout=2).raise_for_status()
+
+        await asyncio.to_thread(request_telemetry_identity)
+        await wait_for(lambda: app.mavlink_data_manager.get_flight_state().get("fresh") is True)
+        telemetry_identity = app.mavlink_data_manager.get_aircraft_identity()
+        if telemetry_identity.get("autopilot_uid") != identity["autopilot_uid"]:
+            raise RuntimeError("Independent telemetry/command identities disagree")
+        write_json(output / "telemetry-identity.json", telemetry_identity)
         # Commands become permissible only after isolated simulator identity observation.
         Parameters.FOLLOWER_CIRCUIT_BREAKER = False
 
@@ -447,6 +488,15 @@ async def worker(args: argparse.Namespace) -> None:
             raise RuntimeError("SIH hover/heading did not stabilize before guidance injection")
         app.follower = Follower(manager, (0.0, 0.0))
         app.follower.follower.reset_control_session()
+        speed_evidence = []
+        if args.session_controls:
+            concrete = app.follower.follower
+            controls = concrete.session_controls()
+            if len(controls) != 1:
+                raise RuntimeError("The selected follower did not advertise a session control")
+            control_id = controls[0]["control_id"]
+            ceiling = controls[0]["configured_maximum"]
+            concrete.update_session_control(control_id, 0.6 * ceiling, controls[0]["revision"])
         app.offboard_commander = OffboardCommander(
             manager,
             app.follower.follower.setpoint_handler,
@@ -458,10 +508,62 @@ async def worker(args: argparse.Namespace) -> None:
         await app.offboard_commander.start()
         app.following_active = True
         (position, quaternion), _ = await pose()
-        target1 = target_for(position, quaternion, 15, -5)
+        target1 = target_for(position, quaternion, 15, -30 if args.session_controls else -5)
         right_up = await phase("right_up", target1, 8)
         if not app.following_active:
             raise RuntimeError("Initial guidance handed off unexpectedly")
+        if args.session_controls:
+            for name, requested, duration in [
+                ("speed_increased", 1.5 * ceiling, 7),
+                ("speed_reduced", 0.2 * ceiling, 7),
+                ("speed_zero", 0.0, 5),
+            ]:
+                control = concrete.session_controls()[0]
+                concrete.update_session_control(control_id, requested, control["revision"])
+                samples = await phase(name, target1, duration)
+                tail = [row for row in samples if row["elapsed_s"] > duration - 1]
+                if not tail or any(row["px4_speed_m_s"] is None for row in tail):
+                    raise RuntimeError("Independent PX4 velocity samples are missing")
+                submitted = [
+                    math.sqrt(
+                        sum(
+                            (row["intent"] or {}).get(field, 0) ** 2
+                            for field in ("vel_body_fwd", "vel_body_right", "vel_body_down")
+                        )
+                    )
+                    for row in tail
+                ]
+                speed_evidence.append(
+                    {
+                        "phase": name,
+                        "requested": requested,
+                        "submitted_median_m_s": statistics.median(submitted),
+                        "px4_median_m_s": statistics.median(row["px4_speed_m_s"] for row in tail),
+                    }
+                )
+            raised, reduced, zero = speed_evidence
+            # Component limits and the configured ramp can prevent reaching the
+            # request. Require a resolved response, not a promised aircraft speed.
+            if not (
+                raised["submitted_median_m_s"] > reduced["submitted_median_m_s"] + 0.05
+                and raised["px4_median_m_s"] > reduced["px4_median_m_s"] + 0.05
+                and zero["submitted_median_m_s"] < 0.01
+                and zero["px4_median_m_s"] < 0.25
+            ):
+                raise RuntimeError(
+                    f"Speed command/independent SIH response did not match: {speed_evidence}"
+                )
+            control = concrete.session_controls()[0]
+            concrete.update_session_control(control_id, ceiling, control["revision"])
+            await phase("speed_restored", target1, 5)
+            control = concrete.session_controls()[0]
+            concrete.update_session_control(control_id, None, control["revision"])
+            restored = concrete.session_controls()[0]
+            if restored["override_active"] or concrete.velocity_limits.forward != ceiling:
+                raise RuntimeError("Reset did not restore the configured velocity limits")
+            await phase("configured_limits_restored", target1, 2)
+            concrete.update_session_control(control_id, 1.5 * ceiling, restored["revision"])
+            await phase("retarget_ready", target1, 2)
         prepared = app._prepare_following_target_transition("sih_retarget")
         if not prepared.get("prepared"):
             raise RuntimeError(f"SIH retarget preparation failed: {prepared}")
@@ -557,9 +659,13 @@ async def worker(args: argparse.Namespace) -> None:
                 raise RuntimeError(
                     f"Expected turn/vertical signs were not actually published: {name}"
                 )
+            # Bounded retargeting intentionally retains prior motion at entry.
+            # Check independent response after settling, and retain the whole
+            # transition separately so an initial climb/descent is not hidden.
+            settled = samples[len(samples) // 2]
             yaw0, yaw1 = initial["px4_attitude"]["yaw"], final["px4_attitude"]["yaw"]
             yaw_change = math.degrees(math.atan2(math.sin(yaw1 - yaw0), math.cos(yaw1 - yaw0)))
-            altitude_change = initial["position_ned"][2] - final["position_ned"][2]
+            altitude_change = settled["position_ned"][2] - final["position_ned"][2]
             if yaw_change * yaw_sign <= 0.2 or altitude_change * altitude_sign <= 0.03:
                 raise RuntimeError(
                     f"Wrong/insufficient independent PX4 response {name}: yaw={yaw_change}, altitude={altitude_change}"
@@ -569,6 +675,9 @@ async def worker(args: argparse.Namespace) -> None:
                     "phase": name,
                     "yaw_change_deg": yaw_change,
                     "altitude_change_m": altitude_change,
+                    "response_window_from_s": settled["elapsed_s"],
+                    "whole_phase_altitude_change_m": initial["position_ned"][2]
+                    - final["position_ned"][2],
                     "publications": len(publications),
                 }
             )
@@ -578,6 +687,73 @@ async def worker(args: argparse.Namespace) -> None:
             for field in ("vel_body_down", "yawspeed_deg_s")
         ):
             raise RuntimeError("Ordinary loss retained yaw or vertical guidance")
+        takeover_evidence = None
+        rtl_evidence = None
+        if args.session_controls:
+            # Re-enter using default setpoints, then let an independent flight
+            # action take authority before invoking delayed PixEagle cleanup.
+            if not (await manager.start_offboard_mode()).get("executed"):
+                raise RuntimeError("Could not enter isolated Offboard for takeover regression")
+            await commander.start()
+            await wait_for(
+                lambda: (
+                    app.mavlink_data_manager.get_flight_state().get("flight_mode")
+                    == app.mavlink_data_manager.offboard_mode_code
+                )
+            )
+            await manager.drone.action.land()
+            await wait_for(
+                lambda: (
+                    "land"
+                    in manager.get_flight_mode_text(
+                        app.mavlink_data_manager.get_flight_state().get("flight_mode")
+                    ).lower()
+                )
+            )
+            mode_before = app.mavlink_data_manager.get_flight_state()["flight_mode"]
+            await commander.stop(publish_final=False)
+            cleanup = await manager.stop_offboard_mode()
+            await asyncio.sleep(0.5)
+            mode_after = app.mavlink_data_manager.get_flight_state()["flight_mode"]
+            if (
+                not cleanup.get("local_sender_quiesced")
+                or cleanup.get("executed")
+                or mode_after != mode_before
+            ):
+                raise RuntimeError(
+                    f"Delayed cleanup did not preserve Land: {cleanup}, {mode_before}, {mode_after}"
+                )
+            takeover_evidence = {
+                "mode_before": mode_before,
+                "mode_after": mode_after,
+                "cleanup": cleanup,
+            }
+            await manager.drone.action.return_to_launch()
+            await wait_for(
+                lambda: (
+                    manager.get_flight_mode_text(
+                        app.mavlink_data_manager.get_flight_state().get("flight_mode")
+                    )
+                    == "Return"
+                )
+            )
+            mode_before = app.mavlink_data_manager.get_flight_state()["flight_mode"]
+            cleanup = await manager.stop_offboard_mode()
+            await asyncio.sleep(0.5)
+            mode_after = app.mavlink_data_manager.get_flight_state()["flight_mode"]
+            if (
+                not cleanup.get("local_sender_quiesced")
+                or cleanup.get("executed")
+                or mode_after != mode_before
+            ):
+                raise RuntimeError(
+                    f"Delayed cleanup did not preserve RTL: {cleanup}, {mode_before}, {mode_after}"
+                )
+            rtl_evidence = {
+                "mode_before": mode_before,
+                "mode_after": mode_after,
+                "cleanup": cleanup,
+            }
         write_json(
             output / "result.json",
             {
@@ -587,6 +763,9 @@ async def worker(args: argparse.Namespace) -> None:
                 "publication": status,
                 "handoff": handoff,
                 "response_evidence": response_evidence,
+                "session_speed_evidence": speed_evidence,
+                "land_takeover_evidence": takeover_evidence,
+                "rtl_takeover_evidence": rtl_evidence,
                 "slew_bounds": {
                     "velocity_step_m_s": maximum_velocity_step,
                     "yaw_step_deg_s": maximum_yaw_step,
@@ -614,6 +793,11 @@ async def worker(args: argparse.Namespace) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
+    parser.add_argument(
+        "--session-controls",
+        action="store_true",
+        help="Also qualify advertised temporary speed controls",
+    )
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument(
         "--backend-repo", type=Path, default=Path("/home/alireza/PixEagle-qgc-integration")

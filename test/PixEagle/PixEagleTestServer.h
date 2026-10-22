@@ -387,6 +387,9 @@ public:
             const auto body = QJsonDocument::fromJson(request.body).object();
             auto action = QString::fromLatin1(request.target.mid(request.target.lastIndexOf('/') + 1));
             action.replace('-', '_');
+            if (action == "following_control") {
+                action = "following_control_set";
+            }
             QJsonObject result{{"target_state", nativeTargetState(context, "2")}};
             if (action == "gimbal_control" && body.value("operation").toString().startsWith("manual_")) {
                 result.insert("manual", QJsonObject{{"gesture_id", body.value("gesture_id")},

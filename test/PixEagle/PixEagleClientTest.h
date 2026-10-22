@@ -81,4 +81,8 @@ private slots:
     void _safetyRequiresBackendCapabilityAndFreshState();
     void _safetyMutationUsesCapturedBackendState();
     void _followerPreviewIsNotAircraftFollowing();
+    void _sessionSpeedUsesCapturedRevisionAndKeepsStopAvailable();
+    void _sessionSpeedRejectsStaleAndUnsupportedControls();
+    void _sessionSpeedControlsRenderAtTouchSize();
+    void _sessionSpeedOverrideAndRestoreUseTheSameAction();
 };
