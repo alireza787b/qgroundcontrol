@@ -265,7 +265,11 @@ jobs:
 
     env:
       BUILD_TYPE: ${{ inputs.build_type }}
-      QT_ANDROID_ABIS: arm64-v8a;armeabi-v7a
+      # Keep the custom APK single-ABI until the fork's multi-ABI Qt target
+      # graph is qualified. The arm64 artifact covers current tablets and
+      # avoids invoking an inner ABI target that the custom target name does
+      # not expose.
+      QT_ANDROID_ABIS: arm64-v8a
       QT_ANDROID_KEYSTORE_ALIAS: pixeagle-debug
       QT_ANDROID_KEYSTORE_STORE_PASS: android
       QT_ANDROID_KEYSTORE_KEY_PASS: android
