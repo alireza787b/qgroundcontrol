@@ -45,7 +45,11 @@ def runtime_module():
 
 def configure(config):
     config["Tracking"]["DEFAULT_TRACKING_ALGORITHM"] = "CSRT"
-    config["Follower"]["General"]["ENABLE_ALTITUDE_CONTROL"] = True
+    # Public scenarios are horizontal by default. The explicit altitude
+    # scenario opts in through --enable-altitude-control at the host boundary.
+    config["Follower"]["General"]["ENABLE_ALTITUDE_CONTROL"] = (
+        os.environ.get("PIXEAGLE_SIH_ALTITUDE_CONTROL") == "1"
+    )
     # A simulator overlay: fixed camera at the normalized image aim, not a
     # camera-owned tracker or a guessed physical mount transform.
     config["MC_ATTITUDE_RATE"]["TARGET_ALTITUDE_OFFSET"] = 0.0
@@ -56,14 +60,20 @@ def signed_angle_change(before, after):
     return math.degrees(math.atan2(math.sin(difference), math.cos(difference)))
 
 
-def expectation(mode, direction):
+def expectation(mode, direction, altitude_enabled):
     if mode == "mc_velocity_ground":
         return {"vel_body_right": direction, "vel_body_fwd": direction}
     if mode == "mc_velocity_distance":
-        return {"vel_body_right": direction, "vel_body_down": -direction}
+        required = {"vel_body_right": direction}
+        if altitude_enabled:
+            required["vel_body_down"] = -direction
+        return required
     if mode in {"mc_attitude_rate", "fw_attitude_rate"}:
         return {"yawspeed_deg_s": direction, "pitchspeed_deg_s": direction}
-    return {"yawspeed_deg_s": direction, "vel_body_down": -direction}
+    required = {"yawspeed_deg_s": direction}
+    if altitude_enabled:
+        required["vel_body_down"] = -direction
+    return required
 
 
 async def worker(args):
@@ -119,6 +129,40 @@ async def worker(args):
     )
     app.target_continuity.reset_session(session_epoch=0, reason="normal_sih_start")
     records = []
+    target_truth_path = output / "target_truth.jsonl"
+    target_truth_path.write_text("", encoding="utf-8")
+    phase_targets = {}
+
+    def target_for_phase(name, position, quaternion, elapsed_s):
+        """Return a fixed world target seeded from the independent phase pose."""
+        if name not in phase_targets:
+            w, x, y, z = quaternion
+            yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+            side = 1.0 if name == "right_up" else -1.0
+            forward = (math.cos(yaw), math.sin(yaw), 0.0)
+            right = (-math.sin(yaw), math.cos(yaw), 0.0)
+            phase_targets[name] = tuple(
+                position[index] + 20.0 * forward[index] + 6.0 * side * right[index]
+                for index in range(3)
+            )
+        return phase_targets[name]
+
+    def image_position_for_target(position, quaternion, target):
+        """Project independent NED truth to a bounded normalized image point."""
+        w, x, y, z = quaternion
+        norm = math.sqrt(sum(value * value for value in quaternion))
+        if norm <= 1e-9:
+            return 0.5, 0.5
+        w, x, y, z = (value / norm for value in quaternion)
+        north, east, down = (target[index] - position[index] for index in range(3))
+        forward = (1 - 2 * (y * y + z * z)) * north + 2 * (x * y + w * z) * east + 2 * (x * z - w * y) * down
+        right = 2 * (x * y - w * z) * north + (1 - 2 * (x * x + z * z)) * east + 2 * (y * z + w * x) * down
+        body_down = 2 * (x * z + w * y) * north + 2 * (y * z - w * x) * east + (1 - 2 * (x * x + y * y)) * down
+        denominator = max(forward, 1.0)
+        return (
+            max(-0.95, min(0.95, right / denominator)),
+            max(-0.95, min(0.95, body_down / denominator)),
+        )
 
     async def snapshot():
         result = await asyncio.to_thread(
@@ -140,7 +184,11 @@ async def worker(args):
         begun = time.monotonic()
         while time.monotonic() - begun < duration and app.following_active:
             measured = await snapshot()
-            x, y = coordinates
+            elapsed = time.monotonic() - begun
+            target_ned = target_for_phase(
+                name, measured["position_ned"], measured["quaternion"], elapsed
+            )
+            x, y = image_position_for_target(measured["position_ned"], measured["quaternion"], target_ned)
             observation = TrackerOutput(
                 data_type=TrackerDataType.POSITION_2D,
                 timestamp=time.time(),
@@ -161,12 +209,15 @@ async def worker(args):
             record = {
                 "phase": name,
                 "timestamp": time.time(),
-                "coordinates": coordinates,
+                "coordinates": (x, y),
+                "target_ned": target_ned,
                 "accepted": accepted,
                 **measured,
                 "continuity": app.get_target_continuity_status(),
             }
             records.append(record)
+            with target_truth_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"timestamp": record["timestamp"], "target_ned": target_ned}) + "\n")
             with (output / "observations.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(record) + "\n")
             if not accepted:
@@ -187,6 +238,17 @@ async def worker(args):
         app._following_session_aircraft_uid = identity["autopilot_uid"]
         runtime.write_json(output / "identity.json", identity)
         expected_airframe = "fixed_wing" if args.follower.startswith("fw_") else "multicopter"
+        if expected_airframe == "fixed_wing":
+            # Pinned SIH airplane image correction; this is simulator-only
+            # provenance and is never copied into a field configuration.
+            await manager.drone.param.set_param_float("SIH_F_T_MAX", 6.0)
+            fixed_wing_param = await manager.drone.param.get_param_float("SIH_F_T_MAX")
+            if abs(fixed_wing_param - 6.0) > 1e-6:
+                raise RuntimeError("SIH_F_T_MAX correction was not accepted")
+            runtime.write_json(
+                output / "fixed_wing_parameters.json",
+                {"SIH_F_T_MAX": fixed_wing_param, "scope": "simulator_only"},
+            )
         Parameters.FOLLOWER_CIRCUIT_BREAKER = False
 
         async def armable():
@@ -204,6 +266,31 @@ async def worker(args):
         )
         if expected_airframe == "fixed_wing":
             await ready(lambda: (getattr(manager, "current_ground_speed", None) or 0) > 14)
+            stable_flight = []
+            settle_deadline = time.monotonic() + 10.0
+            while time.monotonic() < settle_deadline:
+                sample = {
+                    "timestamp": time.time(),
+                    "altitude_m": manager.current_altitude,
+                    "ground_speed_m_s": manager.current_ground_speed,
+                }
+                stable_flight.append(sample)
+                with (output / "stable_flight.jsonl").open("a", encoding="utf-8") as stream:
+                    stream.write(json.dumps(sample) + "\n")
+                if len(stable_flight) >= 10:
+                    speeds = [row["ground_speed_m_s"] for row in stable_flight[-10:] if row["ground_speed_m_s"] is not None]
+                    altitudes = [row["altitude_m"] for row in stable_flight[-10:] if row["altitude_m"] is not None]
+                    if (
+                        len(speeds) == 10
+                        and len(altitudes) == 10
+                        and min(speeds) >= 14.0
+                        and max(speeds) - min(speeds) <= 3.0
+                        and max(altitudes) - min(altitudes) <= 3.0
+                    ):
+                        break
+                await asyncio.sleep(0.5)
+            else:
+                raise RuntimeError("Fixed-wing stable-flight window did not settle")
         else:
             stable = []
             deadline = time.monotonic() + 60
@@ -242,6 +329,12 @@ async def worker(args):
         app.following_active = True
         duration = args.phase_duration or (1.2 if "attitude" in args.follower else 5)
         first = await phase("right_up", (0.15, -0.12), duration)
+        prepared = app._prepare_following_target_transition("sih_retarget")
+        if not prepared.get("prepared"):
+            raise RuntimeError(f"SIH retarget preparation failed: {prepared}")
+        app._advance_tracking_session_generation(for_retarget=True)
+        app._camera_selection_dispatched_wall_time = time.time()
+        app._camera_selection_dispatched_monotonic = time.monotonic()
         second = await phase("left_down", (-0.15, 0.12), duration)
         commander = app.offboard_commander
         await app._stop_following_after_continuity_failure("operator_stop")
@@ -262,14 +355,19 @@ async def worker(args):
         if not publications or commander.get_status()["failed_publishes"]:
             raise RuntimeError("Publication failure or empty evidence")
         results = []
-        for name, samples, direction in (("right_up", first, 1), ("left_down", second, -1)):
+        for name, samples in (("right_up", first), ("left_down", second)):
+            direction = 1 if samples[0]["coordinates"][0] >= 0.0 else -1
             rows = [
                 row
                 for row in publications
                 if samples[0]["timestamp"] <= row["timestamp"] <= samples[-1]["timestamp"]
                 and row.get("command_intent")
             ]
-            required = expectation(args.follower, direction)
+            required = expectation(
+                args.follower,
+                direction,
+                bool(getattr(concrete, "enable_altitude_control", False)),
+            )
             if not any(
                 all(
                     row["command_intent"]["fields"][field] * sign > 1e-4
@@ -309,6 +407,7 @@ async def worker(args):
                     "mc_velocity_distance",
                     "mc_velocity_position",
                 }
+                and getattr(concrete, "enable_altitude_control", False)
                 and altitude_change * direction <= 0.025
             ):
                 raise RuntimeError(
@@ -383,7 +482,7 @@ async def worker(args):
                 "tracker_acquisition_qualified": False,
                 "input": "normalized POSITION_2D plus bounding box and confidence",
                 "test_overlay": {
-                    "ENABLE_ALTITUDE_CONTROL": True,
+                    "ENABLE_ALTITUDE_CONTROL": bool(getattr(concrete, "enable_altitude_control", False)),
                     "MC_ATTITUDE_RATE.TARGET_ALTITUDE_OFFSET": 0,
                 },
                 "publication": commander.get_status(),
@@ -429,6 +528,11 @@ def main():
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--phase-duration", type=float)
     parser.add_argument("--require-attitude-envelope", action="store_true")
+    parser.add_argument(
+        "--enable-altitude-control",
+        action="store_true",
+        help="Opt into the explicit altitude scenario; public/default SIH runs remain horizontal.",
+    )
     parser.add_argument(
         "--backend-repo", type=Path, default=Path.home() / "PixEagle-qgc-integration"
     )
@@ -477,6 +581,9 @@ def main():
             args.worker_extra_args.extend(["--phase-duration", str(args.phase_duration)])
         if args.require_attitude_envelope:
             args.worker_extra_args.append("--require-attitude-envelope")
+        if args.enable_altitude_control:
+            os.environ["PIXEAGLE_SIH_ALTITUDE_CONTROL"] = "1"
+            args.worker_extra_args.append("--enable-altitude-control")
         args.evidence_kind = "normal-camera-production-dispatch-sih"
         runtime_module().host(args, driver_path=Path(__file__), configure=configure)
 

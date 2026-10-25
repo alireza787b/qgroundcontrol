@@ -307,6 +307,8 @@ async def worker(args: argparse.Namespace) -> None:
     )
     app.target_continuity.reset_session(session_epoch=0, reason="sih_session_start")
     records = []
+    target_truth_path = output / "target_truth.jsonl"
+    target_truth_path.write_text("", encoding="utf-8")
 
     async def pose():
         snapshot = await asyncio.to_thread(
@@ -379,6 +381,7 @@ async def worker(args: argparse.Namespace) -> None:
                 "position_ned": position,
                 "body_to_ned_quaternion": quaternion,
                 "angular": angular,
+                "target_ned": target,
                 "target_generation": app._tracking_session_generation,
                 "accepted": accepted,
                 "continuity": app.get_target_continuity_status(),
@@ -388,6 +391,8 @@ async def worker(args: argparse.Namespace) -> None:
                 ]["message"],
             }
             records.append(record)
+            with target_truth_path.open("a", encoding="utf-8") as stream:
+                stream.write(json.dumps({"timestamp": now, "target_ned": target}) + "\n")
             with (output / "observations.jsonl").open("a", encoding="utf-8") as stream:
                 stream.write(json.dumps(record) + "\n")
             await asyncio.sleep(0.05)
