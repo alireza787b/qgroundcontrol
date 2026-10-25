@@ -10,6 +10,7 @@ on:
         default: all
         options:
           - all
+          - linux
           - windows
           - android
       build_type:
@@ -33,6 +34,100 @@ env:
   CUSTOM_DIR: custom-pixeagle
 
 jobs:
+  linux:
+    name: PixEagle Linux ${{ inputs.build_type }}
+    if: inputs.platform == 'all' || inputs.platform == 'linux'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+
+    defaults:
+      run:
+        shell: bash
+
+    steps:
+      - name: Harden Runner
+        uses: step-security/harden-runner@v2
+        with:
+          egress-policy: audit
+
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Build Setup
+        uses: ./.github/actions/build-setup
+        with:
+          qt-host: linux
+          qt-arch: linux_gcc_64
+          build-type: ${{ inputs.build_type }}
+          cache-variant: pixeagle
+
+      - name: Install Dependencies
+        uses: ./.github/actions/install-dependencies
+
+      - name: Configure
+        uses: ./.github/actions/cmake-configure
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          preset: ${{ inputs.build_type == 'Debug' && 'Linux-debug' || 'Linux' }}
+          extra-args: >-
+            -DQGC_CUSTOM_DIR=${{ env.CUSTOM_DIR }}
+            -DQGC_ENABLE_GST_VIDEOSTREAMING=ON
+
+      - name: Build
+        id: build
+        uses: ./.github/actions/cmake-build
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+          output-file: linux-build.log
+
+      - name: Create AppImage
+        uses: ./.github/actions/cmake-install
+        with:
+          build-dir: ${{ runner.temp }}/build
+          build-type: ${{ inputs.build_type }}
+
+      - name: Prepare AppImage artifact
+        id: appimage
+        run: |
+          appimage="${RUNNER_TEMP}/build/PixEagle-QGroundControl-x86_64.AppImage"
+          if [[ ! -f "$appimage" ]]; then
+            echo "::error::PixEagle AppImage was not produced at $appimage"
+            find "${RUNNER_TEMP}/build" -maxdepth 2 -type f -name '*.AppImage' -print
+            exit 1
+          fi
+          checksum="${appimage}.sha256"
+          (cd "$(dirname "$appimage")" && sha256sum "$(basename "$appimage")" > "$checksum")
+          echo "path=$appimage" >> "$GITHUB_OUTPUT"
+
+      - name: Verify AppImage
+        uses: ./.github/actions/verify-executable
+        with:
+          binary-path: ${{ steps.appimage.outputs.path }}
+          type: appimage
+          build-dir: ${{ runner.temp }}/build
+
+      - name: Upload Linux artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: pixeagle-qgroundcontrol-linux-${{ inputs.build_type }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            ${{ steps.appimage.outputs.path }}
+            ${{ steps.appimage.outputs.path }}.sha256
+            ${{ runner.temp }}/build/linux-build.log
+
+      - name: Attest Linux AppImage
+        if: inputs.build_type == 'Release'
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: ${{ steps.appimage.outputs.path }}
+
   windows:
     name: PixEagle Windows ${{ inputs.build_type }}
     if: inputs.platform == 'all' || inputs.platform == 'windows'

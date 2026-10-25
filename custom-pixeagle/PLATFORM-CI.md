@@ -1,4 +1,4 @@
-# PixEagle Windows and Android CI
+# PixEagle platform CI
 
 The custom platform workflow is `.github/workflows/pixeagle-platform.yml`. It
 is deliberately manual: stock QGroundControl workflows remain unchanged, and
@@ -7,15 +7,17 @@ custom artifacts are not produced or published on ordinary stock builds.
 After the integration branch is pushed to the QGC fork, open **Actions →
 PixEagle Platform Artifacts → Run workflow** and select:
 
-- `all` to build Windows and Android;
-- `windows` or `android` for one platform; and
+- `all` to build Linux, Windows, and Android;
+- `linux`, `windows`, or `android` for one platform; and
 - `Release` for a release-shaped unsigned/test artifact, or `Debug` for a
   faster diagnostic build.
 
 The workflow uses QGC's pinned build configuration, locked Qt setup actions,
 the explicit `QGC_CUSTOM_DIR=custom-pixeagle` overlay, and the platform runners
 already used by QGC. It uploads short-lived CI artifacts with SHA-256 sidecar
-files. Release builds receive GitHub build-provenance attestations.
+files. Release builds receive GitHub build-provenance attestations. Linux now
+uses the same workflow and produces the custom PixEagle AppImage; it does not
+fall back to the stock QGC workflow.
 
 Android CI creates a temporary debug keystore for the test APK. It does not use
 a production signing key, Play Store credentials, or store deployment. The APK
