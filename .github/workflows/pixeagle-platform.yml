@@ -39,6 +39,10 @@ jobs:
     if: inputs.platform == 'all' || inputs.platform == 'linux'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
 
     defaults:
       run:
