@@ -85,6 +85,9 @@ def host(args: argparse.Namespace, *, driver_path: Path | None = None, configure
     config["Follower"]["FollowerOverrides"]["GM_VELOCITY_VECTOR"]["LATERAL_GUIDANCE_MODE"] = (
         "coordinated_turn"
     )
+    config["Follower"]["FollowerOverrides"]["GM_VELOCITY_VECTOR"]["ENABLE_ALTITUDE_CONTROL"] = (
+        os.environ.get("PIXEAGLE_SIH_ALTITUDE_CONTROL") == "1"
+    )
     config["GimbalTracker"].update(
         MOUNT_TYPE=args.mount, ENABLED=False, CONTROL_ENABLED=False, UDP_HOST="127.0.0.1"
     )
@@ -620,6 +623,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--enable-altitude-control", action="store_true")
     parser.add_argument(
         "--backend-repo", type=Path, default=Path("/home/alireza/PixEagle-qgc-integration")
     )
@@ -642,6 +646,8 @@ def main() -> None:
     elif args.output is None:
         parser.error("--output is required")
     else:
+        if args.enable_altitude_control:
+            os.environ["PIXEAGLE_SIH_ALTITUDE_CONTROL"] = "1"
         host(args)
 
 
