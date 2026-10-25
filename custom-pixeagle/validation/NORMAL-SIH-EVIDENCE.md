@@ -1,4 +1,4 @@
-# Normal-camera follower evidence — 2026-10-02
+# Normal-camera follower evidence — maintained SIH harness
 
 The checked-in `run-normal-sih-evidence.py` reuses the gimbal evidence harness's
 owned Docker launcher. Each simulator has only loopback networking, exposes no
@@ -6,11 +6,14 @@ host ports and is removed only after its ownership label matches. No camera or
 existing operator stack is used. Source snapshots, configuration, package
 versions, image/binary checksums and driver checksums accompany every attempt.
 
-The observations are normalized `POSITION_2D` measurements with a bounding box
-and confidence. They enter production AppController dispatch, continuity,
-follower calculation, OffboardCommander and MAVSDK publication. Independent
-PX4 attitude and NED position establish selected response directions. This is
-not tracker acquisition, physical camera calibration or visual convergence.
+The observations are normalized, centred `POSITION_2D` measurements with a
+bounding box and confidence. For moving-target runs, an independently seeded
+world target is projected into the image contract at each fresh PX4 pose; the
+target-truth trace is retained separately. Inputs enter production
+AppController dispatch, continuity, follower calculation, OffboardCommander
+and MAVSDK publication. Independent PX4 attitude and NED position establish
+response directions. This is not tracker acquisition, physical camera
+calibration or visual convergence.
 
 ## Results
 
@@ -25,13 +28,15 @@ Evidence root:
 | MC Visual Centering | `normal-sih-mc-distance-v1` | 198 | Right/left displacement and climb/descent response; Stop confirmed |
 | MC Attitude Rate | `normal-sih-mc-attitude-v1` | 48 | Command signs, rate bounds, independent pitch response and Stop passed; attitude envelope **blocked** |
 | FW Attitude Rate | `normal-sih-fw-attitude-v1` | 0 follower publications | Actual airplane SIH startup **blocked** before Offboard |
+| MC Chase moving-target retest | `reports/sitl/mc_velocity_chase-20261025` | 199 | Fresh `sihsim_quadx` production dispatch, independent target/PX4 pose response, Stop and CB gates passed |
 
 All **843** recorded MC publications succeeded. Every completed MC case stopped
 publication and recorded one confirmed Hold. The CB check is a canonical gate
 probe **after Stop**, not a test of changing CB during active following.
 
-The simulation overlay enables altitude control and sets the MC Attitude Rate
-capture-altitude offset to zero. Gains, speed/rate limits and repository default
+The maintained runner uses the public horizontal-safe default: altitude control
+is disabled unless `--enable-altitude-control` is supplied for an explicit
+altitude scenario. Gains, speed/rate limits and repository default
 configuration remain unchanged. Ground mode retains zero vertical command;
 its image-Y error requests forward motion rather than climb/descent. Held
 synthetic image coordinates are deliberate control stimuli, not observations
@@ -69,8 +74,16 @@ Run from the QGC repository with a new output directory:
 ```
 
 `--backend-repo`, `--python`, `--bin-dir` and `--opencv-lib` override local
-dependency locations. The six allowed profile names come from the explicit
-qualification matrix. FW selects the airplane model; MC selects quad SIH.
+dependency locations. Add `--enable-altitude-control` only for the explicit
+altitude scenario. The six normal profile names come from the qualification
+matrix. FW selects the airplane model; MC selects quad SIH. The unified
+PixEagle wrapper also validates all eight profiles and builds the read-only
+report:
+
+```bash
+PYTHONPATH=src .venv/bin/python tools/run_sih_follower_validation.py \
+  --follower mc_velocity_chase
+```
 Existing output directories are never overwritten. `--execute` is required.
 
 Scoped verification passed: **63** backend follower direction/control tests
