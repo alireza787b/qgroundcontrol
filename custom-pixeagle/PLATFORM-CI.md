@@ -50,3 +50,11 @@ image, artifact checksums, and logs in the release checkpoint. A successful CI
 build proves compilation and packaging on that runner; it does not replace
 touch, PiP, suspension, credential-store, camera, Raspberry Pi, or onboard
 ground acceptance.
+
+Current repair candidate: `fix/pixeagle-connection-settings-2026-10-27`, based
+on the accepted upstream/media/session-speed history at `7b27a94d0`. The earlier
+`40226794658` artifacts came from an obsolete integration branch and are
+superseded, despite passing compilation. See
+[connection recovery](CONNECTION-RECOVERY.md#october-27-release-source-and-form-repair).
+Always dispatch with the candidate's explicit `--ref`; do not use the default
+branch or the older `feature/pixeagle-native-integration` for this handoff.

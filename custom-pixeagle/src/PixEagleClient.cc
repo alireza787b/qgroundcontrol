@@ -112,7 +112,17 @@ PixEagleClient::~PixEagleClient()
 
 bool PixEagleClient::validateEndpoint(const QString& text, QUrl* result)
 {
-    QUrl url(text.trimmed(), QUrl::StrictMode);
+    const QString address = text.trimmed();
+    const bool shorthand = !address.contains("://");
+    if (shorthand) {
+        const QString authority = address.section('/', 0, 0);
+        if (authority.isEmpty() ||
+            (!authority.startsWith('[') && authority.contains(':') &&
+             !QRegularExpression(QStringLiteral("^[^:]+:[0-9]{1,5}$")).match(authority).hasMatch())) {
+            return false;
+        }
+    }
+    QUrl url(shorthand ? QStringLiteral("http://") + address : address, QUrl::StrictMode);
     if (!url.isValid() || url.host().isEmpty() || !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment() ||
         (url.scheme() != "https" && url.scheme() != "http") || url.port() == 0 || url.path().contains('\\')) {
         return false;
@@ -120,6 +130,9 @@ bool PixEagleClient::validateEndpoint(const QString& text, QUrl* result)
     const QStringList segments = url.path().split('/');
     if (segments.contains("..") || segments.contains(".")) {
         return false;
+    }
+    if (shorthand && url.port() == -1) {
+        url.setPort(5077);
     }
     QString path = url.path();
     while (path.endsWith('/')) {
@@ -136,7 +149,7 @@ void PixEagleClient::setEndpoint(const QString& text)
 {
     QUrl url;
     if (!validateEndpoint(text.trimmed().isEmpty() ? defaultEndpoint() : text, &url)) {
-        _error = tr("Enter an HTTP or HTTPS address without credentials, query or fragment.");
+        _error = tr("Enter a backend address (host:port or HTTP/HTTPS URL) without credentials, query or fragment.");
         emit changed();
         return;
     }
@@ -150,7 +163,6 @@ void PixEagleClient::setEndpoint(const QString& text)
     _recoveryPassword.clear();
     _resetSession();
     _endpoint = url;
-    setSignInCredentials(QStringLiteral("admin"), QStringLiteral("admin"));
     _credentialStatus.clear();
     emit endpointChanged();
     emit changed();
@@ -190,6 +202,8 @@ QString PixEagleClient::_credentialKey() const
 
 void PixEagleClient::setSignInCredentials(const QString& username, const QString& password)
 {
+    _signInCredentialsEdited = true;
+    ++_credentialDecisionGeneration;
     if (_signInUsername == username && _signInPassword == password) {
         return;
     }
@@ -205,6 +219,7 @@ void PixEagleClient::restoreConnectionFrom(const PixEagleClient& source)
     }
     _resetSession();
     setSignInCredentials(source._signInUsername, source._signInPassword);
+    _signInCredentialsEdited = source._signInCredentialsEdited;
     _recoveryUsername = source._recoveryUsername;
     _recoveryPassword = source._recoveryPassword;
     if (source._authenticated) {
@@ -224,36 +239,39 @@ void PixEagleClient::restoreConnectionFrom(const PixEagleClient& source)
 
 void PixEagleClient::_loadRememberedSignIn()
 {
-    if (!_enabled || _authenticated || busy() || !rememberSignIn() || _endpoint.isEmpty() ||
+    if (!_enabled || _authenticated || busy() || _signInCredentialsEdited || !rememberSignIn() || _endpoint.isEmpty() ||
         QSettings().value(QStringLiteral("PixEagle/AutoSignInSuppressed/") + _credentialKey(), false).toBool()) {
         return;
     }
     const quint64 generation = _generation;
+    const quint64 credentialDecisionGeneration = _credentialDecisionGeneration;
     const QString key = _credentialKey();
     auto* job = new QKeychain::ReadPasswordJob(QStringLiteral("org.pixeagle.qgc"), this);
     job->setKey(key);
-    connect(job, &QKeychain::Job::finished, this, [this, generation, key](QKeychain::Job* completed) {
-        if (generation != _generation || key != _credentialKey() || !_enabled || _authenticated || busy() ||
-            !rememberSignIn()) {
-            return;
-        }
-        if (completed->error() == QKeychain::EntryNotFound) {
-            return;
-        }
-        if (completed->error() != QKeychain::NoError) {
-            _credentialStatus = tr("System password store unavailable. Sign in manually this time.");
-            emit changed();
-            return;
-        }
-        const QJsonDocument saved =
-            QJsonDocument::fromJson(static_cast<QKeychain::ReadPasswordJob*>(completed)->binaryData());
-        const QJsonObject account = saved.object();
-        const QString username = account.value(QStringLiteral("username")).toString();
-        const QString password = account.value(QStringLiteral("password")).toString();
-        if (!username.isEmpty() && !password.isEmpty()) {
-            signIn(username, password);
-        }
-    });
+    connect(job, &QKeychain::Job::finished, this,
+            [this, generation, key, credentialDecisionGeneration](QKeychain::Job* completed) {
+                if (generation != _generation || key != _credentialKey() || !_enabled || _authenticated || busy() ||
+                    _signInCredentialsEdited || credentialDecisionGeneration != _credentialDecisionGeneration ||
+                    !rememberSignIn()) {
+                    return;
+                }
+                if (completed->error() == QKeychain::EntryNotFound) {
+                    return;
+                }
+                if (completed->error() != QKeychain::NoError) {
+                    _credentialStatus = tr("System password store unavailable. Sign in manually this time.");
+                    emit changed();
+                    return;
+                }
+                const QJsonDocument saved =
+                    QJsonDocument::fromJson(static_cast<QKeychain::ReadPasswordJob*>(completed)->binaryData());
+                const QJsonObject account = saved.object();
+                const QString username = account.value(QStringLiteral("username")).toString();
+                const QString password = account.value(QStringLiteral("password")).toString();
+                if (!username.isEmpty() && !password.isEmpty()) {
+                    signIn(username, password);
+                }
+            });
     job->start();
 }
 
@@ -533,7 +551,7 @@ void PixEagleClient::signInAt(const QString& endpoint, const QString& username, 
     }
     const QString destination = endpoint.trimmed().isEmpty() ? defaultEndpoint() : endpoint;
     if (!validateEndpoint(destination)) {
-        _error = tr("Enter an HTTP or HTTPS address without credentials, query or fragment.");
+        _error = tr("Enter a backend address (host:port or HTTP/HTTPS URL) without credentials, query or fragment.");
         emit changed();
         return;
     }
@@ -752,6 +770,7 @@ void PixEagleClient::_finished(QNetworkReply* reply, Request kind, quint64 gener
         _resetSession();
         _error = tr("PixEagle returned an unsupported connection response. Check its version and sign in again.");
     } else if (kind == Request::Login) {
+        _signInCredentialsEdited = false;
         _recoveryUsername = _pendingCredentialUsername;
         _recoveryPassword = _pendingCredentialPassword;
         _authenticationRetryMs = 2000;

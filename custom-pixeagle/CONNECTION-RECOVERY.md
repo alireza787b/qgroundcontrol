@@ -76,3 +76,35 @@ flight-command blocking, and disabled a backed-up, broken legacy dashboard
 service while preserving the live MAVLink router. No aircraft command or
 camera movement was sent by the audit. Backend release CI, source tag and
 Pi deployment provenance are tracked separately from QGC binary provenance.
+
+## October 27 release-source and form repair
+
+The October 25 artifact run `40226794658` used the older
+`feature/pixeagle-native-integration` branch. It omitted the accepted recovery,
+media-lifecycle and session-speed work retained on
+`feature/session-speed-override-2026-10-22` (`7b27a94d0`). Those installers are
+superseded. The replacement candidate is
+`fix/pixeagle-connection-settings-2026-10-27`, based on that newer qualified
+history; do not rebuild the older branch for this handoff.
+
+Backend entry accepts `host`, `host:port`, or a complete HTTP/HTTPS URL.
+Shorthand uses HTTP and port 5077 when omitted; explicit HTTPS and proxy prefixes
+are preserved. Invalid text stays visible with an error and never changes the
+accepted destination. The first-use form starts with admin/admin. Explicit edits,
+including clearing a field, survive endpoint normalization, failed login and
+client changes. A delayed system-password-store reply cannot overwrite an edited
+form. Stored credentials remain endpoint-scoped and never enter QSettings.
+
+The actual Settings QML regression changes focus from address to account fields,
+submits a refused login and toggles integration, retaining the entered fields.
+The existing vehicle, auth, camera and media suites qualify the restored history.
+Dispatch one `pixeagle-platform.yml` run from the replacement candidate after the
+local build, lint and regression checks; keep its exact source and run ID in the
+handoff manifest. No public QGC PR or release is created.
+
+The replacement candidate built locally and passed changed-file lint, 378 Unit
+and 98 Integration CTest entries with the standard `Flaky|Network` exclusions.
+Four media entries initially failed because the host lacked the ICE `nice`
+plugin; all four passed with the matching cached runtime on `GST_PLUGIN_PATH`.
+The opt-in native WebRTC playback fixture was not started by these tests. This
+is regression evidence, not Windows installer or physical operator acceptance.

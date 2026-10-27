@@ -167,7 +167,7 @@ Item {
 
                     QGCLabel {
                         Layout.fillWidth: true
-                        text: qsTr("Leave blank to use the local backend on port 5077. The web dashboard has a separate address.")
+                        text: qsTr("Enter an IP or hostname; port 5077 is used when omitted. Use an HTTPS URL for a secure connection. Leave blank only for a backend on this computer.")
                         visible: root._client && !root._client.authenticated
                         wrapMode: Text.WordWrap
                     }
@@ -217,6 +217,12 @@ Item {
                             text: qsTr("Remember sign-in on this device")
 
                             onClicked: root._client.setRememberSignIn(checked)
+                        }
+
+                        QGCLabel {
+                            Layout.fillWidth: true
+                            text: qsTr("New installations use admin / admin unless changed during setup.")
+                            wrapMode: Text.WordWrap
                         }
 
                         QGCLabel {

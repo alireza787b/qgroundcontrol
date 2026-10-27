@@ -421,6 +421,7 @@ private:
     QString _credentialStatus;
     QString _signInUsername = QStringLiteral("admin");
     QString _signInPassword = QStringLiteral("admin");
+    bool _signInCredentialsEdited = false;
     QString _recoveryUsername;
     QString _recoveryPassword;
     QString _pendingCredentialUsername;

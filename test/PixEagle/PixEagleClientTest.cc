@@ -4,6 +4,7 @@
 
 #include <QtCore/QJsonDocument>
 #include <QtCore/QRegularExpression>
+#include <QtCore/QScopeGuard>
 #include <QtCore/QSettings>
 #include <QtNetwork/QHostAddress>
 #include <QtNetwork/QSslCertificate>
@@ -12,12 +13,20 @@
 #include <QtNetwork/QSslServer>
 #include <QtNetwork/QSslSocket>
 #include <QtQml/QQmlComponent>
+#include <QtQml/QQmlContext>
 #include <QtQml/QQmlEngine>
 #include <QtQuick/QQuickItem>
+#include <QtQuick/QQuickWindow>
 #include <QtTest/QSignalSpy>
 
+#include "ColoredSvgImageProvider.h"
 #include "GPS/NTRIP/Support/NTRIPTlsTestFixtures.h"
+#include "PixEagleManager.h"
+#include "PixEaglePlugin.h"
+#include "PixEagleSettings.h"
 #include "PixEagleTestServer.h"
+#include "QGCPalette.h"
+#include "SettingsManager.h"
 
 using namespace PixEagleTest;
 
@@ -74,6 +83,10 @@ void PixEagleClientTest::_endpointPolicy_data()
     QTest::newRow("localhost") << QStringLiteral("http://localhost:5077") << true;
     QTest::newRow("remote-http-bench") << QStringLiteral("http://192.0.2.1:5077") << true;
     QTest::newRow("remote-hostname") << QStringLiteral("http://companion.example:5077") << true;
+    QTest::newRow("bare-ip-and-port") << QStringLiteral("192.168.0.226:5077") << true;
+    QTest::newRow("bare-hostname") << QStringLiteral("rp5pb.local") << true;
+    QTest::newRow("bare-proxy-prefix") << QStringLiteral("companion.example:8080/pixeagle-api") << true;
+    QTest::newRow("bare-ipv6") << QStringLiteral("[::1]:5077") << true;
     QTest::newRow("userinfo") << QStringLiteral("https://pilot:password@companion.example") << false;
     QTest::newRow("query-secret") << QStringLiteral("https://companion.example/?token=secret") << false;
     QTest::newRow("fragment") << QStringLiteral("https://companion.example/#secret") << false;
@@ -84,6 +97,10 @@ void PixEagleClientTest::_endpointPolicy_data()
     QTest::newRow("invalid-port") << QStringLiteral("https://companion.example:65536") << false;
     QTest::newRow("missing-host") << QStringLiteral("https:///api") << false;
     QTest::newRow("wrong-scheme") << QStringLiteral("file:///tmp/pixeagle") << false;
+    QTest::newRow("ambiguous-scheme") << QStringLiteral("https:companion.example") << false;
+    QTest::newRow("relative-path") << QStringLiteral("/tmp/pixeagle") << false;
+    QTest::newRow("protocol-relative") << QStringLiteral("//companion.example") << false;
+    QTest::newRow("shorthand-credentials") << QStringLiteral("pilot:secret@companion.example") << false;
 }
 
 void PixEagleClientTest::_nativeFollowingUsesCapturedVehicleAndSurvivesVideoLoss()
@@ -442,6 +459,8 @@ void PixEagleClientTest::_signInAtValidatesDestination_data()
                                       << QStringLiteral("http://127.0.0.1:%1/pixeagle-api") << true;
     QTest::newRow("uppercase-host") << QStringLiteral("http://LOCALHOST:%1/pixeagle-api/")
                                     << QStringLiteral("http://localhost:%1/pixeagle-api") << true;
+    QTest::newRow("bare-host-and-port") << QStringLiteral("127.0.0.1:%1/pixeagle-api/")
+                                        << QStringLiteral("http://127.0.0.1:%1/pixeagle-api") << true;
     QTest::newRow("invalid-new-address") << QStringLiteral("https://user:secret@companion.example") << QString()
                                          << false;
 }
@@ -467,6 +486,99 @@ void PixEagleClientTest::_signInAtValidatesDestination()
         QVERIFY(!client.authenticated());
         QCOMPARE(client.endpoint(), server.endpoint());
     }
+}
+
+void PixEagleClientTest::_settingsFormPreservesConnectionEdits_data()
+{
+    QTest::addColumn<QString>("password");
+    QTest::newRow("failed-login") << QStringLiteral("operator-secret");
+    QTest::newRow("intentionally-cleared") << QString();
+}
+
+void PixEagleClientTest::_settingsFormPreservesConnectionEdits()
+{
+    QFETCH(QString, password);
+    CompanionServer server;
+    QVERIFY(server.start());
+    server.overrides[LOGIN_PATH] = {401, {}, {}};
+    auto* plugin = qobject_cast<PixEaglePlugin*>(QGCCorePlugin::instance());
+    QVERIFY(plugin);
+    auto* client = plugin->pixeagle()->activeClient();
+    QVERIFY(client && client->companionOnly());
+    auto* settings = qobject_cast<PixEagleSettings*>(
+        SettingsManager::instance()->value(QStringLiteral("pixEagleSettings")).value<QObject*>());
+    QVERIFY(settings);
+    const auto enabled = settings->integrationEnabled()->rawValue();
+    const QString endpoint = client->endpoint();
+    const QString usernameBefore = client->signInUsername();
+    const QString passwordBefore = client->signInPassword();
+    const auto restore = qScopeGuard([&]() {
+        client->setEnabled(false);
+        client->setEndpoint(endpoint);
+        client->setSignInCredentials(usernameBefore, passwordBefore);
+        settings->integrationEnabled()->setRawValue(enabled);
+    });
+    client->setSignInCredentials("admin", "admin");
+    settings->integrationEnabled()->setRawValue(true);
+    QGCPalette palette;
+    QQmlEngine engine;
+    engine.rootContext()->setContextProperty("qgcPal", &palette);
+    engine.addImageProvider(QLatin1String(ColoredSvgImageProvider::ProviderId), new ColoredSvgImageProvider());
+    QQmlComponent component(&engine, QUrl("qrc:/qml/PixEagle/PixEagleSettings.qml"));
+    QVERIFY2(component.isReady(), qPrintable(component.errorString()));
+    QScopedPointer<QObject> object(component.create());
+    QVERIFY2(object, qPrintable(component.errorString()));
+    auto* root = qobject_cast<QQuickItem*>(object.data());
+    QVERIFY(root);
+    QQuickWindow window;
+    window.resize(1440, 1000);
+    root->setParentItem(window.contentItem());
+    root->setSize(QSizeF(1440, 1000));
+    window.show();
+    auto* address = root->findChild<QQuickItem*>("pixeagleEndpoint");
+    auto* username = root->findChild<QQuickItem*>("pixeagleUsername");
+    auto* secret = root->findChild<QQuickItem*>("pixeaglePassword");
+    auto* signInButton = root->findChild<QQuickItem*>("pixeagleSignIn");
+    QVERIFY(address && username && secret && signInButton);
+    QCOMPARE(username->property("text").toString(), QStringLiteral("admin"));
+    QCOMPARE(secret->property("text").toString(), QStringLiteral("admin"));
+    address->forceActiveFocus();
+    QTRY_VERIFY_WITH_TIMEOUT(address->hasActiveFocus(), TestTimeout::mediumMs());
+    address->setProperty("text", server.endpoint().mid(QStringLiteral("http://").size()));
+    username->forceActiveFocus();
+    QTRY_COMPARE_WITH_TIMEOUT(client->endpoint(), server.endpoint(), TestTimeout::mediumMs());
+    QCOMPARE(address->property("text").toString(), server.endpoint());
+    client->setRememberSignIn(false);
+    username->setProperty("text", "field-operator");
+    QVERIFY(QMetaObject::invokeMethod(username, "textEdited"));
+    secret->setProperty("text", password);
+    QVERIFY(QMetaObject::invokeMethod(secret, "textEdited"));
+    QCOMPARE(client->signInUsername(), QStringLiteral("field-operator"));
+    QCOMPARE(client->signInPassword(), password);
+    if (!password.isEmpty()) {
+        QVERIFY(QMetaObject::invokeMethod(root, "signIn"));
+        QTRY_VERIFY_WITH_TIMEOUT(server.lastRequestIndex(LOGIN_PATH) >= 0 && !client->busy(), TestTimeout::mediumMs());
+        const auto body = QJsonDocument::fromJson(server.lastRequest(LOGIN_PATH).body).object();
+        QCOMPARE(body.value("username").toString(), QStringLiteral("field-operator"));
+        QCOMPARE(body.value("password").toString(), password);
+        QVERIFY(!client->authenticated());
+    } else {
+        QVERIFY(!signInButton->isEnabled());
+        QVERIFY(server.requests.isEmpty());
+    }
+    address->forceActiveFocus();
+    QTRY_VERIFY_WITH_TIMEOUT(address->hasActiveFocus(), TestTimeout::mediumMs());
+    const QString invalid = QStringLiteral("https://user:secret@companion.example");
+    address->setProperty("text", invalid);
+    username->forceActiveFocus();
+    QTRY_VERIFY_WITH_TIMEOUT(!address->hasActiveFocus(), TestTimeout::mediumMs());
+    QCOMPARE(address->property("text").toString(), invalid);
+    QCOMPARE(client->endpoint(), server.endpoint());
+    settings->integrationEnabled()->setRawValue(false);
+    settings->integrationEnabled()->setRawValue(true);
+    QCOMPARE(username->property("text").toString(), QStringLiteral("field-operator"));
+    QCOMPARE(secret->property("text").toString(), password);
+    QCOMPARE(address->property("text").toString(), invalid);
 }
 
 void PixEagleClientTest::_csrfHeaderContract_data()

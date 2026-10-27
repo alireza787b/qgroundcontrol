@@ -12,6 +12,8 @@ private slots:
     void _endpointPolicy();
     void _signInAtValidatesDestination_data();
     void _signInAtValidatesDestination();
+    void _settingsFormPreservesConnectionEdits_data();
+    void _settingsFormPreservesConnectionEdits();
     void _csrfHeaderContract_data();
     void _csrfHeaderContract();
     void _disabledMakesNoRequests();
